@@ -1,6 +1,23 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
+#[derive(Debug)]
+pub enum ParseError {
+  Generic(String),
+  NotImplemented,
+}
+
+impl Display for ParseError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    match self {
+      ParseError::Generic(s) => write!(f, "[ParseError] {}", s),
+      ParseError::NotImplemented => write!(f, "[ParseError] not implemented"),
+    }
+  }
+}
+
+impl std::error::Error for ParseError {}
+
 pub enum AstNode {
   ScriptNode,
   CommandNode,
@@ -60,15 +77,18 @@ impl Display for WordNode {
   }
 }
 
-pub fn parse(src: &str) -> ScriptNode {
-  return ScriptNode {
-    commands: vec![CommandNode {
-      words: vec![
-        WordNode::Literal(String::from("expr")),
-        WordNode::Literal(String::from("2")),
-        WordNode::Literal(String::from("+")),
-        WordNode::Literal(String::from("3")),
-      ],
-    }],
-  };
+pub fn parse(src: &str) -> Result<ScriptNode, ParseError> {
+  return parse_script(src);
+}
+
+pub fn parse_script(_src: &str) -> Result<ScriptNode, ParseError> {
+  return Err(ParseError::NotImplemented);
+}
+
+pub fn parse_command(_src: &str) -> Result<CommandNode, ParseError> {
+  return Err(ParseError::NotImplemented);
+}
+
+pub fn parse_word(_src: &str) -> Result<WordNode, ParseError> {
+  return Err(ParseError::NotImplemented);
 }
