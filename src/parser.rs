@@ -1,6 +1,8 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
+use clap::Command;
+
 #[derive(Debug)]
 pub enum ParseError {
   Generic(String),
@@ -81,14 +83,41 @@ pub fn parse(src: &str) -> Result<ScriptNode, ParseError> {
   return parse_script(src);
 }
 
-pub fn parse_script(_src: &str) -> Result<ScriptNode, ParseError> {
-  return Err(ParseError::NotImplemented);
+pub fn parse_script(mut src: &str) -> Result<ScriptNode, ParseError> {
+  let mut commands: Vec<CommandNode> = vec![];
+
+  while !src.is_empty() {
+    if let Ok((_, new_src)) = parse_ws(src) {
+      src = new_src;
+    }
+    if let Ok((command, new_src)) = parse_command(src) {
+      commands.push(command);
+      src = new_src;
+    }
+  }
+
+  Ok(ScriptNode { commands })
 }
 
-pub fn parse_command(_src: &str) -> Result<CommandNode, ParseError> {
+pub fn parse_command(_src: &str) -> Result<(CommandNode, &str), ParseError> {
   return Err(ParseError::NotImplemented);
 }
 
 pub fn parse_word(_src: &str) -> Result<WordNode, ParseError> {
   return Err(ParseError::NotImplemented);
+}
+
+pub fn parse_ws(mut src: &str) -> Result<(String, &str), ParseError> {
+  let mut result = String::new();
+
+  while let Some(ch @ (' ' | '\t' | '\r' | '\n')) = src.chars().next() {
+    result.push(ch);
+    src = &src[ch.len_utf8()..];
+  }
+
+  if result.is_empty() {
+    Err(ParseError::Generic("expected whitespace".to_string()))
+  } else {
+    Ok((result, src))
+  }
 }
