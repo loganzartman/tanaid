@@ -19,17 +19,17 @@ impl Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub struct ScriptNode {
   pub commands: Vec<CommandNode>,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub struct CommandNode {
   pub words: Vec<WordNode>,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum WordNode {
   Literal(String),
   VarSub(String),
@@ -180,5 +180,56 @@ fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
     Err(ParseError::Generic("expected whitespace".to_string()))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parses_script_with_one_set_command() -> Result<(), ParseError> {
+    let parsed = parse("set x 3")?;
+    assert_eq!(
+      parsed,
+      ScriptNode {
+        commands: vec![CommandNode {
+          words: vec![
+            WordNode::Literal("set".to_string()),
+            WordNode::Literal("x".to_string()),
+            WordNode::Literal("3".to_string()),
+          ]
+        }]
+      }
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_script_with_two_commands() -> Result<(), ParseError> {
+    let parsed = parse("set x 3\nexpr 2 + 1")?;
+    assert_eq!(
+      parsed,
+      ScriptNode {
+        commands: vec![
+          CommandNode {
+            words: vec![
+              WordNode::Literal("set".to_string()),
+              WordNode::Literal("x".to_string()),
+              WordNode::Literal("3".to_string()),
+            ],
+          },
+          CommandNode {
+            words: vec![
+              WordNode::Literal("expr".to_string()),
+              WordNode::Literal("2".to_string()),
+              WordNode::Literal("+".to_string()),
+              WordNode::Literal("1".to_string()),
+            ]
+          },
+        ]
+      }
+    );
+    Ok(())
   }
 }
