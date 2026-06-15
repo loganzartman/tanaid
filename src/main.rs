@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .map_or(io::read_to_string(io::stdin()), fs::read_to_string)?;
 
   let parsed = parser::parse(src.as_str())?;
-  println!("{:?}", parsed);
+  println!("{:#?}", parsed);
 
   Ok(())
 }

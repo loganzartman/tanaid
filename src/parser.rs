@@ -99,7 +99,9 @@ fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
       src = new_src;
     }
 
-    if let Err(_) = parse_command_sep(src) {
+    if let Ok((_, new_src)) = parse_command_sep(src) {
+      src = new_src;
+    } else {
       break;
     }
   }
@@ -108,36 +110,46 @@ fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
 }
 
 fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
+  // eat whitespace
   if let Ok((_, new_src)) = parse_ws(src) {
     src = new_src;
   }
 
-  let (name, new_src) = parse_word(src).map_err(|e| {
-    ParseError::Generic(format!("expected command name\ncaused by: {}", e).to_string())
-  })?;
+  // required: first word (command name)
+  let (name, new_src) = parse_word(src)
+    .map_err(|e| ParseError::Generic(format!("expected command name\ncaused by: {}", e)))?;
   let mut words: Vec<WordNode> = vec![name];
   src = new_src;
 
+  // collect additional words
   while !src.is_empty() {
-    if let Ok((_, new_src)) = parse_ws(src) {
-      src = new_src;
-    } else {
+    // required whitespace separator
+    let Ok((_, new_src)) = parse_ws(src) else {
       break;
-    }
+    };
+    src = new_src;
 
-    if let Ok((word, new_src)) = parse_word(src) {
-      words.push(word);
-      src = new_src;
-    } else {
+    // word
+    let Ok((word, new_src)) = parse_word(src) else {
       break;
-    }
+    };
+    words.push(word);
+    src = new_src;
   }
 
   Ok((CommandNode { words }, src))
 }
 
-fn parse_command_sep(_src: &str) -> Result<(String, &str), ParseError> {
-  Err(ParseError::NotImplemented)
+fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
+  let re_cmd_sep = Regex::new(r"^[\r\n\;]+").unwrap();
+
+  if let Some(captures) = re_cmd_sep.captures(src) {
+    Ok((captures[0].to_string(), &src[captures[0].len()..]))
+  } else {
+    Err(ParseError::Generic(
+      "expected command separator (newline or `;`)".to_string(),
+    ))
+  }
 }
 
 fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
@@ -162,7 +174,7 @@ fn parse_word_literal(src: &str) -> Result<(WordNode, &str), ParseError> {
 }
 
 fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
-  let re_ws = Regex::new(r"^\h+").unwrap();
+  let re_ws = Regex::new(r"^[\t\p{Zs}]+").unwrap();
 
   if let Some(captures) = re_ws.captures(src) {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
