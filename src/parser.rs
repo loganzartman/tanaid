@@ -372,4 +372,22 @@ mod tests {
     );
     Ok(())
   }
+
+  #[test]
+  fn parses_script_with_quoted_and_braced_strings() -> Result<(), ParseError> {
+    let parsed = parse(r#"puts "hello world" {nested {braced} string}"#)?;
+    assert_eq!(
+      parsed,
+      ScriptNode {
+        commands: vec![CommandNode {
+          words: vec![
+            WordNode::Literal("puts".to_string()),
+            WordNode::Literal("hello world".to_string()),
+            WordNode::Literal("nested {braced} string".to_string()),
+          ]
+        }]
+      }
+    );
+    Ok(())
+  }
 }
