@@ -169,6 +169,14 @@ fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
 }
 
 fn parse_word_literal(src: &str) -> Result<(WordNode, &str), ParseError> {
+  if let Ok((word, rest)) = parse_word_bracketed(src, BracketType::Curly) {
+    return Ok((WordNode::Literal(word), rest));
+  }
+
+  if let Ok((word, rest)) = parse_word_bracketed(src, BracketType::DoubleQuote) {
+    return Ok((WordNode::Literal(word), rest));
+  }
+
   parse_word_bare(src).map(|(word, rest)| (WordNode::Literal(word), rest))
 }
 
