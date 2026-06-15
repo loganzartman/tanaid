@@ -18,7 +18,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .file_path
     .map_or(io::read_to_string(io::stdin()), fs::read_to_string)?;
 
-  let _parsed = parser::parse(src.as_str())?;
+  let parsed = parser::parse(src.as_str())?;
+  println!("{:?}", parsed);
 
   Ok(())
 }
