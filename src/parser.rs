@@ -33,7 +33,7 @@ pub struct CommandNode {
 pub enum WordNode {
   Literal(String),
   VarSub(String),
-  CommandSub(ScriptNode),
+  CommandSub(String),
   Concat(Vec<WordNode>),
 }
 
@@ -84,23 +84,23 @@ fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
-    if let Ok((_, new_src)) = parse_ws(src) {
-      src = new_src;
+    if let Ok((_, rest)) = parse_ws(src) {
+      src = rest;
     }
 
-    if let Ok((command, new_src)) = parse_command(src) {
+    if let Ok((command, rest)) = parse_command(src) {
       commands.push(command);
-      src = new_src;
+      src = rest;
     } else {
       return Err(ParseError::Generic("expected command".to_string()));
     }
 
-    if let Ok((_, new_src)) = parse_ws(src) {
-      src = new_src;
+    if let Ok((_, rest)) = parse_ws(src) {
+      src = rest;
     }
 
-    if let Ok((_, new_src)) = parse_command_sep(src) {
-      src = new_src;
+    if let Ok((_, rest)) = parse_command_sep(src) {
+      src = rest;
     } else {
       break;
     }
@@ -111,30 +111,30 @@ fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
 
 fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
   // eat whitespace
-  if let Ok((_, new_src)) = parse_ws(src) {
-    src = new_src;
+  if let Ok((_, rest)) = parse_ws(src) {
+    src = rest;
   }
 
   // required: first word (command name)
-  let (name, new_src) = parse_word(src)
+  let (name, rest) = parse_word(src)
     .map_err(|e| ParseError::Generic(format!("expected command name\ncaused by: {}", e)))?;
   let mut words: Vec<WordNode> = vec![name];
-  src = new_src;
+  src = rest;
 
   // collect additional words
   while !src.is_empty() {
     // required whitespace separator
-    let Ok((_, new_src)) = parse_ws(src) else {
+    let Ok((_, rest)) = parse_ws(src) else {
       break;
     };
-    src = new_src;
+    src = rest;
 
     // word
-    let Ok((word, new_src)) = parse_word(src) else {
+    let Ok((word, rest)) = parse_word(src) else {
       break;
     };
     words.push(word);
-    src = new_src;
+    src = rest;
   }
 
   Ok((CommandNode { words }, src))
@@ -153,6 +153,10 @@ fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
 }
 
 fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
+  if let Ok(result) = parse_word_cmdsub(src) {
+    return Ok(result);
+  }
+
   if let Ok(result) = parse_word_varsub(src) {
     return Ok(result);
   }
@@ -165,14 +169,69 @@ fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
 }
 
 fn parse_word_literal(src: &str) -> Result<(WordNode, &str), ParseError> {
-  parse_word_bare(src).map(|(word, new_src)| (WordNode::Literal(word), new_src))
+  parse_word_bare(src).map(|(word, rest)| (WordNode::Literal(word), rest))
 }
 
 fn parse_word_varsub(src: &str) -> Result<(WordNode, &str), ParseError> {
   let rest = src
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
-  parse_word_bare(rest).map(|(word, new_src)| (WordNode::VarSub(word), new_src))
+  parse_word_bare(rest).map(|(word, rest)| (WordNode::VarSub(word), rest))
+}
+
+fn parse_word_cmdsub(src: &str) -> Result<(WordNode, &str), ParseError> {
+  let (word, rest) = parse_word_bracketed(src, BracketType::Square)?;
+  Ok((WordNode::CommandSub(word), rest))
+}
+
+enum BracketType {
+  Square,
+  Curly,
+  DoubleQuote,
+}
+
+fn parse_word_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseError> {
+  let open = match b {
+    BracketType::Square => '[',
+    BracketType::Curly => '{',
+    BracketType::DoubleQuote => '"',
+  };
+  let close = match b {
+    BracketType::Square => ']',
+    BracketType::Curly => '}',
+    BracketType::DoubleQuote => '"',
+  };
+
+  let mut rest = src
+    .strip_prefix(open)
+    .ok_or_else(|| ParseError::Generic(format!("expected a: {}", open)))?;
+
+  let mut depth = 1;
+  let mut word = String::new();
+
+  while !rest.is_empty() {
+    let (ch, new_rest) = parse_char(rest)?;
+    rest = new_rest;
+
+    if ch == close {
+      depth -= 1;
+      if depth == 0 {
+        break;
+      }
+    }
+
+    if ch == open {
+      depth += 1;
+    }
+
+    word.push(ch);
+  }
+
+  if depth > 0 {
+    Err(ParseError::Generic(format!("missing closing {}", close)))
+  } else {
+    Ok((word, rest))
+  }
 }
 
 fn parse_word_bare(src: &str) -> Result<(String, &str), ParseError> {
@@ -182,6 +241,29 @@ fn parse_word_bare(src: &str) -> Result<(String, &str), ParseError> {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
     Err(ParseError::Generic("expected literal word".to_string()))
+  }
+}
+
+fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
+  let ch = src
+    .chars()
+    .next()
+    .ok_or_else(|| ParseError::Generic("expected character".to_string()))?;
+
+  if ch != '\\' {
+    return Ok((ch, &src[1..]));
+  }
+
+  let next = src
+    .chars()
+    .next()
+    .ok_or_else(|| ParseError::Generic("expected escape sequence".to_string()))?;
+
+  match next {
+    'n' => Ok(('\n', &src[2..])),
+    't' => Ok(('\t', &src[2..])),
+    'r' => Ok(('\r', &src[2..])),
+    _ => Ok((next, &src[2..])),
   }
 }
 
@@ -257,6 +339,25 @@ mod tests {
             WordNode::Literal("2".to_string()),
             WordNode::Literal("+".to_string()),
             WordNode::VarSub("x".to_string()),
+          ]
+        },]
+      }
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_script_with_cmd_sub() -> Result<(), ParseError> {
+    let parsed = parse("expr 2 + [expr 3 + [expr 4 + 5]]")?;
+    assert_eq!(
+      parsed,
+      ScriptNode {
+        commands: vec![CommandNode {
+          words: vec![
+            WordNode::Literal("expr".to_string()),
+            WordNode::Literal("2".to_string()),
+            WordNode::Literal("+".to_string()),
+            WordNode::CommandSub("expr 3 + [expr 4 + 5]".to_string()),
           ]
         },]
       }
