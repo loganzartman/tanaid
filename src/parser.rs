@@ -153,6 +153,10 @@ fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
 }
 
 fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
+  if let Ok(result) = parse_word_varsub(src) {
+    return Ok(result);
+  }
+
   if let Ok(result) = parse_word_literal(src) {
     return Ok(result);
   }
@@ -161,13 +165,21 @@ fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
 }
 
 fn parse_word_literal(src: &str) -> Result<(WordNode, &str), ParseError> {
+  parse_word_bare(src).map(|(word, new_src)| (WordNode::Literal(word), new_src))
+}
+
+fn parse_word_varsub(src: &str) -> Result<(WordNode, &str), ParseError> {
+  let rest = src
+    .strip_prefix('$')
+    .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
+  parse_word_bare(rest).map(|(word, new_src)| (WordNode::VarSub(word), new_src))
+}
+
+fn parse_word_bare(src: &str) -> Result<(String, &str), ParseError> {
   let re_word = Regex::new(r#"^[^\[\]{}";\s]+"#).unwrap();
 
   if let Some(captures) = re_word.captures(src) {
-    Ok((
-      WordNode::Literal(captures[0].to_string()),
-      &src[captures[0].len()..],
-    ))
+    Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
     Err(ParseError::Generic("expected literal word".to_string()))
   }
@@ -228,6 +240,25 @@ mod tests {
             ]
           },
         ]
+      }
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_script_with_var_sub() -> Result<(), ParseError> {
+    let parsed = parse("expr 2 + $x")?;
+    assert_eq!(
+      parsed,
+      ScriptNode {
+        commands: vec![CommandNode {
+          words: vec![
+            WordNode::Literal("expr".to_string()),
+            WordNode::Literal("2".to_string()),
+            WordNode::Literal("+".to_string()),
+            WordNode::VarSub("x".to_string()),
+          ]
+        },]
       }
     );
     Ok(())
