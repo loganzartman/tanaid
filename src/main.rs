@@ -4,6 +4,7 @@ use std::{
   io::{self},
 };
 
+mod eval;
 mod parser;
 
 #[derive(Parser, Debug)]
@@ -20,6 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let parsed = parser::parse(src.as_str())?;
   println!("{:#?}", parsed);
+
+  let mut context = eval::EvalContext::new();
+  let result = eval::eval(parsed, &mut context)?;
+  println!("{:#?}", result);
 
   Ok(())
 }
