@@ -1,16 +1,25 @@
-use crate::parser::{CommandNode, ScriptNode, WordNode};
+use crate::parser;
+use crate::parser::{CommandNode, ScriptNode, WordNode, WordPart};
 use std::collections::HashMap;
 use std::fmt::Display;
 
 #[derive(Debug)]
 pub enum EvalError {
   Generic(String),
+  UndefinedVariable(String),
+  CommandParseError(String),
   NotImplemented,
 }
 
 impl Display for EvalError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", self)
+    use EvalError::*;
+    match self {
+      Generic(s) => write!(f, "{}", s),
+      UndefinedVariable(v) => write!(f, "Undefined variable: {}", v),
+      CommandParseError(e) => write!(f, "Failed to parse command: {}", e),
+      NotImplemented => write!(f, "Not implemented"),
+    }
   }
 }
 
@@ -99,15 +108,12 @@ pub fn eval_command(command: CommandNode, context: &mut EvalContext) -> Result<V
 }
 
 pub fn eval_expr(
-  mut words: impl Iterator<Item = WordNode>,
+  words: impl Iterator<Item = WordNode>,
   context: &mut EvalContext,
 ) -> Result<Value, EvalError> {
-  eval_word(
-    words
-      .next()
-      .ok_or(EvalError::Generic("missing expression".to_string()))?,
-    context,
-  )
+  let values = words.map(|word| eval_word(word, context).map(|word| word.string));
+  let joined = values.collect::<Result<Vec<String>, _>>()?.join(" ");
+  Ok(Value::new(joined))
 }
 
 pub fn eval_set(
@@ -128,12 +134,31 @@ pub fn eval_set(
 }
 
 pub fn eval_word(word: WordNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  match word {
-    WordNode::Literal(s) => Ok(Value::new(s)),
-    WordNode::VarSub(name) => context
-      .get_variable(name.as_str())
-      .cloned()
-      .ok_or(EvalError::Generic(format!("variable {} not found", name))),
+  let joined = word
+    .parts
+    .iter()
+    .map(|part| eval_wordpart(part.clone(), context).map(|p| p.string))
+    .collect::<Result<Vec<String>, _>>()?
+    .join("");
+  Ok(Value::new(joined))
+}
+
+pub fn eval_wordpart(part: WordPart, context: &mut EvalContext) -> Result<Value, EvalError> {
+  match part {
+    WordPart::BareLiteral(s) => Ok(Value::new(s)),
+    WordPart::BracedLiteral(s) => Ok(Value::new(s)),
+    WordPart::BracedSub(v) => context
+      .get_variable(&v)
+      .ok_or_else(|| EvalError::UndefinedVariable(v))
+      .cloned(),
+    WordPart::CommandSub(c) => parser::parse(&c)
+      .map_err(|e| EvalError::CommandParseError(e.to_string()))
+      .and_then(|script| eval(script, context)),
+    WordPart::QuotedLiteral(s) => Ok(Value::new(s)),
+    WordPart::VarSub(v) => context
+      .get_variable(&v)
+      .ok_or_else(|| EvalError::UndefinedVariable(v))
+      .cloned(),
     _ => Err(EvalError::NotImplemented),
   }
 }

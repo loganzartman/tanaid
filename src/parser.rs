@@ -30,11 +30,26 @@ pub struct CommandNode {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum WordNode {
-  Literal(String),
+pub struct WordNode {
+  pub parts: Vec<WordPart>,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum WordPart {
+  BareLiteral(String),
+  BracedLiteral(String),
+  QuotedLiteral(String),
   VarSub(String),
+  VarIndex(String, String),
+  BracedSub(String),
+  BracedIndex(String, String),
   CommandSub(String),
-  Concat(Vec<WordNode>),
+}
+
+impl WordNode {
+  pub fn only(part: WordPart) -> WordNode {
+    WordNode { parts: vec![part] }
+  }
 }
 
 impl Display for ScriptNode {
@@ -60,17 +75,25 @@ impl Display for CommandNode {
 
 impl Display for WordNode {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    use WordNode::*;
+    for p in self.parts.iter() {
+      write!(f, "{}", p);
+    }
+    Ok(())
+  }
+}
+
+impl Display for WordPart {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    use WordPart::*;
     match self {
-      Literal(s) => write!(f, "{}", s),
-      VarSub(s) => write!(f, "${}", s),
-      CommandSub(n) => write!(f, "[{}]", n.to_string()),
-      Concat(v) => {
-        for n in v.iter() {
-          write!(f, "{}", n.to_string())?;
-        }
-        Ok(())
-      }
+      BareLiteral(s) => write!(f, "{}", s),
+      BracedLiteral(s) => write!(f, "{{{}}}", s),
+      QuotedLiteral(s) => write!(f, "\"{}\"", s),
+      VarSub(v) => write!(f, "${}", v),
+      VarIndex(v, i) => write!(f, "${}({})", v, i),
+      BracedSub(v) => write!(f, "${{{}}}", v),
+      BracedIndex(v, i) => write!(f, "${{{}({})}}", v, i),
+      CommandSub(c) => write!(f, "[{}]", c.to_string()),
     }
   }
 }
@@ -152,44 +175,66 @@ fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
   }
 }
 
-fn parse_word(src: &str) -> Result<(WordNode, &str), ParseError> {
-  if let Ok(result) = parse_word_cmdsub(src) {
-    return Ok(result);
+fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
+  // trim leading whitespace
+  if let Ok((_, rest)) = parse_ws(src) {
+    src = rest;
   }
 
-  if let Ok(result) = parse_word_varsub(src) {
-    return Ok(result);
+  let mut parts: Vec<WordPart> = vec![];
+  while !src.is_empty() {
+    if let Ok((part, rest)) = parse_wordpart_cmdsub(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
+    if let Ok((part, rest)) = parse_wordpart_varsub(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
+    if let Ok((part, rest)) = parse_wordpart_literal(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
+    break;
   }
 
-  if let Ok(result) = parse_word_literal(src) {
-    return Ok(result);
+  if parts.is_empty() {
+    Err(ParseError::Generic("expected word".to_string()))
+  } else {
+    Ok((WordNode { parts }, src))
   }
-
-  Err(ParseError::Generic("expected word".to_string()))
 }
 
-fn parse_word_literal(src: &str) -> Result<(WordNode, &str), ParseError> {
-  if let Ok((word, rest)) = parse_word_bracketed(src, BracketType::Curly) {
-    return Ok((WordNode::Literal(word), rest));
+fn parse_wordpart_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
+  if let Ok((s, rest)) = parse_bracketed(src, BracketType::Curly) {
+    return Ok((WordPart::BracedLiteral(s), rest));
   }
 
-  if let Ok((word, rest)) = parse_word_bracketed(src, BracketType::DoubleQuote) {
-    return Ok((WordNode::Literal(word), rest));
+  if let Ok((s, rest)) = parse_bracketed(src, BracketType::DoubleQuote) {
+    return Ok((WordPart::QuotedLiteral(s), rest));
   }
 
-  parse_word_bare(src).map(|(word, rest)| (WordNode::Literal(word), rest))
+  parse_wordpart_bare(src)
+    .map(|(s, rest)| (WordPart::BareLiteral(s), rest))
+    .map_err(|_| ParseError::Generic("expected literal word".to_string()))
 }
 
-fn parse_word_varsub(src: &str) -> Result<(WordNode, &str), ParseError> {
+fn parse_wordpart_varsub(src: &str) -> Result<(WordPart, &str), ParseError> {
   let rest = src
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
-  parse_word_bare(rest).map(|(word, rest)| (WordNode::VarSub(word), rest))
+  parse_wordpart_bare(rest).map(|(word, rest)| (WordPart::VarSub(word), rest))
 }
 
-fn parse_word_cmdsub(src: &str) -> Result<(WordNode, &str), ParseError> {
-  let (word, rest) = parse_word_bracketed(src, BracketType::Square)?;
-  Ok((WordNode::CommandSub(word), rest))
+fn parse_wordpart_cmdsub(src: &str) -> Result<(WordPart, &str), ParseError> {
+  let (word, rest) = parse_bracketed(src, BracketType::Square)?;
+  Ok((WordPart::CommandSub(word), rest))
 }
 
 enum BracketType {
@@ -198,7 +243,7 @@ enum BracketType {
   DoubleQuote,
 }
 
-fn parse_word_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseError> {
+fn parse_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseError> {
   let open = match b {
     BracketType::Square => '[',
     BracketType::Curly => '{',
@@ -242,13 +287,13 @@ fn parse_word_bracketed(src: &str, b: BracketType) -> Result<(String, &str), Par
   }
 }
 
-fn parse_word_bare(src: &str) -> Result<(String, &str), ParseError> {
-  let re_word = Regex::new(r#"^[^\[\]{}";\s]+"#).unwrap();
+fn parse_wordpart_bare(src: &str) -> Result<(String, &str), ParseError> {
+  let re_word = Regex::new(r#"^[^$\[\]{}";\s]+"#).unwrap();
 
   if let Some(captures) = re_word.captures(src) {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
-    Err(ParseError::Generic("expected literal word".to_string()))
+    Err(ParseError::Generic("expected bare word".to_string()))
   }
 }
 
@@ -290,6 +335,46 @@ mod tests {
   use super::*;
 
   #[test]
+  fn parses_word_with_two_varsubs() -> Result<(), ParseError> {
+    let parsed = parse_word("$x$y")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("x".to_string()),
+            WordPart::VarSub("y".to_string())
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_word_with_many_parts() -> Result<(), ParseError> {
+    let parsed = parse_word("$x[expr 1 + 2]$y[a][b]{c}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("x".to_string()),
+            WordPart::CommandSub("expr 1 + 2".to_string()),
+            WordPart::VarSub("y".to_string()),
+            WordPart::CommandSub("a".to_string()),
+            WordPart::CommandSub("b".to_string()),
+            WordPart::BracedLiteral("c".to_string()),
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
   fn parses_script_with_one_set_command() -> Result<(), ParseError> {
     let parsed = parse("set x 3")?;
     assert_eq!(
@@ -297,9 +382,9 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::Literal("set".to_string()),
-            WordNode::Literal("x".to_string()),
-            WordNode::Literal("3".to_string()),
+            WordNode::only(WordPart::BareLiteral("set".to_string())),
+            WordNode::only(WordPart::BareLiteral("x".to_string())),
+            WordNode::only(WordPart::BareLiteral("3".to_string())),
           ]
         }]
       }
@@ -316,17 +401,17 @@ mod tests {
         commands: vec![
           CommandNode {
             words: vec![
-              WordNode::Literal("set".to_string()),
-              WordNode::Literal("x".to_string()),
-              WordNode::Literal("3".to_string()),
+              WordNode::only(WordPart::BareLiteral("set".to_string())),
+              WordNode::only(WordPart::BareLiteral("x".to_string())),
+              WordNode::only(WordPart::BareLiteral("3".to_string())),
             ],
           },
           CommandNode {
             words: vec![
-              WordNode::Literal("expr".to_string()),
-              WordNode::Literal("2".to_string()),
-              WordNode::Literal("+".to_string()),
-              WordNode::Literal("1".to_string()),
+              WordNode::only(WordPart::BareLiteral("expr".to_string())),
+              WordNode::only(WordPart::BareLiteral("2".to_string())),
+              WordNode::only(WordPart::BareLiteral("+".to_string())),
+              WordNode::only(WordPart::BareLiteral("1".to_string())),
             ]
           },
         ]
@@ -343,10 +428,10 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::Literal("expr".to_string()),
-            WordNode::Literal("2".to_string()),
-            WordNode::Literal("+".to_string()),
-            WordNode::VarSub("x".to_string()),
+            WordNode::only(WordPart::BareLiteral("expr".to_string())),
+            WordNode::only(WordPart::BareLiteral("2".to_string())),
+            WordNode::only(WordPart::BareLiteral("+".to_string())),
+            WordNode::only(WordPart::VarSub("x".to_string())),
           ]
         },]
       }
@@ -362,10 +447,10 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::Literal("expr".to_string()),
-            WordNode::Literal("2".to_string()),
-            WordNode::Literal("+".to_string()),
-            WordNode::CommandSub("expr 3 + [expr 4 + 5]".to_string()),
+            WordNode::only(WordPart::BareLiteral("expr".to_string())),
+            WordNode::only(WordPart::BareLiteral("2".to_string())),
+            WordNode::only(WordPart::BareLiteral("+".to_string())),
+            WordNode::only(WordPart::CommandSub("expr 3 + [expr 4 + 5]".to_string())),
           ]
         },]
       }
@@ -381,9 +466,11 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::Literal("puts".to_string()),
-            WordNode::Literal("hello world".to_string()),
-            WordNode::Literal("nested {braced} string".to_string()),
+            WordNode::only(WordPart::BareLiteral("puts".to_string())),
+            WordNode::only(WordPart::QuotedLiteral("hello world".to_string())),
+            WordNode::only(WordPart::BracedLiteral(
+              "nested {braced} string".to_string()
+            )),
           ]
         }]
       }
