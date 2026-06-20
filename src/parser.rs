@@ -76,7 +76,7 @@ impl Display for CommandNode {
 impl Display for WordNode {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     for p in self.parts.iter() {
-      write!(f, "{}", p);
+      write!(f, "{}", p)?;
     }
     Ok(())
   }
@@ -229,6 +229,11 @@ fn parse_wordpart_varsub(src: &str) -> Result<(WordPart, &str), ParseError> {
   let rest = src
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
+
+  if let Ok((word, rest)) = parse_bracketed(rest, BracketType::Curly) {
+    return Ok((WordPart::BracedSub(word), rest));
+  }
+
   parse_wordpart_bare(rest).map(|(word, rest)| (WordPart::VarSub(word), rest))
 }
 
@@ -345,6 +350,21 @@ mod tests {
             WordPart::VarSub("x".to_string()),
             WordPart::VarSub("y".to_string())
           ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_word_braced_sub() -> Result<(), ParseError> {
+    let parsed = parse_word("${hello}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::BracedSub("hello".to_string())]
         },
         ""
       )

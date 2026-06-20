@@ -159,6 +159,7 @@ pub fn eval_wordpart(part: WordPart, context: &mut EvalContext) -> Result<Value,
       .get_variable(&v)
       .ok_or_else(|| EvalError::UndefinedVariable(v))
       .cloned(),
-    _ => Err(EvalError::NotImplemented),
+    WordPart::VarIndex(_, _) => Err(EvalError::NotImplemented),
+    WordPart::BracedIndex(_, _) => Err(EvalError::NotImplemented),
   }
 }
