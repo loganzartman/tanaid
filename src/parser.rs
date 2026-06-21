@@ -175,7 +175,7 @@ fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
   }
 }
 
-fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
+pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
   // trim leading whitespace
   if let Ok((_, rest)) = parse_ws(src) {
     src = rest;
@@ -325,7 +325,7 @@ fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
   }
 }
 
-fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
+pub(crate) fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
   let re_ws = Regex::new(r"^[\t\p{Zs}]+").unwrap();
 
   if let Some(captures) = re_ws.captures(src) {
