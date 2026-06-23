@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 pub enum ParseError {
   Generic(String),
+  Internal(String),
   NotImplemented,
 }
 
@@ -12,6 +13,7 @@ impl Display for ParseError {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match self {
       ParseError::Generic(s) => write!(f, "[ParseError] {}", s),
+      ParseError::Internal(s) => write!(f, "[ParseError] internal error: {}", s),
       ParseError::NotImplemented => write!(f, "[ParseError] not implemented"),
     }
   }

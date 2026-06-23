@@ -3,9 +3,7 @@ use std::{
   fs,
   io::{self},
 };
-
-mod eval;
-mod parser;
+use tanaid::{eval, parser};
 
 #[derive(Parser, Debug)]
 struct Args {
