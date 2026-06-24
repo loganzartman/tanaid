@@ -1,7 +1,7 @@
 use regex::Regex;
 
-use crate::parser;
 use crate::parser::{ParseError, WordNode};
+use crate::{parser, parser_expr};
 
 #[derive(Debug, PartialEq)]
 pub enum ExprNode {
@@ -91,8 +91,28 @@ pub fn parse_expr_unary(src: &str) -> Result<(ExprNode, &str), ParseError> {
 }
 
 pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
+  if let Ok(result) = parse_expr_group(src) {
+    return Ok(result);
+  }
+
   let (word, rest) = parser::parse_word(src)?;
   Ok((ExprNode::Word(word), rest))
+}
+
+pub fn parse_expr_group(src: &str) -> Result<(ExprNode, &str), ParseError> {
+  let Some(src) = src.strip_prefix("(") else {
+    return Err(ParseError::Generic("expected open parenthesis".to_string()));
+  };
+
+  let (node, src) = parse_expr(src)?;
+
+  let Some(src) = src.strip_prefix(")") else {
+    return Err(ParseError::Generic(
+      "expected close parenthesis".to_string(),
+    ));
+  };
+
+  Ok((node, src))
 }
 
 #[cfg(test)]
@@ -149,6 +169,37 @@ mod tests {
         Add,
         binop!(Add, lit!("2"), binop!(Mul, lit!("3"), lit!("2"))),
         binop!(Mul, binop!(Mul, lit!("2"), lit!("3")), lit!("5"))
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_group_simple() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("(2 + 3)")?;
+    assert_eq!(node, binop!(Add, lit!("2"), lit!("3")));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_group_precedence_change() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("5 * (2 + 3)")?;
+    assert_eq!(
+      node,
+      binop!(Mul, lit!("5"), binop!(Add, lit!("2"), lit!("3")))
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_group_nested() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("5 * ((2 + 3) * 4)")?;
+    assert_eq!(
+      node,
+      binop!(
+        Mul,
+        lit!("5"),
+        binop!(Mul, binop!(Add, lit!("2"), lit!("3")), lit!("4"))
       )
     );
     Ok(())

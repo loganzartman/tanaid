@@ -295,7 +295,7 @@ fn parse_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseErr
 }
 
 fn parse_wordpart_bare(src: &str) -> Result<(String, &str), ParseError> {
-  let re_word = Regex::new(r#"^[^$\[\]{}";\s]+"#).unwrap();
+  let re_word = Regex::new(r#"^[^$\[\]{}()";\s]+"#).unwrap();
 
   if let Some(captures) = re_word.captures(src) {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
@@ -391,6 +391,21 @@ mod tests {
           ]
         },
         ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_word_excludes_paren() -> Result<(), ParseError> {
+    let parsed = parse_word("hello(a")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::BareLiteral("hello".to_string())]
+        },
+        "(a"
       )
     );
     Ok(())
