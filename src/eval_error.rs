@@ -3,8 +3,10 @@ pub enum EvalError {
   Generic(String),
   UndefinedVariable(String),
   CommandParseError(String),
+  ScriptParseError(String),
   ExprParseError(String),
   NotNumericError(String),
+  BreakError,
   NotImplemented,
 }
 
@@ -15,8 +17,10 @@ impl std::fmt::Display for EvalError {
       Generic(s) => write!(f, "{}", s),
       UndefinedVariable(s) => write!(f, "Undefined variable: {}", s),
       CommandParseError(s) => write!(f, "Failed to parse command: {}", s),
+      ScriptParseError(s) => write!(f, "Failed to parse script: {}", s),
       ExprParseError(s) => write!(f, "Failed to parse expr: {}", s),
       NotNumericError(s) => write!(f, "Expected numeric value, got: {}", s),
+      BreakError => write!(f, "Unexpected break command"),
       NotImplemented => write!(f, "Not implemented"),
     }
   }

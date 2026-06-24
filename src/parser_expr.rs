@@ -23,6 +23,12 @@ pub enum BinaryOp {
   Sub,
   Mul,
   Div,
+  Eq,
+  Ne,
+  Lt,
+  Gt,
+  Le,
+  Ge,
 }
 
 pub fn parse_expr(src: &str) -> Result<(ExprNode, &str), ParseError> {
@@ -30,7 +36,7 @@ pub fn parse_expr(src: &str) -> Result<(ExprNode, &str), ParseError> {
 }
 
 pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &str), ParseError> {
-  if precedence >= 2 {
+  if precedence >= 3 {
     return parse_expr_unary(src);
   }
 
@@ -61,8 +67,9 @@ pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &st
 
 pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &str), ParseError> {
   let re = match precedence {
-    0 => Regex::new("^[+-]").unwrap(),
-    1 => Regex::new("^[*/]").unwrap(),
+    0 => Regex::new("^(<=|==|!=|>=|<|>)").unwrap(),
+    1 => Regex::new("^[+-]").unwrap(),
+    2 => Regex::new("^[*/]").unwrap(),
     _ => return Err(ParseError::Internal("invalid precedence".to_string())),
   };
 
@@ -72,6 +79,12 @@ pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &st
   let m = captures.get_match().as_str();
 
   let op = match m {
+    "<" => BinaryOp::Lt,
+    "<=" => BinaryOp::Le,
+    "==" => BinaryOp::Eq,
+    "!=" => BinaryOp::Ne,
+    ">=" => BinaryOp::Ge,
+    ">" => BinaryOp::Gt,
     "+" => BinaryOp::Add,
     "-" => BinaryOp::Sub,
     "*" => BinaryOp::Mul,
@@ -202,6 +215,17 @@ mod tests {
         binop!(Mul, binop!(Add, lit!("2"), lit!("3")), lit!("4"))
       )
     );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_comparison_ops() -> Result<(), ParseError> {
+    assert_eq!(parse_expr("1 < 2")?.0, binop!(Lt, lit!("1"), lit!("2")));
+    assert_eq!(parse_expr("1 <= 2")?.0, binop!(Le, lit!("1"), lit!("2")));
+    assert_eq!(parse_expr("1 == 2")?.0, binop!(Eq, lit!("1"), lit!("2")));
+    assert_eq!(parse_expr("1 != 2")?.0, binop!(Ne, lit!("1"), lit!("2")));
+    assert_eq!(parse_expr("1 >= 2")?.0, binop!(Ge, lit!("1"), lit!("2")));
+    assert_eq!(parse_expr("1 > 2")?.0, binop!(Gt, lit!("1"), lit!("2")));
     Ok(())
   }
 }

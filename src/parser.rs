@@ -105,7 +105,7 @@ pub fn parse(src: &str) -> Result<ScriptNode, ParseError> {
   return Ok(script_node);
 }
 
-fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
+pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {

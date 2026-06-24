@@ -1,4 +1,5 @@
 use crate::eval_error::EvalError;
+use std::cmp::Ordering;
 use std::fmt::Display;
 use std::ops;
 
@@ -64,6 +65,71 @@ impl Value {
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Float(x);
     Ok(x)
+  }
+
+  pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
+    if let (Ok(a), Ok(b)) = (self.repr_int(), other.repr_int()) {
+      return Ok(Some(a.cmp(&b)));
+    }
+    if let (Ok(a), Ok(b)) = (self.repr_float(), other.repr_float()) {
+      return Ok(a.partial_cmp(&b));
+    }
+
+    return Ok(Some(self.repr_str()?.cmp(other.repr_str()?)));
+  }
+
+  pub fn lt(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+    if matches!(self.compare(other)?, Some(Ordering::Less)) {
+      Ok(Value::from(1))
+    } else {
+      Ok(Value::from(0))
+    }
+  }
+
+  pub fn le(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+    if matches!(
+      self.compare(other)?,
+      Some(Ordering::Less) | Some(Ordering::Equal)
+    ) {
+      Ok(Value::from(1))
+    } else {
+      Ok(Value::from(0))
+    }
+  }
+
+  pub fn eq(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+    if matches!(self.compare(other)?, Some(Ordering::Equal)) {
+      Ok(Value::from(1))
+    } else {
+      Ok(Value::from(0))
+    }
+  }
+
+  pub fn ne(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+    if !matches!(self.compare(other)?, Some(Ordering::Equal)) {
+      Ok(Value::from(1))
+    } else {
+      Ok(Value::from(0))
+    }
+  }
+
+  pub fn ge(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+    if matches!(
+      self.compare(other)?,
+      Some(Ordering::Greater) | Some(Ordering::Equal)
+    ) {
+      Ok(Value::from(1))
+    } else {
+      Ok(Value::from(0))
+    }
+  }
+
+  pub fn gt(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+    if matches!(self.compare(other)?, Some(Ordering::Greater)) {
+      Ok(Value::from(1))
+    } else {
+      Ok(Value::from(0))
+    }
   }
 }
 

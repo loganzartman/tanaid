@@ -1,8 +1,8 @@
 use crate::eval_error::EvalError;
 use crate::parser;
 use crate::parser::{CommandNode, ScriptNode, WordNode, WordPart};
-use crate::parser_expr::ExprNode;
-use crate::parser_expr::{self, BinaryOp};
+use crate::parser_expr;
+use crate::parser_expr::{BinaryOp, ExprNode};
 use crate::value::Value;
 use std::collections::HashMap;
 
@@ -27,18 +27,18 @@ impl EvalContext {
 }
 
 pub fn eval(script: ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  eval_script(script, context)
+  eval_script(&script, context)
 }
 
-pub fn eval_script(script: ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_script(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
   let mut result = Value::none();
-  for command in script.commands {
-    result = eval_command(command, context)?;
+  for command in &script.commands {
+    result = eval_command(&command, context)?;
   }
   Ok(result)
 }
 
-pub fn eval_command(command: CommandNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_command(command: &CommandNode, context: &mut EvalContext) -> Result<Value, EvalError> {
   let [name, args @ ..] = command.words.as_slice() else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
@@ -46,11 +46,17 @@ pub fn eval_command(command: CommandNode, context: &mut EvalContext) -> Result<V
   let mut name_value = eval_word(&name, context)?;
 
   match name_value.repr_str()? {
+    "break" => eval_cmd_break(args, context),
     "expr" => eval_cmd_expr(args, context),
     "puts" => eval_cmd_puts(args, context),
     "set" => eval_cmd_set(args, context),
+    "while" => eval_cmd_while(args, context),
     _ => Err(EvalError::NotImplemented),
   }
+}
+
+pub fn eval_cmd_break(_words: &[WordNode], _context: &mut EvalContext) -> Result<Value, EvalError> {
+  Err(EvalError::BreakError)
 }
 
 pub fn eval_cmd_expr(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
@@ -97,6 +103,30 @@ pub fn eval_cmd_set(words: &[WordNode], context: &mut EvalContext) -> Result<Val
   Ok(value)
 }
 
+pub fn eval_cmd_while(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+  let [test, body] = words else {
+    return Err(EvalError::Generic(
+      "while requires two arguments: test and body".to_string(),
+    ));
+  };
+
+  let (test_expr, _) = parser_expr::parse_expr(eval_word(test, context)?.repr_str()?)
+    .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
+
+  let (body_script, _) = parser::parse_script(eval_word(body, context)?.repr_str()?)
+    .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
+
+  while eval_expr(&test_expr, context)?.repr_int()? != 0 {
+    match eval_script(&body_script, context) {
+      Err(EvalError::BreakError) => break,
+      Err(e) => return Err(e),
+      Ok(_) => {}
+    }
+  }
+
+  Ok(Value::none())
+}
+
 pub fn eval_expr(node: &ExprNode, context: &mut EvalContext) -> Result<Value, EvalError> {
   use ExprNode::*;
   match node {
@@ -114,9 +144,15 @@ pub fn eval_expr_binary_op(
   context: &mut EvalContext,
 ) -> Result<Value, EvalError> {
   use BinaryOp::*;
-  let a = eval_expr(a, context)?;
-  let b = eval_expr(b, context)?;
+  let mut a = eval_expr(a, context)?;
+  let mut b = eval_expr(b, context)?;
   match o {
+    Lt => a.lt(&mut b),
+    Le => a.le(&mut b),
+    Eq => a.eq(&mut b),
+    Ne => a.ne(&mut b),
+    Ge => a.ge(&mut b),
+    Gt => a.gt(&mut b),
     Add => a + b,
     Sub => a - b,
     Mul => a * b,
