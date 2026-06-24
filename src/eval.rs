@@ -67,9 +67,9 @@ pub fn eval_expr_node(node: &ExprNode, context: &mut EvalContext) -> Result<Valu
   use ExprNode::*;
   match node {
     Word(w) => eval_word(w, context),
-    UnaryOp(o, x) => todo!(),
+    UnaryOp(_o, _x) => todo!(),
     BinaryOp(o, a, b) => eval_expr_binary_op(o, a.as_ref(), b.as_ref(), context),
-    Ternary(c, i, e) => todo!(),
+    Ternary(_c, _i, _e) => todo!(),
   }
 }
 

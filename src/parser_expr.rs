@@ -1,7 +1,7 @@
 use regex::Regex;
 
+use crate::parser;
 use crate::parser::{ParseError, WordNode};
-use crate::{parser, parser_expr};
 
 #[derive(Debug, PartialEq)]
 pub enum ExprNode {
