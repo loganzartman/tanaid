@@ -39,25 +39,24 @@ pub fn eval_script(script: ScriptNode, context: &mut EvalContext) -> Result<Valu
 }
 
 pub fn eval_command(command: CommandNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  let mut words = command.words.into_iter();
-  let Some(name) = words.next() else {
+  let [name, args @ ..] = command.words.as_slice() else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
 
   let mut name_value = eval_word(&name, context)?;
 
   match name_value.repr_str()? {
-    "expr" => eval_expr(words, context),
-    "set" => eval_set(words, context),
+    "expr" => eval_expr(args, context),
+    "puts" => eval_puts(args, context),
+    "set" => eval_set(args, context),
     _ => Err(EvalError::NotImplemented),
   }
 }
 
-pub fn eval_expr(
-  words: impl Iterator<Item = WordNode>,
-  context: &mut EvalContext,
-) -> Result<Value, EvalError> {
-  let values = words.map(|word| eval_word(&word, context).map(|value| value.to_string()));
+pub fn eval_expr(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+  let values = words
+    .iter()
+    .map(|word| eval_word(&word, context).map(|value| value.to_string()));
   let joined = values.collect::<Result<Vec<String>, _>>()?.join(" ");
   let (node, _) = parser_expr::parse_expr(joined.as_str())
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
@@ -91,15 +90,32 @@ pub fn eval_expr_binary_op(
   }
 }
 
-pub fn eval_set(
-  mut words: impl Iterator<Item = WordNode>,
-  context: &mut EvalContext,
-) -> Result<Value, EvalError> {
-  let Some(name) = words.next() else {
-    return Err(EvalError::Generic("missing variable name".to_string()));
+pub fn eval_puts(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+  let [mut string] = match words {
+    [_, _, _] => todo!(),
+    [_, _] => todo!(),
+    [string] => [eval_word(string, context)?],
+    [..] => {
+      return Err(EvalError::Generic(
+        "too many arguments; expects string".to_string(),
+      ));
+    }
   };
-  let Some(value) = words.next() else {
-    return Err(EvalError::Generic("missing variable value".to_string()));
+
+  println!("{}", string.repr_str()?);
+  Ok(Value::none())
+}
+
+pub fn eval_set(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+  let [name, value] = match words {
+    [name, value] => [name, value],
+    [_] => return Err(EvalError::Generic("missing value".to_string())),
+    [] => return Err(EvalError::Generic("missing name and value".to_string())),
+    _ => {
+      return Err(EvalError::Generic(
+        "too many arguments; expects name and value".to_string(),
+      ));
+    }
   };
 
   let mut name = eval_word(&name, context)?;
