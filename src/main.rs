@@ -10,7 +10,9 @@ use tanaid::{eval, parser};
 #[derive(Parser, Debug)]
 struct Args {
   file_path: Option<String>,
-  debug: Option<bool>,
+
+  #[arg(short, long, default_value_t = false)]
+  debug: bool,
 }
 
 struct RunOpts {
@@ -20,9 +22,7 @@ struct RunOpts {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
   let mut context = eval::EvalContext::new();
-  let opts = RunOpts {
-    debug: args.debug.unwrap_or(false),
-  };
+  let opts = RunOpts { debug: args.debug };
 
   if let Some(file_path) = args.file_path {
     return run_source(fs::read_to_string(file_path)?.as_str(), &mut context, &opts);
