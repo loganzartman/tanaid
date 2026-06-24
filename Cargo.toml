@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+reedline = "0.48.0"
 regex = "1.12.4"
 
 [dev-dependencies]
