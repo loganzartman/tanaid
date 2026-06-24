@@ -4,6 +4,7 @@ pub enum EvalError {
   UndefinedVariable(String),
   CommandParseError(String),
   ExprParseError(String),
+  NotNumericError(String),
   NotImplemented,
 }
 
@@ -12,9 +13,10 @@ impl std::fmt::Display for EvalError {
     use EvalError::*;
     match self {
       Generic(s) => write!(f, "{}", s),
-      UndefinedVariable(v) => write!(f, "Undefined variable: {}", v),
-      CommandParseError(e) => write!(f, "Failed to parse command: {}", e),
-      ExprParseError(e) => write!(f, "Failed to parse expr: {}", e),
+      UndefinedVariable(s) => write!(f, "Undefined variable: {}", s),
+      CommandParseError(s) => write!(f, "Failed to parse command: {}", s),
+      ExprParseError(s) => write!(f, "Failed to parse expr: {}", s),
+      NotNumericError(s) => write!(f, "Expected numeric value, got: {}", s),
       NotImplemented => write!(f, "Not implemented"),
     }
   }

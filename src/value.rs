@@ -30,6 +30,11 @@ impl Value {
     }
   }
 
+  pub fn format_str(&self) -> Result<String, EvalError> {
+    // TODO: lazy materialize
+    Ok(self.string.clone())
+  }
+
   pub fn repr_str(&mut self) -> Result<&str, EvalError> {
     // TODO: lazy materialize
     Ok(&self.string)
@@ -59,6 +64,18 @@ impl Value {
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Float(x);
     Ok(x)
+  }
+}
+
+impl Display for Value {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "{}",
+      self
+        .format_str()
+        .unwrap_or("{Unprintable Value}".to_string())
+    )
   }
 }
 
@@ -98,52 +115,29 @@ impl From<f64> for Value {
   }
 }
 
-impl ops::Add for Value {
-  type Output = Result<Value, EvalError>;
+macro_rules! arithmetic_binop {
+  ($trait: ident, $name: ident, $op: tt) => {
+    impl ops::$trait for Value {
+      type Output = Result<Value, EvalError>;
 
-  fn add(mut self, mut rhs: Self) -> Self::Output {
-    if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
-      return Ok(Value::from(a + b));
+      fn $name(mut self, mut rhs: Self) -> Self::Output {
+        if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
+          return Ok(Value::from(a $op b));
+        }
+
+        let Ok(a) = self.repr_float() else {
+          return Err(EvalError::NotNumericError(self.to_string()));
+        };
+        let Ok(b) = rhs.repr_float() else {
+          return Err(EvalError::NotNumericError(rhs.to_string()));
+        };
+        Ok(Value::from(a $op b))
+      }
     }
-    Ok(Value::from(self.repr_float()? + rhs.repr_float()?))
-  }
+  };
 }
 
-impl ops::Sub for Value {
-  type Output = Result<Value, EvalError>;
-
-  fn sub(mut self, mut rhs: Self) -> Self::Output {
-    if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
-      return Ok(Value::from(a - b));
-    }
-    Ok(Value::from(self.repr_float()? - rhs.repr_float()?))
-  }
-}
-
-impl ops::Mul for Value {
-  type Output = Result<Value, EvalError>;
-
-  fn mul(mut self, mut rhs: Self) -> Self::Output {
-    if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
-      return Ok(Value::from(a * b));
-    }
-    Ok(Value::from(self.repr_float()? * rhs.repr_float()?))
-  }
-}
-
-impl ops::Div for Value {
-  type Output = Result<Value, EvalError>;
-
-  fn div(mut self, mut rhs: Self) -> Self::Output {
-    if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
-      return Ok(Value::from(a / b));
-    }
-    Ok(Value::from(self.repr_float()? / rhs.repr_float()?))
-  }
-}
-
-impl Display for Value {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", self.string)
-  }
-}
+arithmetic_binop!(Add, add, +);
+arithmetic_binop!(Sub, sub, -);
+arithmetic_binop!(Mul, mul, *);
+arithmetic_binop!(Div, div, /);

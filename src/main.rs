@@ -3,6 +3,7 @@ use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use std::{
   fs,
   io::{self, IsTerminal},
+  process::ExitCode,
 };
 use tanaid::value::Value;
 use tanaid::{eval, parser};
@@ -19,7 +20,17 @@ struct RunOpts {
   debug: bool,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> ExitCode {
+  match run() {
+    Ok(()) => ExitCode::SUCCESS,
+    Err(err) => {
+      eprintln!("Error: {}", err);
+      ExitCode::FAILURE
+    }
+  }
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
   let mut context = eval::EvalContext::new();
   let opts = RunOpts { debug: args.debug };
