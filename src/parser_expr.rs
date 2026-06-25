@@ -3,6 +3,8 @@ use regex::Regex;
 use crate::parser;
 use crate::parser::{ParseError, WordNode};
 
+use std::sync::LazyLock;
+
 #[derive(Debug, PartialEq)]
 pub enum ExprNode {
   Word(WordNode),
@@ -66,10 +68,14 @@ pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &st
 }
 
 pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &str), ParseError> {
+  static RE_P0: LazyLock<Regex> = LazyLock::new(|| Regex::new("^(<=|==|!=|>=|<|>)").unwrap());
+  static RE_P1: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[+-]").unwrap());
+  static RE_P2: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[*/]").unwrap());
+
   let re = match precedence {
-    0 => Regex::new("^(<=|==|!=|>=|<|>)").unwrap(),
-    1 => Regex::new("^[+-]").unwrap(),
-    2 => Regex::new("^[*/]").unwrap(),
+    0 => &RE_P0,
+    1 => &RE_P1,
+    2 => &RE_P2,
     _ => return Err(ParseError::Internal("invalid precedence".to_string())),
   };
 

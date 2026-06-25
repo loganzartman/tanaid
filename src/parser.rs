@@ -1,6 +1,7 @@
 use regex::Regex;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::sync::LazyLock;
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -166,9 +167,9 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
 }
 
 fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
-  let re_cmd_sep = Regex::new(r"^[\r\n\;]+").unwrap();
+  static RE_CMD_SEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\r\n\;]+").unwrap());
 
-  if let Some(captures) = re_cmd_sep.captures(src) {
+  if let Some(captures) = RE_CMD_SEP.captures(src) {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
     Err(ParseError::Generic(
@@ -295,9 +296,9 @@ fn parse_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseErr
 }
 
 fn parse_wordpart_bare(src: &str) -> Result<(String, &str), ParseError> {
-  let re_word = Regex::new(r#"^[^$\[\]{}()";\s]+"#).unwrap();
+  static RE_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^$\[\]{}()";\s]+"#).unwrap());
 
-  if let Some(captures) = re_word.captures(src) {
+  if let Some(captures) = RE_WORD.captures(src) {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
     Err(ParseError::Generic("expected bare word".to_string()))
@@ -328,9 +329,9 @@ fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
 }
 
 pub(crate) fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
-  let re_ws = Regex::new(r"^[\t\p{Zs}]+").unwrap();
+  static RE_WS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\t\p{Zs}]+").unwrap());
 
-  if let Some(captures) = re_ws.captures(src) {
+  if let Some(captures) = RE_WS.captures(src) {
     Ok((captures[0].to_string(), &src[captures[0].len()..]))
   } else {
     Err(ParseError::Generic("expected whitespace".to_string()))
