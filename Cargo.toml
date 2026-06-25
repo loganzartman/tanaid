@@ -3,6 +3,12 @@ name = "tanaid"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+debug = true
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-Clink-arg=-Wl,--no-rosegment"]
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 reedline = "0.48.0"
