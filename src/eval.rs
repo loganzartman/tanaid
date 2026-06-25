@@ -26,8 +26,8 @@ impl EvalContext {
   }
 }
 
-pub fn eval(script: ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  eval_script(&script, context)
+pub fn eval(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+  eval_script(script, context)
 }
 
 pub fn eval_script(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
@@ -179,7 +179,7 @@ pub fn eval_wordpart(part: &WordPart, context: &mut EvalContext) -> Result<Value
       .cloned(),
     WordPart::CommandSub(c) => parser::parse(&c)
       .map_err(|e| EvalError::CommandParseError(e.to_string()))
-      .and_then(|script| eval(script, context)),
+      .and_then(|script| eval(&script, context)),
     WordPart::QuotedLiteral(s) => Ok(Value::new(s)),
     WordPart::VarSub(v) => context
       .get_variable(&v)

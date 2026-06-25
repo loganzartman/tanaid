@@ -96,7 +96,7 @@ fn exec(
     println!("{:#?}", parsed)
   }
 
-  let result = eval::eval(parsed, context)?;
+  let result = eval::eval(&parsed, context)?;
   if opts.debug {
     println!("{:#?}", result);
   }
