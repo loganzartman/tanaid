@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum EvalError {
   Generic(String),
+  ArgumentError(String),
   UndefinedVariable(String),
   CommandParseError(String),
   ScriptParseError(String),
@@ -15,6 +16,7 @@ impl std::fmt::Display for EvalError {
     use EvalError::*;
     match self {
       Generic(s) => write!(f, "{}", s),
+      ArgumentError(s) => write!(f, "Argument error: {}", s),
       UndefinedVariable(s) => write!(f, "Undefined variable: {}", s),
       CommandParseError(s) => write!(f, "Failed to parse command: {}", s),
       ScriptParseError(s) => write!(f, "Failed to parse script: {}", s),

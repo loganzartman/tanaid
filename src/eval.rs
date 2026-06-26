@@ -48,6 +48,7 @@ pub fn eval_command(command: &CommandNode, context: &mut EvalContext) -> Result<
   match name_value.repr_str()? {
     "break" => eval_cmd_break(args, context),
     "expr" => eval_cmd_expr(args, context),
+    "if" => eval_cmd_if(args, context),
     "puts" => eval_cmd_puts(args, context),
     "set" => eval_cmd_set(args, context),
     "while" => eval_cmd_while(args, context),
@@ -67,6 +68,16 @@ pub fn eval_cmd_expr(words: &[WordNode], context: &mut EvalContext) -> Result<Va
   let (node, _) = parser_expr::parse_expr(joined.as_str())
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
   eval_expr(&node, context)
+}
+
+pub fn eval_cmd_if(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+  let mut args = words.iter().map(|w| eval_word(w, context)).peekable();
+
+  let cond = &args
+    .next()
+    .ok_or_else(|| EvalError::ArgumentError("expected condition".to_string()))??;
+
+  todo!()
 }
 
 pub fn eval_cmd_puts(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
