@@ -52,7 +52,7 @@ pub fn eval_command(command: &CommandNode, context: &mut EvalContext) -> Result<
     "puts" => eval_cmd_puts(args, context),
     "set" => eval_cmd_set(args, context),
     "while" => eval_cmd_while(args, context),
-    _ => Err(EvalError::NotImplemented),
+    other => Err(EvalError::UndefinedCommand(other.to_string())),
   }
 }
 
@@ -73,11 +73,58 @@ pub fn eval_cmd_expr(words: &[WordNode], context: &mut EvalContext) -> Result<Va
 pub fn eval_cmd_if(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
   let mut args = words.iter().map(|w| eval_word(w, context)).peekable();
 
-  let cond = &args
-    .next()
-    .ok_or_else(|| EvalError::ArgumentError("expected condition".to_string()))??;
+  let mut cond_body: Vec<(Value, Value)> = vec![];
 
-  todo!()
+  loop {
+    // require `elseif` to start 2nd condition onward
+    if !cond_body.is_empty() {
+      if matches!(args.peek(), Some(Ok(value)) if value.to_string() == "elseif") {
+        args.next();
+      } else {
+        break;
+      }
+    }
+
+    // required condition
+    let cond = args
+      .next()
+      .ok_or_else(|| EvalError::ArgumentError("expected condition".to_string()))??;
+
+    // optional "then"
+    if matches!(args.peek(), Some(Ok(value)) if value.to_string() == "then") {
+      args.next();
+    }
+
+    // required body
+    let body = args
+      .next()
+      .ok_or_else(|| EvalError::ArgumentError("expected condition body".to_string()))??;
+
+    cond_body.push((cond, body));
+  }
+
+  // optional "else"
+  if matches!(args.peek(), Some(Ok(value)) if value.to_string() == "else") {
+    args.next();
+  }
+
+  // optional else body
+  if let Some(else_body) = args.next() {
+    cond_body.push((Value::from(1), else_body?));
+  }
+
+  for (cond, body) in &mut cond_body {
+    let (cond_parsed, _) = parser_expr::parse_expr(cond.repr_str()?)
+      .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if condition: {}", e)))?;
+    let body_parsed = parser::parse(body.repr_str()?)
+      .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
+
+    if eval_expr(&cond_parsed, context)?.repr_int()? != 0 {
+      return eval(&body_parsed, context);
+    }
+  }
+
+  Ok(Value::none())
 }
 
 pub fn eval_cmd_puts(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
@@ -198,5 +245,74 @@ pub fn eval_wordpart(part: &WordPart, context: &mut EvalContext) -> Result<Value
       .cloned(),
     WordPart::VarIndex(_, _) => Err(EvalError::NotImplemented),
     WordPart::BracedIndex(_, _) => Err(EvalError::NotImplemented),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::eval::*;
+
+  #[test]
+  fn eval_if_simple() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("if {$x} {expr yes} {expr no}")?;
+    {
+      let mut ctx = EvalContext::new();
+      ctx.set_variable("x", 1.into());
+      let mut result = eval(&ast, &mut ctx)?;
+      assert_eq!(result.repr_str()?, "yes");
+    }
+    {
+      let mut ctx = EvalContext::new();
+      ctx.set_variable("x", 0.into());
+      let mut result = eval(&ast, &mut ctx)?;
+      assert_eq!(result.repr_str()?, "no");
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn eval_if_verbose() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("if {$x} then {expr yes} else {expr no}")?;
+    {
+      let mut ctx = EvalContext::new();
+      ctx.set_variable("x", 1.into());
+      let mut result = eval(&ast, &mut ctx)?;
+      assert_eq!(result.repr_str()?, "yes");
+    }
+    {
+      let mut ctx = EvalContext::new();
+      ctx.set_variable("x", 0.into());
+      let mut result = eval(&ast, &mut ctx)?;
+      assert_eq!(result.repr_str()?, "no");
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn eval_if_elseif_one_verbose() -> Result<(), Box<dyn std::error::Error>> {
+    {
+      let ast = parser::parse("if {0} then {expr 0} elseif {1} then {expr 1} else {expr 2}")?;
+      let mut ctx = EvalContext::new();
+      let mut result = eval(&ast, &mut ctx)?;
+      assert_eq!(result.repr_str()?, "1");
+    }
+    {
+      let ast = parser::parse("if {0} then {expr 0} elseif {0} then {expr 1} else {expr 2}")?;
+      let mut ctx = EvalContext::new();
+      let mut result = eval(&ast, &mut ctx)?;
+      assert_eq!(result.repr_str()?, "2");
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn eval_if_elseif_three_verbose() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse(
+      "if {0} then {expr 0} elseif {0} then {expr 1} elseif {1} then {expr 2} else {expr 3}",
+    )?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_str()?, "2");
+    Ok(())
   }
 }
