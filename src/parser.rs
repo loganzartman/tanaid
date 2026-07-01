@@ -22,22 +22,22 @@ impl Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct ScriptNode {
   pub commands: Vec<CommandNode>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct CommandNode {
   pub words: Vec<WordNode>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct WordNode {
   pub parts: Vec<WordPart>,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum WordPart {
   BareLiteral(String),
   BracedLiteral(String),
@@ -174,6 +174,48 @@ fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
   } else {
     Err(ParseError::Generic(
       "expected command separator (newline or `;`)".to_string(),
+    ))
+  }
+}
+
+pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
+  let mut items: Vec<String> = vec![];
+  let mut first = true;
+
+  while !src.is_empty() {
+    // required whitespace separator
+    if let Ok((_, rest)) = parse_ws(src) {
+      src = rest;
+    } else if !first {
+      break;
+    }
+    first = false;
+
+    if let Ok((str, rest)) = parse_bracketed(src, BracketType::Curly) {
+      items.push(str);
+      src = rest;
+    } else if let Ok((str, rest)) = parse_bracketed(src, BracketType::DoubleQuote) {
+      items.push(str);
+      src = rest;
+    } else if let Ok((str, rest)) = parse_list_element_bare(src) {
+      items.push(str);
+      src = rest;
+    } else {
+      break;
+    }
+  }
+
+  Ok((items, src))
+}
+
+fn parse_list_element_bare(src: &str) -> Result<(String, &str), ParseError> {
+  static RE_BARE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^{}"\s]+"#).unwrap());
+
+  if let Some(captures) = RE_BARE.captures(src) {
+    Ok((captures[0].to_string(), &src[captures[0].len()..]))
+  } else {
+    Err(ParseError::Generic(
+      "expected bare list element".to_string(),
     ))
   }
 }
@@ -409,6 +451,20 @@ mod tests {
         "(a"
       )
     );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_decodes_braced_element() -> Result<(), ParseError> {
+    let parsed = parse_list("{args}")?;
+    assert_eq!(parsed, (vec!["args".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_leaves_substitution_syntax_literal() -> Result<(), ParseError> {
+    let parsed = parse_list("$x [foo]")?;
+    assert_eq!(parsed, (vec!["$x".to_string(), "[foo]".to_string()], ""));
     Ok(())
   }
 
