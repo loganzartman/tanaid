@@ -12,31 +12,47 @@ pub struct Proc {
   body: ScriptNode,
 }
 
+type FrameId = usize;
+const GLOBAL_FRAME: FrameId = 0;
+
 #[derive(Clone, Debug)]
 pub struct EvalContext {
-  variables: HashMap<String, Value>,
   procs: HashMap<String, Proc>,
+  frames: Vec<EvalFrame>,
+}
+
+#[derive(Clone, Debug)]
+pub struct EvalFrame {
+  caller: Option<FrameId>,
+  variables: HashMap<String, Value>,
 }
 
 impl EvalContext {
   pub fn new() -> EvalContext {
     EvalContext {
-      variables: HashMap::new(),
       procs: HashMap::new(),
+      frames: vec![EvalFrame::new()],
     }
   }
 
-  pub fn fork(&self) -> EvalContext {
-    // TODO: parent chain
-    self.clone()
+  pub fn frame(&self, id: FrameId) -> &EvalFrame {
+    self.frames.get(id).unwrap()
   }
 
-  pub fn get_variable(&self, name: &str) -> Option<&Value> {
-    self.variables.get(name)
+  pub fn frame_mut(&mut self, id: FrameId) -> &mut EvalFrame {
+    self.frames.get_mut(id).unwrap()
   }
 
-  pub fn set_variable(&mut self, name: &str, value: Value) {
-    self.variables.insert(name.to_string(), value);
+  pub fn run_with_frame<R>(
+    &mut self,
+    calling_frame: FrameId,
+    f: impl FnOnce(&mut EvalContext, FrameId) -> R,
+  ) -> R {
+    let next_id = self.frames.len();
+    self.frames.push(EvalFrame::new_from(calling_frame));
+    let result = f(self, next_id);
+    self.frames.pop();
+    result
   }
 
   pub fn get_proc(&self, name: &str) -> Option<&Proc> {
@@ -48,17 +64,42 @@ impl EvalContext {
   }
 }
 
+impl EvalFrame {
+  pub fn new() -> EvalFrame {
+    EvalFrame {
+      caller: None,
+      variables: HashMap::new(),
+    }
+  }
+
+  pub fn new_from(frame: FrameId) -> EvalFrame {
+    EvalFrame {
+      caller: Some(frame),
+      variables: HashMap::new(),
+    }
+  }
+
+  pub fn get_variable(&self, name: &str) -> Option<&Value> {
+    self.variables.get(name)
+  }
+
+  pub fn set_variable(&mut self, name: &str, value: Value) {
+    self.variables.insert(name.to_string(), value);
+  }
+}
+
 pub fn eval(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  eval_returnable_script(script, context)
+  eval_returnable_script(script, context, GLOBAL_FRAME)
 }
 
 pub fn eval_returnable_script(
   script: &ScriptNode,
   context: &mut EvalContext,
+  frame: FrameId,
 ) -> Result<Value, EvalError> {
   let mut result = Value::none();
   for command in &script.commands {
-    match eval_command(&command, context) {
+    match eval_command(&command, context, frame) {
       Ok(val) => result = val,
       Err(EvalError::ReturnError(val)) => {
         result = val;
@@ -70,43 +111,55 @@ pub fn eval_returnable_script(
   Ok(result)
 }
 
-pub fn eval_script(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_script(
+  script: &ScriptNode,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let mut result = Value::none();
   for command in &script.commands {
-    result = eval_command(&command, context)?;
+    result = eval_command(&command, context, frame)?;
   }
   Ok(result)
 }
 
-pub fn eval_command(command: &CommandNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_command(
+  command: &CommandNode,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let [name, args @ ..] = command.words.as_slice() else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
 
-  let mut name_value = eval_word(&name, context)?;
+  let mut name_value = eval_word(&name, context, frame)?;
   let name_str = name_value.repr_str()?;
 
   // user-defined proc
   // TODO: reference-count procs
   if let Some(proc) = context.get_proc(name_str).cloned() {
-    return eval_proc(name_str, &proc, args, context);
+    return eval_proc(name_str, &proc, args, context, frame);
   }
 
   // builtin
   match name_str {
-    "break" => eval_cmd_break(args, context),
-    "expr" => eval_cmd_expr(args, context),
-    "if" => eval_cmd_if(args, context),
-    "proc" => eval_cmd_proc(args, context),
-    "puts" => eval_cmd_puts(args, context),
-    "return" => eval_cmd_return(args, context),
-    "set" => eval_cmd_set(args, context),
-    "while" => eval_cmd_while(args, context),
+    "break" => eval_cmd_break(args, context, frame),
+    "expr" => eval_cmd_expr(args, context, frame),
+    "if" => eval_cmd_if(args, context, frame),
+    "proc" => eval_cmd_proc(args, context, frame),
+    "puts" => eval_cmd_puts(args, context, frame),
+    "return" => eval_cmd_return(args, context, frame),
+    "set" => eval_cmd_set(args, context, frame),
+    "while" => eval_cmd_while(args, context, frame),
     _ => Err(EvalError::UndefinedCommand(name_str.to_string())),
   }
 }
 
-pub fn eval_cmd_break(words: &[WordNode], _context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_break(
+  words: &[WordNode],
+  _context: &mut EvalContext,
+  _frame: FrameId,
+) -> Result<Value, EvalError> {
   if !words.is_empty() {
     return Err(EvalError::ArgumentError(
       "break expects no arguments".to_string(),
@@ -115,18 +168,29 @@ pub fn eval_cmd_break(words: &[WordNode], _context: &mut EvalContext) -> Result<
   Err(EvalError::BreakError)
 }
 
-pub fn eval_cmd_expr(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_expr(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let values = words
     .iter()
-    .map(|word| eval_word(&word, context).map(|value| value.to_string()));
+    .map(|word| eval_word(&word, context, frame).map(|value| value.to_string()));
   let joined = values.collect::<Result<Vec<String>, _>>()?.join(" ");
   let (node, _) = parser_expr::parse_expr(joined.as_str())
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
-  eval_expr(&node, context)
+  eval_expr(&node, context, frame)
 }
 
-pub fn eval_cmd_if(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
-  let mut args = words.iter().map(|w| eval_word(w, context)).peekable();
+pub fn eval_cmd_if(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
+  let mut args = words
+    .iter()
+    .map(|w| eval_word(w, context, frame))
+    .peekable();
 
   let mut cond_body: Vec<(Value, Value)> = vec![];
 
@@ -174,20 +238,24 @@ pub fn eval_cmd_if(words: &[WordNode], context: &mut EvalContext) -> Result<Valu
     let body_parsed = parser::parse(body.repr_str()?)
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
 
-    if eval_expr(&cond_parsed, context)?.repr_int()? != 0 {
-      return eval_script(&body_parsed, context);
+    if eval_expr(&cond_parsed, context, frame)?.repr_int()? != 0 {
+      return eval_script(&body_parsed, context, frame);
     }
   }
 
   Ok(Value::none())
 }
 
-pub fn eval_cmd_proc(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_proc(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let (mut name_val, mut params_val, mut body_val) = match words {
     [name, params, body] => (
-      eval_word(name, context)?,
-      eval_word(params, context)?,
-      eval_word(body, context)?,
+      eval_word(name, context, frame)?,
+      eval_word(params, context, frame)?,
+      eval_word(body, context, frame)?,
     ),
     [..] => {
       return Err(EvalError::ArgumentError(
@@ -219,11 +287,15 @@ pub fn eval_cmd_proc(words: &[WordNode], context: &mut EvalContext) -> Result<Va
   Ok(Value::none())
 }
 
-pub fn eval_cmd_puts(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_puts(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let [mut string] = match words {
     [_, _, _] => todo!(),
     [_, _] => todo!(),
-    [string] => [eval_word(string, context)?],
+    [string] => [eval_word(string, context, frame)?],
     [..] => {
       return Err(EvalError::Generic(
         "too many arguments; expects string".to_string(),
@@ -235,15 +307,23 @@ pub fn eval_cmd_puts(words: &[WordNode], context: &mut EvalContext) -> Result<Va
   Ok(Value::none())
 }
 
-pub fn eval_cmd_return(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
-  match words.get(0).map(|w| eval_word(w, context)) {
+pub fn eval_cmd_return(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
+  match words.get(0).map(|w| eval_word(w, context, frame)) {
     Some(Ok(val)) => Err(EvalError::ReturnError(val)),
     Some(Err(e)) => Err(e),
     None => Err(EvalError::ReturnError(Value::none())),
   }?
 }
 
-pub fn eval_cmd_set(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_set(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let [name, value] = match words {
     [name, value] => [name, value],
     [_] => return Err(EvalError::Generic("missing value".to_string())),
@@ -255,27 +335,33 @@ pub fn eval_cmd_set(words: &[WordNode], context: &mut EvalContext) -> Result<Val
     }
   };
 
-  let mut name = eval_word(&name, context)?;
-  let value = eval_word(&value, context)?;
-  context.set_variable(name.repr_str()?, value.clone());
+  let mut name = eval_word(&name, context, frame)?;
+  let value = eval_word(&value, context, frame)?;
+  context
+    .frame_mut(frame)
+    .set_variable(name.repr_str()?, value.clone());
   Ok(value)
 }
 
-pub fn eval_cmd_while(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_while(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let [test, body] = words else {
     return Err(EvalError::Generic(
       "while requires two arguments: test and body".to_string(),
     ));
   };
 
-  let (test_expr, _) = parser_expr::parse_expr(eval_word(test, context)?.repr_str()?)
+  let (test_expr, _) = parser_expr::parse_expr(eval_word(test, context, frame)?.repr_str()?)
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
 
-  let (body_script, _) = parser::parse_script(eval_word(body, context)?.repr_str()?)
+  let (body_script, _) = parser::parse_script(eval_word(body, context, frame)?.repr_str()?)
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
 
-  while eval_expr(&test_expr, context)?.repr_int()? != 0 {
-    match eval_script(&body_script, context) {
+  while eval_expr(&test_expr, context, frame)?.repr_int()? != 0 {
+    match eval_script(&body_script, context, frame) {
       Err(EvalError::BreakError) => break,
       Err(e) => return Err(e),
       Ok(_) => {}
@@ -285,12 +371,16 @@ pub fn eval_cmd_while(words: &[WordNode], context: &mut EvalContext) -> Result<V
   Ok(Value::none())
 }
 
-pub fn eval_expr(node: &ExprNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_expr(
+  node: &ExprNode,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   use ExprNode::*;
   match node {
-    Word(w) => eval_word(w, context),
+    Word(w) => eval_word(w, context, frame),
     UnaryOp(_o, _x) => todo!(),
-    BinaryOp(o, a, b) => eval_expr_binary_op(o, a.as_ref(), b.as_ref(), context),
+    BinaryOp(o, a, b) => eval_expr_binary_op(o, a.as_ref(), b.as_ref(), context, frame),
     Ternary(_c, _i, _e) => todo!(),
   }
 }
@@ -300,10 +390,11 @@ pub fn eval_expr_binary_op(
   a: &ExprNode,
   b: &ExprNode,
   context: &mut EvalContext,
+  frame: FrameId,
 ) -> Result<Value, EvalError> {
   use BinaryOp::*;
-  let mut a = eval_expr(a, context)?;
-  let mut b = eval_expr(b, context)?;
+  let mut a = eval_expr(a, context, frame)?;
+  let mut b = eval_expr(b, context, frame)?;
   match o {
     Lt => a.lt(&mut b),
     Le => a.le(&mut b),
@@ -323,65 +414,81 @@ pub fn eval_proc(
   proc: &Proc,
   args: &[WordNode],
   context: &mut EvalContext,
+  frame: FrameId,
 ) -> Result<Value, EvalError> {
-  let mut proc_context = context.fork();
-
-  // bind arguments
-  let mut args_it = args.iter().map(|arg| eval_word(arg, context));
-  for (i, param) in proc.params.iter().enumerate() {
-    // handle rest args
-    if i == proc.params.len() - 1 {
-      if param == "args" {
-        let args_concat = args_it
-          .by_ref()
-          .map(|arg| arg?.repr_str().map(|str| str.to_string()))
-          .collect::<Result<Vec<_>, _>>()?
-          .join(" ");
-        proc_context.set_variable("args", Value::new(args_concat));
-        break;
+  context.run_with_frame(frame, |context, proc_frame| {
+    // bind arguments
+    let mut args_it = args.iter();
+    for (i, param) in proc.params.iter().enumerate() {
+      // handle rest args
+      if i == proc.params.len() - 1 {
+        if param == "args" {
+          let args_concat = args_it
+            .by_ref()
+            .map(|word| {
+              eval_word(word, context, frame)?
+                .repr_str()
+                .map(|str| str.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .join(" ");
+          context
+            .frame_mut(proc_frame)
+            .set_variable("args", Value::new(args_concat));
+          break;
+        }
       }
+
+      let value = args_it
+        .next()
+        .map(|w| eval_word(w, context, frame))
+        .ok_or_else(|| EvalError::ArgumentError(format!("not enough args for {}", name)))??;
+      context.frame_mut(proc_frame).set_variable(param, value);
     }
 
-    proc_context.set_variable(
-      param,
-      args_it
-        .next()
-        .ok_or_else(|| EvalError::ArgumentError(format!("not enough args for {}", name)))??,
-    );
-  }
+    if args_it.next().is_some() {
+      return Err(EvalError::ArgumentError(format!(
+        "too many args for {}",
+        name
+      )));
+    }
 
-  if args_it.next().is_some() {
-    return Err(EvalError::ArgumentError(format!(
-      "too many args for {}",
-      name
-    )));
-  }
-
-  eval_returnable_script(&proc.body, &mut proc_context)
+    eval_returnable_script(&proc.body, context, proc_frame)
+  })
 }
 
-pub fn eval_word(word: &WordNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_word(
+  word: &WordNode,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let mut joined = String::new();
   for part in &word.parts {
-    let mut value = eval_wordpart(part, context)?;
+    let mut value = eval_wordpart(part, context, frame)?;
     joined.push_str(value.repr_str()?);
   }
   Ok(Value::new(joined))
 }
 
-pub fn eval_wordpart(part: &WordPart, context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_wordpart(
+  part: &WordPart,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   match part {
     WordPart::BareLiteral(s) => Ok(Value::new(s)),
     WordPart::BracedLiteral(s) => Ok(Value::new(s)),
     WordPart::BracedSub(v) => context
+      .frame(frame)
       .get_variable(&v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
     WordPart::CommandSub(c) => parser::parse(&c)
       .map_err(|e| EvalError::CommandParseError(e.to_string()))
-      .and_then(|script| eval_script(&script, context)),
+      .and_then(|script| eval_script(&script, context, frame)),
     WordPart::QuotedLiteral(s) => Ok(Value::new(s)),
     WordPart::VarSub(v) => context
+      .frame(frame)
       .get_variable(&v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
@@ -400,13 +507,13 @@ mod tests {
     let ast = parser::parse("if {$x} {expr yes} {expr no}")?;
     {
       let mut ctx = EvalContext::new();
-      ctx.set_variable("x", 1.into());
+      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 1.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "yes");
     }
     {
       let mut ctx = EvalContext::new();
-      ctx.set_variable("x", 0.into());
+      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 0.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "no");
     }
@@ -418,13 +525,13 @@ mod tests {
     let ast = parser::parse("if {$x} then {expr yes} else {expr no}")?;
     {
       let mut ctx = EvalContext::new();
-      ctx.set_variable("x", 1.into());
+      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 1.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "yes");
     }
     {
       let mut ctx = EvalContext::new();
-      ctx.set_variable("x", 0.into());
+      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 0.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "no");
     }
