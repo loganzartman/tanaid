@@ -49,7 +49,25 @@ impl EvalContext {
 }
 
 pub fn eval(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  eval_script(script, context)
+  eval_returnable_script(script, context)
+}
+
+pub fn eval_returnable_script(
+  script: &ScriptNode,
+  context: &mut EvalContext,
+) -> Result<Value, EvalError> {
+  let mut result = Value::none();
+  for command in &script.commands {
+    match eval_command(&command, context) {
+      Ok(val) => result = val,
+      Err(EvalError::ReturnError(val)) => {
+        result = val;
+        break;
+      }
+      err => return err,
+    }
+  }
+  Ok(result)
 }
 
 pub fn eval_script(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
@@ -81,13 +99,19 @@ pub fn eval_command(command: &CommandNode, context: &mut EvalContext) -> Result<
     "if" => eval_cmd_if(args, context),
     "proc" => eval_cmd_proc(args, context),
     "puts" => eval_cmd_puts(args, context),
+    "return" => eval_cmd_return(args, context),
     "set" => eval_cmd_set(args, context),
     "while" => eval_cmd_while(args, context),
     _ => Err(EvalError::UndefinedCommand(name_str.to_string())),
   }
 }
 
-pub fn eval_cmd_break(_words: &[WordNode], _context: &mut EvalContext) -> Result<Value, EvalError> {
+pub fn eval_cmd_break(words: &[WordNode], _context: &mut EvalContext) -> Result<Value, EvalError> {
+  if !words.is_empty() {
+    return Err(EvalError::ArgumentError(
+      "break expects no arguments".to_string(),
+    ));
+  }
   Err(EvalError::BreakError)
 }
 
@@ -151,7 +175,7 @@ pub fn eval_cmd_if(words: &[WordNode], context: &mut EvalContext) -> Result<Valu
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
 
     if eval_expr(&cond_parsed, context)?.repr_int()? != 0 {
-      return eval(&body_parsed, context);
+      return eval_script(&body_parsed, context);
     }
   }
 
@@ -209,6 +233,14 @@ pub fn eval_cmd_puts(words: &[WordNode], context: &mut EvalContext) -> Result<Va
 
   println!("{}", string.repr_str()?);
   Ok(Value::none())
+}
+
+pub fn eval_cmd_return(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
+  match words.get(0).map(|w| eval_word(w, context)) {
+    Some(Ok(val)) => Err(EvalError::ReturnError(val)),
+    Some(Err(e)) => Err(e),
+    None => Err(EvalError::ReturnError(Value::none())),
+  }?
 }
 
 pub fn eval_cmd_set(words: &[WordNode], context: &mut EvalContext) -> Result<Value, EvalError> {
@@ -325,7 +357,7 @@ pub fn eval_proc(
     )));
   }
 
-  eval_script(&proc.body, &mut proc_context)
+  eval_returnable_script(&proc.body, &mut proc_context)
 }
 
 pub fn eval_word(word: &WordNode, context: &mut EvalContext) -> Result<Value, EvalError> {
@@ -347,7 +379,7 @@ pub fn eval_wordpart(part: &WordPart, context: &mut EvalContext) -> Result<Value
       .cloned(),
     WordPart::CommandSub(c) => parser::parse(&c)
       .map_err(|e| EvalError::CommandParseError(e.to_string()))
-      .and_then(|script| eval(&script, context)),
+      .and_then(|script| eval_script(&script, context)),
     WordPart::QuotedLiteral(s) => Ok(Value::new(s)),
     WordPart::VarSub(v) => context
       .get_variable(&v)
@@ -506,6 +538,33 @@ mod tests {
     let mut ctx = EvalContext::new();
     let result = eval(&ast, &mut ctx);
     assert_matches!(result, Err(EvalError::ArgumentError(_)));
+    Ok(())
+  }
+
+  #[test]
+  fn eval_return_from_script() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("expr 1; expr 2; return 3; expr 4")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 3);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_return_from_proc() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("proc f {x} {return $x}; f 4")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 4);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_return_from_proc_deep() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("proc f {x} {if {0 < 1} {return $x}}; f 5")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 5);
     Ok(())
   }
 }

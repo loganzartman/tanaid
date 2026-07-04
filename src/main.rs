@@ -106,6 +106,16 @@ fn exec(
 
 #[cfg(test)]
 mod tests {
+  use super::*;
+
   #[test]
-  fn greet_returns_hello() {}
+  fn test() -> Result<(), Box<dyn std::error::Error>> {
+    let mut context = eval::EvalContext::new();
+    let opts = RunOpts { debug: true };
+    run_source(
+      fs::read_to_string("./sample/fib.tcl")?.as_str(),
+      &mut context,
+      &opts,
+    )
+  }
 }

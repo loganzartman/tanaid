@@ -110,10 +110,6 @@ pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseErr
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
-    if let Ok((_, rest)) = parse_ws(src) {
-      src = rest;
-    }
-
     if let Ok((command, rest)) = parse_command(src) {
       commands.push(command);
       src = rest;
@@ -130,6 +126,11 @@ pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseErr
     } else {
       break;
     }
+
+    // eat whitespace
+    if let Ok((_, rest)) = parse_ws_or_command_sep(src) {
+      src = rest;
+    }
   }
 
   Ok((ScriptNode { commands }, src))
@@ -137,7 +138,7 @@ pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseErr
 
 fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
   // eat whitespace
-  if let Ok((_, rest)) = parse_ws(src) {
+  if let Ok((_, rest)) = parse_ws_or_command_sep(src) {
     src = rest;
   }
 
@@ -164,18 +165,6 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
   }
 
   Ok((CommandNode { words }, src))
-}
-
-fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
-  static RE_CMD_SEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\r\n\;]+").unwrap());
-
-  if let Some(captures) = RE_CMD_SEP.captures(src) {
-    Ok((captures[0].to_string(), &src[captures[0].len()..]))
-  } else {
-    Err(ParseError::Generic(
-      "expected command separator (newline or `;`)".to_string(),
-    ))
-  }
 }
 
 pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
@@ -367,6 +356,29 @@ fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
     't' => Ok(('\t', &src[2..])),
     'r' => Ok(('\r', &src[2..])),
     _ => Ok((next, &src[2..])),
+  }
+}
+
+pub(crate) fn parse_ws_or_command_sep(src: &str) -> Result<(String, &str), ParseError> {
+  static RE_WS_OR_CMD_SEP: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[\t\p{Zs}\r\n;]+").unwrap());
+
+  if let Some(captures) = RE_WS_OR_CMD_SEP.captures(src) {
+    Ok((captures[0].to_string(), &src[captures[0].len()..]))
+  } else {
+    Err(ParseError::Generic("expected whitespace".to_string()))
+  }
+}
+
+fn parse_command_sep(src: &str) -> Result<(String, &str), ParseError> {
+  static RE_CMD_SEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\r\n;]+").unwrap());
+
+  if let Some(captures) = RE_CMD_SEP.captures(src) {
+    Ok((captures[0].to_string(), &src[captures[0].len()..]))
+  } else {
+    Err(ParseError::Generic(
+      "expected command separator (newline or `;`)".to_string(),
+    ))
   }
 }
 
@@ -568,6 +580,46 @@ mod tests {
           ]
         }]
       }
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_script_with_leading_cmd_sep() -> Result<(), ParseError> {
+    let parsed = parse("\n;; puts hey;;;expr 1")?;
+    assert_eq!(
+      parsed,
+      ScriptNode {
+        commands: vec![
+          CommandNode {
+            words: vec![
+              WordNode::only(WordPart::BareLiteral("puts".to_string())),
+              WordNode::only(WordPart::BareLiteral("hey".to_string())),
+            ]
+          },
+          CommandNode {
+            words: vec![
+              WordNode::only(WordPart::BareLiteral("expr".to_string())),
+              WordNode::only(WordPart::BareLiteral("1".to_string())),
+            ]
+          },
+        ]
+      }
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_cmd_with_leading_cmd_sep() -> Result<(), ParseError> {
+    let (parsed, _) = parse_command("\n;; puts hey")?;
+    assert_eq!(
+      parsed,
+      CommandNode {
+        words: vec![
+          WordNode::only(WordPart::BareLiteral("puts".to_string())),
+          WordNode::only(WordPart::BareLiteral("hey".to_string())),
+        ]
+      },
     );
     Ok(())
   }
