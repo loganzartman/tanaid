@@ -603,6 +603,24 @@ mod tests {
   }
 
   #[test]
+  fn eval_proc_local_variables_do_not_leak() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("proc f {} {set x 1}; f; expr $x")?;
+    let mut ctx = EvalContext::new();
+    let result = eval(&ast, &mut ctx);
+    assert_matches!(result, Err(EvalError::UndefinedVariable(_)));
+    Ok(())
+  }
+
+  #[test]
+  fn eval_proc_does_not_read_globals_by_default() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set x 1; proc f {} {expr $x}; f")?;
+    let mut ctx = EvalContext::new();
+    let result = eval(&ast, &mut ctx);
+    assert_matches!(result, Err(EvalError::UndefinedVariable(_)));
+    Ok(())
+  }
+
+  #[test]
   fn eval_proc_args_rest_invoke() -> Result<(), Box<dyn std::error::Error>> {
     let ast =
       parser::parse("proc drop_first_two {x y args} {expr \"$args\"}; drop_first_two a b c d e")?;
