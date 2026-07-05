@@ -486,7 +486,14 @@ pub fn eval_wordpart(
     WordPart::CommandSub(c) => parser::parse(&c)
       .map_err(|e| EvalError::CommandParseError(e.to_string()))
       .and_then(|script| eval_script(&script, context, frame)),
-    WordPart::QuotedLiteral(s) => Ok(Value::new(s)),
+    WordPart::Quoted(parts) => {
+      let mut result: String = "".to_string();
+      for part in parts {
+        let mut string = eval_wordpart(part, context, frame)?;
+        result.push_str(string.repr_str()?);
+      }
+      Ok(Value::new(result))
+    }
     WordPart::VarSub(v) => context
       .frame(frame)
       .get_variable(&v)
@@ -623,7 +630,7 @@ mod tests {
   #[test]
   fn eval_proc_args_rest_invoke() -> Result<(), Box<dyn std::error::Error>> {
     let ast =
-      parser::parse("proc drop_first_two {x y args} {expr \"$args\"}; drop_first_two a b c d e")?;
+      parser::parse("proc drop_first_two {x y args} {return \"$args\"}; drop_first_two a b c d e")?;
     let mut ctx = EvalContext::new();
     let mut result = eval(&ast, &mut ctx)?;
     assert_eq!(result.repr_str()?, "c d e");
@@ -632,10 +639,28 @@ mod tests {
 
   #[test]
   fn eval_proc_braced_args_param_is_rest_arg() -> Result<(), Box<dyn std::error::Error>> {
-    let ast = parser::parse("proc collect {{args}} {expr \"$args\"}; collect a b c")?;
+    let ast = parser::parse("proc collect {{args}} {return \"$args\"}; collect a b c")?;
     let mut ctx = EvalContext::new();
     let mut result = eval(&ast, &mut ctx)?;
     assert_eq!(result.repr_str()?, "a b c");
+    Ok(())
+  }
+
+  #[test]
+  fn eval_quoted_word_var_sub() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set name Tcl; set greeting \"hello $name\"")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_str()?, "hello Tcl");
+    Ok(())
+  }
+
+  #[test]
+  fn eval_quoted_word_command_sub() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set greeting \"sum [expr 1 + 2]\"")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_str()?, "sum 3");
     Ok(())
   }
 

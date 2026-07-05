@@ -41,7 +41,7 @@ pub struct WordNode {
 pub enum WordPart {
   BareLiteral(String),
   BracedLiteral(String),
-  QuotedLiteral(String),
+  Quoted(Vec<WordPart>),
   VarSub(String),
   VarIndex(String, String),
   BracedSub(String),
@@ -91,7 +91,13 @@ impl Display for WordPart {
     match self {
       BareLiteral(s) => write!(f, "{}", s),
       BracedLiteral(s) => write!(f, "{{{}}}", s),
-      QuotedLiteral(s) => write!(f, "\"{}\"", s),
+      Quoted(s) => {
+        let escape = |part: &WordPart| part.to_string().replace("\"", "\\\"");
+        for part in s {
+          write!(f, "\"{}\"", escape(part))?;
+        }
+        Ok(())
+      }
       VarSub(v) => write!(f, "${}", v),
       VarIndex(v, i) => write!(f, "${}({})", v, i),
       BracedSub(v) => write!(f, "${{{}}}", v),
@@ -217,6 +223,12 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
 
   let mut parts: Vec<WordPart> = vec![];
   while !src.is_empty() {
+    if let Ok((part, rest)) = parse_wordpart_quoted(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
     if let Ok((part, rest)) = parse_wordpart_cmdsub(src) {
       parts.push(part);
       src = rest;
@@ -245,13 +257,50 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
   }
 }
 
+fn parse_wordpart_quoted(src: &str) -> Result<(WordPart, &str), ParseError> {
+  let Some(mut src) = src.strip_prefix("\"") else {
+    return Err(ParseError::Generic("expected \"".to_string()));
+  };
+
+  let mut parts = vec![];
+  while !src.is_empty() {
+    if let Some(rest) = src.strip_prefix("\"") {
+      return Ok((WordPart::Quoted(parts), rest));
+    }
+
+    if let Ok((part, rest)) = parse_wordpart_cmdsub(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
+    if let Ok((part, rest)) = parse_wordpart_varsub(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
+    if let Ok((part, rest)) = parse_wordpart_quoted_literal(src) {
+      parts.push(part);
+      src = rest;
+      continue;
+    }
+
+    break;
+  }
+
+  Err(ParseError::Generic("expected \"".to_string()))
+}
+
+fn parse_wordpart_quoted_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
+  parse_wordpart_quoted_bare(src)
+    .map(|(s, rest)| (WordPart::BareLiteral(s), rest))
+    .map_err(|_| ParseError::Generic("expected literal word".to_string()))
+}
+
 fn parse_wordpart_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
   if let Ok((s, rest)) = parse_bracketed(src, BracketType::Curly) {
     return Ok((WordPart::BracedLiteral(s), rest));
-  }
-
-  if let Ok((s, rest)) = parse_bracketed(src, BracketType::DoubleQuote) {
-    return Ok((WordPart::QuotedLiteral(s), rest));
   }
 
   parse_wordpart_bare(src)
@@ -336,27 +385,93 @@ fn parse_wordpart_bare(src: &str) -> Result<(String, &str), ParseError> {
   }
 }
 
+fn parse_wordpart_quoted_bare(src: &str) -> Result<(String, &str), ParseError> {
+  let mut rest = src;
+  let mut word = String::new();
+
+  while let Some(ch) = rest.chars().next() {
+    // Stop at substitution/terminator characters, but let parse_char handle
+    // backslash escapes (so `\"` doesn't terminate the quoted string).
+    if matches!(ch, '$' | '[' | ']' | '"') {
+      break;
+    }
+    let (decoded, new_rest) = parse_char(rest)?;
+    word.push(decoded);
+    rest = new_rest;
+  }
+
+  if word.is_empty() {
+    Err(ParseError::Generic("expected bare word".to_string()))
+  } else {
+    Ok((word, rest))
+  }
+}
+
 fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
   let ch = src
     .chars()
     .next()
     .ok_or_else(|| ParseError::Generic("expected character".to_string()))?;
 
+  let rest = &src[ch.len_utf8()..];
   if ch != '\\' {
-    return Ok((ch, &src[1..]));
+    return Ok((ch, rest));
   }
 
-  let next = src
-    .chars()
-    .next()
-    .ok_or_else(|| ParseError::Generic("expected escape sequence".to_string()))?;
+  static RE_OCTAL_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-7]{1,3})").unwrap());
+  static RE_HEX_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^x([0-9a-fA-F]{1,2})").unwrap());
+  static RE_UNICODE_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^u([0-9a-fA-F]{1,6})").unwrap());
+  static RE_SIMPLE_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([abfnrtv])").unwrap());
 
-  match next {
-    'n' => Ok(('\n', &src[2..])),
-    't' => Ok(('\t', &src[2..])),
-    'r' => Ok(('\r', &src[2..])),
-    _ => Ok((next, &src[2..])),
+  let from_radix = |string: String, radix: u32| {
+    let parse_err =
+      || ParseError::Generic(format!("failed to parse base-{} escape: {}", radix, string));
+    let val = char::from_u32(u32::from_str_radix(string.as_str(), radix).map_err(|_| parse_err())?)
+      .ok_or_else(|| parse_err())?;
+    Ok(val)
+  };
+
+  if let Some(cap) = RE_OCTAL_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return Ok((from_radix(cap[1].to_string(), 8)?, rest));
   }
+
+  if let Some(cap) = RE_HEX_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return Ok((from_radix(cap[1].to_string(), 16)?, rest));
+  }
+
+  if let Some(cap) = RE_UNICODE_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return Ok((from_radix(cap[1].to_string(), 16)?, rest));
+  }
+
+  if let Some(cap) = RE_SIMPLE_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return match cap[1].to_string().as_str() {
+      "a" => Ok(('\x07', rest)),
+      "b" => Ok(('\x08', rest)),
+      "f" => Ok(('\x0c', rest)),
+      "n" => Ok(('\n', rest)),
+      "r" => Ok(('\r', rest)),
+      "t" => Ok(('\t', rest)),
+      "v" => Ok(('\x0b', rest)),
+      unsupported => Err(ParseError::Generic(format!(
+        "unsupported character escape: {}",
+        unsupported
+      ))),
+    };
+  }
+
+  // Tcl semantics: a backslash before any other character is that character.
+  if let Some(escaped) = rest.chars().next() {
+    return Ok((escaped, &rest[escaped.len_utf8()..]));
+  }
+
+  // A lone trailing backslash is a literal backslash.
+  Ok(('\\', rest))
 }
 
 pub(crate) fn parse_ws_or_command_sep(src: &str) -> Result<(String, &str), ParseError> {
@@ -395,6 +510,20 @@ pub(crate) fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn parse_char_ascii() -> Result<(), ParseError> {
+    let (char, _rest) = parse_char("a")?;
+    assert_eq!(char, 'a');
+    Ok(())
+  }
+
+  #[test]
+  fn parse_char_escape_newline() -> Result<(), ParseError> {
+    let (char, _rest) = parse_char("\\n")?;
+    assert_eq!(char, '\n');
+    Ok(())
+  }
 
   #[test]
   fn parses_word_with_two_varsubs() -> Result<(), ParseError> {
@@ -444,6 +573,59 @@ mod tests {
             WordPart::CommandSub("b".to_string()),
             WordPart::BracedLiteral("c".to_string()),
           ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_quoted_word_with_var_sub() -> Result<(), ParseError> {
+    let parsed = parse_word(r#""hello $name""#)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::Quoted(vec![
+            WordPart::BareLiteral("hello ".to_string()),
+            WordPart::VarSub("name".to_string())
+          ]),]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_quoted_word_with_command_sub() -> Result<(), ParseError> {
+    let parsed = parse_word(r#""sum [expr 1 + 2]""#)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::Quoted(vec![
+            WordPart::BareLiteral("sum ".to_string()),
+            WordPart::CommandSub("expr 1 + 2".to_string())
+          ]),]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_quoted_word_with_backslash_sub() -> Result<(), ParseError> {
+    let parsed = parse_word(r#""a\nb\"c""#)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::Quoted(vec![WordPart::BareLiteral(
+            "a\nb\"c".to_string()
+          )])]
         },
         ""
       )
@@ -573,7 +755,9 @@ mod tests {
         commands: vec![CommandNode {
           words: vec![
             WordNode::only(WordPart::BareLiteral("puts".to_string())),
-            WordNode::only(WordPart::QuotedLiteral("hello world".to_string())),
+            WordNode::only(WordPart::Quoted(vec![WordPart::BareLiteral(
+              "hello world".to_string()
+            )])),
             WordNode::only(WordPart::BracedLiteral(
               "nested {braced} string".to_string()
             )),
