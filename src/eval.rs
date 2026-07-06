@@ -5,6 +5,7 @@ use crate::parser_expr;
 use crate::parser_expr::{BinaryOp, ExprNode};
 use crate::value::Value;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Proc {
@@ -17,7 +18,7 @@ const GLOBAL_FRAME: FrameId = 0;
 
 #[derive(Clone, Debug)]
 pub struct EvalContext {
-  procs: HashMap<String, Proc>,
+  procs: HashMap<String, Rc<Proc>>,
   frames: Vec<EvalFrame>,
 }
 
@@ -55,12 +56,12 @@ impl EvalContext {
     result
   }
 
-  pub fn get_proc(&self, name: &str) -> Option<&Proc> {
-    self.procs.get(name)
+  pub fn get_proc(&self, name: &str) -> Option<Rc<Proc>> {
+    self.procs.get(name).cloned()
   }
 
   pub fn set_proc(&mut self, name: &str, proc: Proc) {
-    self.procs.insert(name.to_string(), proc);
+    self.procs.insert(name.to_string(), Rc::new(proc));
   }
 }
 
@@ -137,7 +138,7 @@ pub fn eval_command(
 
   // user-defined proc
   // TODO: reference-count procs
-  if let Some(proc) = context.get_proc(name_str).cloned() {
+  if let Some(proc) = context.get_proc(name_str) {
     return eval_proc(name_str, &proc, args, context, frame);
   }
 
@@ -587,7 +588,7 @@ mod tests {
     let mut ctx = EvalContext::new();
     eval(&ast, &mut ctx)?;
     assert_eq!(
-      ctx.get_proc("hi"),
+      ctx.get_proc("hi").as_deref(),
       Some(&Proc {
         params: vec![],
         body: ScriptNode {
