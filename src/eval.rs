@@ -113,6 +113,10 @@ impl EvalFrame {
     self.variables.get(name)
   }
 
+  pub fn get_variable_mut(&mut self, name: &str) -> Option<&mut Value> {
+    self.variables.get_mut(name)
+  }
+
   pub fn set_variable(&mut self, name: &str, value: Value) {
     self.variables.insert(name.to_string(), value);
   }
@@ -374,23 +378,33 @@ pub fn eval_cmd_set(
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Result<Value, EvalError> {
-  let [name, value] = match words {
-    [name, value] => [name, value],
-    [_] => return Err(EvalError::Generic("missing value".to_string())),
-    [] => return Err(EvalError::Generic("missing name and value".to_string())),
+  let (name, maybe_value) = match words {
+    [name, value] => (name, Some(value)),
+    [name] => (name, None),
+    [] => return Err(EvalError::Generic("missing variable name".to_string())),
     _ => {
       return Err(EvalError::Generic(
-        "too many arguments; expects name and value".to_string(),
+        "too many arguments; expects: set name ?value?".to_string(),
       ));
     }
   };
 
   let mut name = eval_word(&name, context, frame)?;
-  let value = eval_word(&value, context, frame)?;
-  context
-    .frame_mut(frame)
-    .set_variable(name.repr_str()?, value.clone());
-  Ok(value)
+  if let Some(value) = maybe_value {
+    let value = eval_word(&value, context, frame)?;
+    context
+      .frame_mut(frame)
+      .set_variable(name.repr_str()?, value.clone());
+    Ok(value)
+  } else {
+    Ok(
+      context
+        .frame(frame)
+        .get_variable(name.repr_str()?)
+        .ok_or_else(|| EvalError::UndefinedVariable(format!("{}", name.to_string())))?
+        .clone(),
+    )
+  }
 }
 
 pub fn eval_cmd_while(
@@ -573,6 +587,26 @@ pub fn eval_wordpart(
 mod tests {
   use crate::eval::*;
   use std::assert_matches;
+
+  #[test]
+  fn eval_set_var_name() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set x 2")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    let mut val_x = ctx.frame(GLOBAL_FRAME).get_variable("x").unwrap().clone();
+    assert_eq!(val_x.repr_int()?, 2);
+    assert_eq!(result.repr_str()?, "2");
+    Ok(())
+  }
+
+  #[test]
+  fn eval_set_var() -> Result<(), Box<dyn std::error::Error>> {
+    let mut ctx = EvalContext::new();
+    eval(&parser::parse("set x 2")?, &mut ctx)?;
+    let mut result = eval(&parser::parse("set x")?, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 2);
+    Ok(())
+  }
 
   #[test]
   fn eval_if_simple() -> Result<(), Box<dyn std::error::Error>> {
