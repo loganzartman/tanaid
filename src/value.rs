@@ -12,33 +12,45 @@ pub enum Repr {
 
 #[derive(Clone, Debug)]
 pub struct Value {
-  string: String,
+  string: Option<String>,
   repr: Repr,
 }
 
 impl Value {
   pub fn none() -> Value {
     Value {
-      string: "".to_string(),
+      string: Some("".to_string()),
       repr: Repr::None,
     }
   }
 
   pub fn new(x: impl Into<String>) -> Value {
     Value {
-      string: x.into(),
+      string: Some(x.into()),
       repr: Repr::None,
     }
   }
 
-  pub fn format_str(&self) -> Result<String, EvalError> {
-    // TODO: lazy materialize
-    Ok(self.string.clone())
+  pub fn format_string(&self) -> Result<String, EvalError> {
+    if let Some(string) = &self.string {
+      return Ok(string.clone());
+    }
+
+    match self.repr {
+      Repr::Int(i) => Ok(i.to_string()),
+      Repr::Float(f) => Ok(f.to_string()),
+      Repr::None => Err(EvalError::Generic(
+        "Internal error: no string and no repr".to_string(),
+      )),
+    }
   }
 
   pub fn repr_str(&mut self) -> Result<&str, EvalError> {
-    // TODO: lazy materialize
-    Ok(&self.string)
+    if self.string.is_none() {
+      self.string = Some(self.format_string()?);
+    }
+
+    Ok(self.string.as_deref().unwrap())
   }
 
   pub fn repr_int(&mut self) -> Result<i64, EvalError> {
@@ -47,7 +59,7 @@ impl Value {
     }
 
     let x = self
-      .string
+      .repr_str()?
       .parse::<i64>()
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Int(x);
@@ -58,9 +70,12 @@ impl Value {
     if let Repr::Float(x) = self.repr {
       return Ok(x);
     }
+    if let Repr::Int(x) = self.repr {
+      return Ok(x as f64);
+    }
 
-    let x = self
-      .string
+    let x: f64 = self
+      .repr_str()?
       .parse::<f64>()
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Float(x);
@@ -139,7 +154,7 @@ impl Display for Value {
       f,
       "{}",
       self
-        .format_str()
+        .format_string()
         .unwrap_or("{Unprintable Value}".to_string())
     )
   }
@@ -148,7 +163,7 @@ impl Display for Value {
 impl From<String> for Value {
   fn from(value: String) -> Self {
     Value {
-      string: value,
+      string: Some(value),
       repr: Repr::None,
     }
   }
@@ -157,7 +172,7 @@ impl From<String> for Value {
 impl From<&str> for Value {
   fn from(value: &str) -> Self {
     Value {
-      string: value.to_string(),
+      string: Some(value.to_string()),
       repr: Repr::None,
     }
   }
@@ -166,7 +181,7 @@ impl From<&str> for Value {
 impl From<i64> for Value {
   fn from(value: i64) -> Self {
     Value {
-      string: value.to_string(),
+      string: None,
       repr: Repr::Int(value),
     }
   }
@@ -175,7 +190,7 @@ impl From<i64> for Value {
 impl From<f64> for Value {
   fn from(value: f64) -> Self {
     Value {
-      string: value.to_string(),
+      string: None,
       repr: Repr::Float(value),
     }
   }
