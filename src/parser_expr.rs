@@ -5,7 +5,7 @@ use crate::parser::{ParseError, WordNode};
 
 use std::sync::LazyLock;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExprNode {
   Word(WordNode),
   UnaryOp(UnaryOp, Box<ExprNode>),
@@ -13,13 +13,13 @@ pub enum ExprNode {
   Ternary(Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOp {
   Plus,
   Minus,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOp {
   Add,
   Sub,

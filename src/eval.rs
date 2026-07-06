@@ -1,10 +1,12 @@
 use crate::eval_error::EvalError;
 use crate::parser;
-use crate::parser::{CommandNode, ScriptNode, WordNode, WordPart};
+use crate::parser::{CommandNode, ParseError, ScriptNode, WordNode, WordPart};
 use crate::parser_expr;
 use crate::parser_expr::{BinaryOp, ExprNode};
 use crate::value::Value;
+use lru::LruCache;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::rc::Rc;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -20,6 +22,8 @@ const GLOBAL_FRAME: FrameId = 0;
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
   frames: Vec<EvalFrame>,
+  parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
+  parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +37,8 @@ impl EvalContext {
     EvalContext {
       procs: HashMap::new(),
       frames: vec![EvalFrame::new()],
+      parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
+      parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
     }
   }
 
@@ -62,6 +68,29 @@ impl EvalContext {
 
   pub fn set_proc(&mut self, name: &str, proc: Proc) {
     self.procs.insert(name.to_string(), Rc::new(proc));
+  }
+
+  pub fn parse_script_caching(
+    &mut self,
+    src: &str,
+  ) -> Result<Rc<(ScriptNode, String)>, ParseError> {
+    if !self.parse_cache_script.contains(src) {
+      let (node, rest) = parser::parse_script(src)?;
+      self
+        .parse_cache_script
+        .put(src.to_string(), Rc::new((node, rest.to_string())));
+    }
+    Ok(self.parse_cache_script.get(src).unwrap().clone())
+  }
+
+  pub fn parse_expr_caching(&mut self, src: &str) -> Result<Rc<(ExprNode, String)>, ParseError> {
+    if !self.parse_cache_expr.contains(src) {
+      let (node, rest) = parser_expr::parse_expr(src)?;
+      self
+        .parse_cache_expr
+        .put(src.to_string(), Rc::new((node, rest.to_string())));
+    }
+    Ok(self.parse_cache_expr.get(src).unwrap().clone())
   }
 }
 
@@ -177,9 +206,14 @@ pub fn eval_cmd_expr(
   let values = words
     .iter()
     .map(|word| eval_word(&word, context, frame).map(|value| value.to_string()));
+
   let joined = values.collect::<Result<Vec<String>, _>>()?.join(" ");
-  let (node, _) = parser_expr::parse_expr(joined.as_str())
+
+  let expr_parsed = context
+    .parse_expr_caching(joined.as_str())
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
+  let (node, _) = expr_parsed.as_ref();
+
   eval_expr(&node, context, frame)
 }
 
@@ -234,10 +268,15 @@ pub fn eval_cmd_if(
   }
 
   for (cond, body) in &mut cond_body {
-    let (cond_parsed, _) = parser_expr::parse_expr(cond.repr_str()?)
+    let cond_parse_result = context
+      .parse_expr_caching(cond.repr_str()?)
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if condition: {}", e)))?;
-    let body_parsed = parser::parse(body.repr_str()?)
+    let (cond_parsed, _) = cond_parse_result.as_ref();
+
+    let body_parse_result = context
+      .parse_script_caching(body.repr_str()?)
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
+    let (body_parsed, _) = body_parse_result.as_ref();
 
     if eval_expr(&cond_parsed, context, frame)?.repr_int()? != 0 {
       return eval_script(&body_parsed, context, frame);
@@ -276,14 +315,18 @@ pub fn eval_cmd_proc(
     ));
   };
 
-  let (body, "") = parser::parse_script(body_val.repr_str()?)
-    .map_err(|e| EvalError::ArgumentError(format!("proc body must be a script: {}", e)))?
-  else {
+  let parsed = context
+    .parse_script_caching(body_val.repr_str()?)
+    .map_err(|e| EvalError::ArgumentError(format!("proc body must be a script: {}", e)))?;
+  let (body, rest) = parsed.as_ref();
+
+  if !rest.is_empty() {
     return Err(EvalError::ArgumentError(
       "proc body must be a script: trailing input".to_string(),
     ));
   };
 
+  let body = body.clone();
   context.set_proc(name, Proc { params, body });
   Ok(Value::none())
 }
@@ -355,11 +398,17 @@ pub fn eval_cmd_while(
     ));
   };
 
-  let (test_expr, _) = parser_expr::parse_expr(eval_word(test, context, frame)?.repr_str()?)
+  let mut expr_src = eval_word(test, context, frame)?;
+  let expr_parsed = context
+    .parse_expr_caching(expr_src.repr_str()?)
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
+  let (test_expr, _) = expr_parsed.as_ref();
 
-  let (body_script, _) = parser::parse_script(eval_word(body, context, frame)?.repr_str()?)
+  let mut body_src = eval_word(body, context, frame)?;
+  let body_parsed = context
+    .parse_script_caching(body_src.repr_str()?)
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
+  let (body_script, _) = body_parsed.as_ref();
 
   while eval_expr(&test_expr, context, frame)?.repr_int()? != 0 {
     match eval_script(&body_script, context, frame) {
@@ -463,6 +512,11 @@ pub fn eval_word(
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Result<Value, EvalError> {
+  // optimization for single-part words
+  if let [part] = word.parts.as_slice() {
+    return eval_wordpart(part, context, frame);
+  }
+
   let mut joined = String::new();
   for part in &word.parts {
     let mut value = eval_wordpart(part, context, frame)?;
@@ -484,9 +538,13 @@ pub fn eval_wordpart(
       .get_variable(&v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
-    WordPart::CommandSub(c) => parser::parse(&c)
-      .map_err(|e| EvalError::CommandParseError(e.to_string()))
-      .and_then(|script| eval_script(&script, context, frame)),
+    WordPart::CommandSub(c) => {
+      let parsed = context
+        .parse_script_caching(c)
+        .map_err(|e| EvalError::CommandParseError(e.to_string()))?;
+      let (script, _) = parsed.as_ref();
+      eval_script(script, context, frame)
+    }
     WordPart::Quoted(parts) => {
       let mut result: String = "".to_string();
       for part in parts {

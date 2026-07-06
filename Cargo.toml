@@ -11,6 +11,7 @@ rustflags = ["-Clink-arg=-Wl,--no-rosegment"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+lru = "0.18.0"
 reedline = "0.48.0"
 regex = "1.12.4"
 
