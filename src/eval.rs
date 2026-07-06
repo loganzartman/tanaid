@@ -180,6 +180,7 @@ pub fn eval_command(
     "break" => eval_cmd_break(args, context, frame),
     "expr" => eval_cmd_expr(args, context, frame),
     "if" => eval_cmd_if(args, context, frame),
+    "info" => eval_cmd_info(args, context, frame),
     "proc" => eval_cmd_proc(args, context, frame),
     "puts" => eval_cmd_puts(args, context, frame),
     "return" => eval_cmd_return(args, context, frame),
@@ -294,6 +295,42 @@ pub fn eval_cmd_if(
   }
 
   Ok(Value::none())
+}
+
+pub fn eval_cmd_info(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
+  let mut args = words
+    .iter()
+    .map(|w| eval_word(w, context, frame))
+    .peekable();
+
+  let mut subcommand = args.next().ok_or_else(|| {
+    EvalError::ArgumentError("not enough arguments; expects: info subcommand ...".to_string())
+  })??;
+
+  match subcommand.repr_str()? {
+    "exists" => {
+      let mut name = args.next().ok_or_else(|| {
+        EvalError::ArgumentError("not enough arguments; expects: info exists varName".to_string())
+      })??;
+      if context
+        .frame(frame)
+        .get_variable(name.repr_str()?)
+        .is_some()
+      {
+        Ok(Value::from(1))
+      } else {
+        Ok(Value::from(0))
+      }
+    }
+    unsupported => Err(EvalError::ArgumentError(format!(
+      "unsupported info subcommand: {}",
+      unsupported
+    ))),
+  }
 }
 
 pub fn eval_cmd_proc(
@@ -814,6 +851,17 @@ mod tests {
     let mut ctx = EvalContext::new();
     let mut result = eval(&ast, &mut ctx)?;
     assert_eq!(result.repr_int()?, 5);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_info_exists() -> Result<(), Box<dyn std::error::Error>> {
+    let mut ctx = EvalContext::new();
+    eval(&parser::parse("set x 2")?, &mut ctx)?;
+    let mut result_x = eval(&parser::parse("info exists x")?, &mut ctx)?;
+    let mut result_y = eval(&parser::parse("info exists y")?, &mut ctx)?;
+    assert_eq!(result_x.repr_int()?, 1);
+    assert_eq!(result_y.repr_int()?, 0);
     Ok(())
   }
 }

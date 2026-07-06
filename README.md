@@ -16,6 +16,7 @@ implements a (probably broken) subset of tcl:
   - `break`
   - `expr arg ?arg arg ...?`
   - `if expr1 ?then? body1 elseif expr2 ?then? body2 elseif ... ?else? ?bodyN?`
+  - `info exists varName`
   - `proc name args body`
   - `puts string`
   - `return ?result?`
