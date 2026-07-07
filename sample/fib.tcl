@@ -9,7 +9,7 @@ proc fib {x} {
 }
 
 set i 1
-while {$i < 30} {
+while {$i < 20} {
   puts [fib $i]
   set i [expr {$i + 1}]
 }

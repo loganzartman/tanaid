@@ -29,7 +29,13 @@ pub struct EvalContext {
 #[derive(Clone, Debug)]
 pub struct EvalFrame {
   caller: Option<FrameId>,
-  variables: HashMap<String, Value>,
+  variables: HashMap<String, Binding>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Binding {
+  Val(Value),
+  Ref(FrameId, String),
 }
 
 impl EvalContext {
@@ -92,6 +98,59 @@ impl EvalContext {
     }
     Ok(self.parse_cache_expr.get(src).unwrap().clone())
   }
+
+  pub fn get_variable(&self, frame: FrameId, name: &str) -> Option<&Value> {
+    let mut cur_frame = frame;
+    let mut cur_name = name;
+    loop {
+      match self.frame(cur_frame).get_binding(cur_name)? {
+        Binding::Ref(ref_frame, ref_name) => {
+          if *ref_frame == frame && ref_name == name {
+            panic!("circular reference to {}", ref_name);
+          }
+          cur_frame = *ref_frame;
+          cur_name = ref_name;
+        }
+        Binding::Val(v) => return Some(v),
+      }
+    }
+  }
+
+  pub fn set_variable(&mut self, frame: FrameId, name: &str, value: Value) {
+    let mut cur_frame = frame;
+    let mut cur_name = name;
+    loop {
+      match self.frame(cur_frame).get_binding(cur_name) {
+        Some(Binding::Ref(ref_frame, ref_name)) => {
+          if *ref_frame == frame && ref_name == name {
+            panic!("circular reference to {}", ref_name);
+          }
+          cur_frame = *ref_frame;
+          cur_name = ref_name;
+        }
+        Some(Binding::Val(_)) | None => {
+          let name = cur_name.to_string();
+          self
+            .frame_mut(cur_frame)
+            .set_binding(name.as_ref(), Binding::Val(value));
+          return;
+        }
+      }
+    }
+  }
+
+  pub fn ref_variable(
+    &mut self,
+    ref_frame: FrameId,
+    ref_name: &str,
+    target_frame: FrameId,
+    target_name: &str,
+  ) {
+    self.frame_mut(ref_frame).set_binding(
+      ref_name,
+      Binding::Ref(target_frame, target_name.to_string()),
+    );
+  }
 }
 
 impl EvalFrame {
@@ -109,16 +168,16 @@ impl EvalFrame {
     }
   }
 
-  pub fn get_variable(&self, name: &str) -> Option<&Value> {
+  pub fn get_binding(&self, name: &str) -> Option<&Binding> {
     self.variables.get(name)
   }
 
-  pub fn get_variable_mut(&mut self, name: &str) -> Option<&mut Value> {
+  pub fn get_binding_mut(&mut self, name: &str) -> Option<&mut Binding> {
     self.variables.get_mut(name)
   }
 
-  pub fn set_variable(&mut self, name: &str, value: Value) {
-    self.variables.insert(name.to_string(), value);
+  pub fn set_binding(&mut self, name: &str, binding: Binding) {
+    self.variables.insert(name.to_string(), binding);
   }
 }
 
@@ -179,6 +238,7 @@ pub fn eval_command(
   match name_str {
     "break" => eval_cmd_break(args, context, frame),
     "expr" => eval_cmd_expr(args, context, frame),
+    "global" => eval_cmd_global(args, context, frame),
     "if" => eval_cmd_if(args, context, frame),
     "info" => eval_cmd_info(args, context, frame),
     "proc" => eval_cmd_proc(args, context, frame),
@@ -226,6 +286,33 @@ pub fn eval_cmd_expr(
   let (node, _) = expr_parsed.as_ref();
 
   eval_expr(&node, context, frame)
+}
+
+pub fn eval_cmd_global(
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
+  for word in words {
+    let mut name_node = eval_word(word, context, frame)?;
+
+    if frame == GLOBAL_FRAME {
+      continue;
+    }
+
+    let name = name_node.repr_str()?;
+
+    if context.get_variable(frame, name).is_some() {
+      return Err(EvalError::ArgumentError(format!(
+        "local variable {} would be overwritten by global",
+        name
+      )));
+    }
+
+    context.ref_variable(frame, name, GLOBAL_FRAME, name);
+  }
+
+  Ok(Value::none())
 }
 
 pub fn eval_cmd_if(
@@ -316,11 +403,7 @@ pub fn eval_cmd_info(
       let mut name = args.next().ok_or_else(|| {
         EvalError::ArgumentError("not enough arguments; expects: info exists varName".to_string())
       })??;
-      if context
-        .frame(frame)
-        .get_variable(name.repr_str()?)
-        .is_some()
-      {
+      if context.get_variable(frame, name.repr_str()?).is_some() {
         Ok(Value::from(1))
       } else {
         Ok(Value::from(0))
@@ -429,15 +512,12 @@ pub fn eval_cmd_set(
   let mut name = eval_word(&name, context, frame)?;
   if let Some(value) = maybe_value {
     let value = eval_word(&value, context, frame)?;
-    context
-      .frame_mut(frame)
-      .set_variable(name.repr_str()?, value.clone());
+    context.set_variable(frame, name.repr_str()?, value.clone());
     Ok(value)
   } else {
     Ok(
       context
-        .frame(frame)
-        .get_variable(name.repr_str()?)
+        .get_variable(frame, name.repr_str()?)
         .ok_or_else(|| EvalError::UndefinedVariable(format!("{}", name.to_string())))?
         .clone(),
     )
@@ -539,9 +619,7 @@ pub fn eval_proc(
             })
             .collect::<Result<Vec<_>, _>>()?
             .join(" ");
-          context
-            .frame_mut(proc_frame)
-            .set_variable("args", Value::new(args_concat));
+          context.set_variable(proc_frame, "args", Value::new(args_concat));
           break;
         }
       }
@@ -550,7 +628,7 @@ pub fn eval_proc(
         .next()
         .map(|w| eval_word(w, context, frame))
         .ok_or_else(|| EvalError::ArgumentError(format!("not enough args for {}", name)))??;
-      context.frame_mut(proc_frame).set_variable(param, value);
+      context.set_variable(proc_frame, param, value);
     }
 
     if args_it.next().is_some() {
@@ -591,8 +669,7 @@ pub fn eval_wordpart(
     WordPart::BareLiteral(s) => Ok(Value::new(s)),
     WordPart::BracedLiteral(s) => Ok(Value::new(s)),
     WordPart::BracedSub(v) => context
-      .frame(frame)
-      .get_variable(&v)
+      .get_variable(frame, &v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
     WordPart::CommandSub(c) => {
@@ -611,8 +688,7 @@ pub fn eval_wordpart(
       Ok(Value::new(result))
     }
     WordPart::VarSub(v) => context
-      .frame(frame)
-      .get_variable(&v)
+      .get_variable(frame, &v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
     WordPart::VarIndex(_, _) => Err(EvalError::NotImplemented),
@@ -630,7 +706,7 @@ mod tests {
     let ast = parser::parse("set x 2")?;
     let mut ctx = EvalContext::new();
     let mut result = eval(&ast, &mut ctx)?;
-    let mut val_x = ctx.frame(GLOBAL_FRAME).get_variable("x").unwrap().clone();
+    let mut val_x = ctx.get_variable(GLOBAL_FRAME, "x").unwrap().clone();
     assert_eq!(val_x.repr_int()?, 2);
     assert_eq!(result.repr_str()?, "2");
     Ok(())
@@ -650,13 +726,13 @@ mod tests {
     let ast = parser::parse("if {$x} {expr yes} {expr no}")?;
     {
       let mut ctx = EvalContext::new();
-      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 1.into());
+      ctx.set_variable(GLOBAL_FRAME, "x", 1.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "yes");
     }
     {
       let mut ctx = EvalContext::new();
-      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 0.into());
+      ctx.set_variable(GLOBAL_FRAME, "x", 0.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "no");
     }
@@ -668,13 +744,13 @@ mod tests {
     let ast = parser::parse("if {$x} then {expr yes} else {expr no}")?;
     {
       let mut ctx = EvalContext::new();
-      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 1.into());
+      ctx.set_variable(GLOBAL_FRAME, "x", 1.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "yes");
     }
     {
       let mut ctx = EvalContext::new();
-      ctx.frame_mut(GLOBAL_FRAME).set_variable("x", 0.into());
+      ctx.set_variable(GLOBAL_FRAME, "x", 0.into());
       let mut result = eval(&ast, &mut ctx)?;
       assert_eq!(result.repr_str()?, "no");
     }
@@ -760,6 +836,51 @@ mod tests {
     let mut ctx = EvalContext::new();
     let result = eval(&ast, &mut ctx);
     assert_matches!(result, Err(EvalError::UndefinedVariable(_)));
+    Ok(())
+  }
+
+  #[test]
+  fn eval_global_reads_global_variable() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set x 1; proc f {} {global x; expr $x}; f")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 1);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_global_writes_global_variable() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set x 1; proc f {} {global x; set x 2}; f; expr $x")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 2);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_global_at_top_level_is_noop() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("global x; set x 1; expr $x")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 1);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_global_at_top_level_still_evals_args() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("global [set name x]; expr $name")?;
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&ast, &mut ctx)?;
+    assert_eq!(result.repr_str()?, "x");
+    Ok(())
+  }
+
+  #[test]
+  fn eval_global_does_not_overwrite_local_variable() -> Result<(), Box<dyn std::error::Error>> {
+    let ast = parser::parse("set x global; proc f {} {set x local; global x}; f")?;
+    let mut ctx = EvalContext::new();
+    let result = eval(&ast, &mut ctx);
+    assert_matches!(result, Err(EvalError::ArgumentError(_)));
     Ok(())
   }
 
