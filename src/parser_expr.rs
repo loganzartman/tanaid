@@ -46,17 +46,23 @@ pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &st
   src = rest;
 
   while !src.is_empty() {
-    if let Ok((_, rest)) = parser::parse_ws(src) {
-      src = rest;
+    match parser::parse_ws(src) {
+      Ok((_, rest)) => src = rest,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    let Ok((op, rest)) = parse_binary_operator(src, precedence) else {
-      break;
+    let (op, rest) = match parse_binary_operator(src, precedence) {
+      Ok(result) => result,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => break,
     };
     src = rest;
 
-    if let Ok((_, rest)) = parser::parse_ws(src) {
-      src = rest;
+    match parser::parse_ws(src) {
+      Ok((_, rest)) => src = rest,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
     let (right, rest) = parse_expr_binary(src, precedence + 1)?;
@@ -110,8 +116,10 @@ pub fn parse_expr_unary(src: &str) -> Result<(ExprNode, &str), ParseError> {
 }
 
 pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
-  if let Ok(result) = parse_expr_group(src) {
-    return Ok(result);
+  match parse_expr_group(src) {
+    Ok(result) => return Ok(result),
+    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+    Err(_) => {}
   }
 
   let (word, rest) = parser::parse_word(src)?;
@@ -126,8 +134,8 @@ pub fn parse_expr_group(src: &str) -> Result<(ExprNode, &str), ParseError> {
   let (node, src) = parse_expr(src)?;
 
   let Some(src) = src.strip_prefix(")") else {
-    return Err(ParseError::Generic(
-      "expected close parenthesis".to_string(),
+    return Err(ParseError::Continuable(
+      "missing closing character: )".to_string(),
     ));
   };
 

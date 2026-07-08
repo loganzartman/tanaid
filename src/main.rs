@@ -1,11 +1,10 @@
 use clap::Parser;
-use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use std::{
   fs,
   io::{self, IsTerminal},
   process::ExitCode,
 };
-use tanaid::value::Value;
+use tanaid::repl::run_repl;
 use tanaid::{eval, parser};
 
 #[derive(Parser, Debug)]
@@ -39,7 +38,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     return run_source(fs::read_to_string(file_path)?.as_str(), &mut context, &opts);
   }
   if io::stdin().is_terminal() {
-    return run_repl(&mut context, &opts);
+    return run_repl(&mut context);
   }
   run_source(
     io::read_to_string(io::stdin())?.as_str(),
@@ -48,60 +47,25 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
   )
 }
 
-fn run_repl(
-  context: &mut eval::EvalContext,
-  opts: &RunOpts,
-) -> Result<(), Box<dyn std::error::Error>> {
-  let mut line_editor = Reedline::create();
-  let prompt = DefaultPrompt {
-    left_prompt: DefaultPromptSegment::Basic("tcl ".to_string()),
-    right_prompt: DefaultPromptSegment::Empty,
-  };
-
-  loop {
-    let sig = line_editor.read_line(&prompt);
-    match sig {
-      Ok(Signal::Success(buffer)) => {
-        let mut result = exec(buffer.as_str(), context, opts)?;
-        println!("{}", result.repr_str()?);
-      }
-      Ok(Signal::CtrlD) | Ok(Signal::CtrlC) => {
-        println!("see ya!");
-        break;
-      }
-      _ => unimplemented!(),
-    }
-  }
-
-  Ok(())
-}
-
 fn run_source(
   src: &str,
   context: &mut eval::EvalContext,
   opts: &RunOpts,
 ) -> Result<(), Box<dyn std::error::Error>> {
-  let mut result = exec(src, context, opts)?;
-  println!("{}", result.repr_str()?);
-  Ok(())
-}
-
-fn exec(
-  src: &str,
-  context: &mut eval::EvalContext,
-  opts: &RunOpts,
-) -> Result<Value, Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
   if opts.debug {
+    println!("=== parse tree ===");
     println!("{:#?}", parsed)
   }
 
-  let result = eval::eval(&parsed, context)?;
+  let mut result = eval::eval(&parsed, context)?;
   if opts.debug {
+    println!("=== result ===");
     println!("{:#?}", result);
   }
 
-  Ok(result)
+  println!("{}", result.repr_str()?);
+  Ok(())
 }
 
 #[cfg(test)]

@@ -6,16 +6,18 @@ use std::sync::LazyLock;
 #[derive(Debug)]
 pub enum ParseError {
   Generic(String),
+  /// more input may resolve this error
+  Continuable(String),
+  /// internal error, should not happen
   Internal(String),
-  NotImplemented,
 }
 
 impl Display for ParseError {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match self {
-      ParseError::Generic(s) => write!(f, "[ParseError] {}", s),
-      ParseError::Internal(s) => write!(f, "[ParseError] internal error: {}", s),
-      ParseError::NotImplemented => write!(f, "[ParseError] not implemented"),
+      ParseError::Generic(s) => write!(f, "[ParseError]: {}", s),
+      ParseError::Continuable(s) => write!(f, "[ParseError]: {}", s),
+      ParseError::Internal(s) => write!(f, "[ParseError] internal: {}", s),
     }
   }
 }
@@ -116,26 +118,32 @@ pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseErr
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
-    if let Ok((command, rest)) = parse_command(src) {
-      commands.push(command);
-      src = rest;
-    } else {
-      return Err(ParseError::Generic("expected command".to_string()));
+    match parse_command(src) {
+      Ok((command, rest)) => {
+        commands.push(command);
+        src = rest;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => return Err(ParseError::Generic("expected command".to_string())),
     }
 
-    if let Ok((_, rest)) = parse_ws(src) {
-      src = rest;
+    match parse_ws(src) {
+      Ok((_, rest)) => src = rest,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    if let Ok((_, rest)) = parse_command_sep(src) {
-      src = rest;
-    } else {
-      break;
+    match parse_command_sep(src) {
+      Ok((_, rest)) => src = rest,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => break,
     }
 
     // eat whitespace
-    if let Ok((_, rest)) = parse_ws_or_command_sep(src) {
-      src = rest;
+    match parse_ws_or_command_sep(src) {
+      Ok((_, rest)) => src = rest,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
   }
 
@@ -144,27 +152,41 @@ pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseErr
 
 fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
   // eat whitespace
-  if let Ok((_, rest)) = parse_ws_or_command_sep(src) {
-    src = rest;
+  match parse_ws_or_command_sep(src) {
+    Ok((_, rest)) => src = rest,
+    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+    Err(_) => {}
   }
 
   // required: first word (command name)
-  let (name, rest) = parse_word(src)
-    .map_err(|e| ParseError::Generic(format!("expected command name\ncaused by: {}", e)))?;
+  let (name, rest) = match parse_word(src) {
+    Ok(result) => result,
+    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+    Err(err) => {
+      return Err(ParseError::Generic(format!(
+        "expected command name\ncaused by: {}",
+        err
+      )));
+    }
+  };
   let mut words: Vec<WordNode> = vec![name];
   src = rest;
 
   // collect additional words
   while !src.is_empty() {
     // required whitespace separator
-    let Ok((_, rest)) = parse_ws(src) else {
-      break;
+    let (_, rest) = match parse_ws(src) {
+      Ok(result) => result,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => break,
     };
     src = rest;
 
     // word
-    let Ok((word, rest)) = parse_word(src) else {
-      break;
+    let (word, rest) = match parse_word(src) {
+      Ok(result) => result,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => break,
     };
     words.push(word);
     src = rest;
@@ -179,24 +201,41 @@ pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
 
   while !src.is_empty() {
     // required whitespace separator
-    if let Ok((_, rest)) = parse_ws(src) {
-      src = rest;
-    } else if !first {
-      break;
+    match parse_ws(src) {
+      Ok((_, rest)) => src = rest,
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) if !first => break,
+      Err(_) => {}
     }
     first = false;
 
-    if let Ok((str, rest)) = parse_bracketed(src, BracketType::Curly) {
-      items.push(str);
-      src = rest;
-    } else if let Ok((str, rest)) = parse_bracketed(src, BracketType::DoubleQuote) {
-      items.push(str);
-      src = rest;
-    } else if let Ok((str, rest)) = parse_list_element_bare(src) {
-      items.push(str);
-      src = rest;
-    } else {
-      break;
+    match parse_bracketed(src, BracketType::Curly) {
+      Ok((str, rest)) => {
+        items.push(str);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
+    }
+
+    match parse_bracketed(src, BracketType::DoubleQuote) {
+      Ok((str, rest)) => {
+        items.push(str);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
+    }
+
+    match parse_list_element_bare(src) {
+      Ok((str, rest)) => {
+        items.push(str);
+        src = rest;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => break,
     }
   }
 
@@ -217,34 +256,52 @@ fn parse_list_element_bare(src: &str) -> Result<(String, &str), ParseError> {
 
 pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
   // trim leading whitespace
-  if let Ok((_, rest)) = parse_ws(src) {
-    src = rest;
+  match parse_ws(src) {
+    Ok((_, rest)) => src = rest,
+    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+    Err(_) => {}
   }
 
   let mut parts: Vec<WordPart> = vec![];
   while !src.is_empty() {
-    if let Ok((part, rest)) = parse_wordpart_quoted(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_quoted(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    if let Ok((part, rest)) = parse_wordpart_cmdsub(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_cmdsub(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    if let Ok((part, rest)) = parse_wordpart_varsub(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_varsub(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    if let Ok((part, rest)) = parse_wordpart_literal(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_literal(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
     break;
@@ -268,28 +325,42 @@ fn parse_wordpart_quoted(src: &str) -> Result<(WordPart, &str), ParseError> {
       return Ok((WordPart::Quoted(parts), rest));
     }
 
-    if let Ok((part, rest)) = parse_wordpart_cmdsub(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_cmdsub(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    if let Ok((part, rest)) = parse_wordpart_varsub(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_varsub(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
-    if let Ok((part, rest)) = parse_wordpart_quoted_literal(src) {
-      parts.push(part);
-      src = rest;
-      continue;
+    match parse_wordpart_quoted_literal(src) {
+      Ok((part, rest)) => {
+        parts.push(part);
+        src = rest;
+        continue;
+      }
+      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+      Err(_) => {}
     }
 
     break;
   }
 
-  Err(ParseError::Generic("expected \"".to_string()))
+  Err(ParseError::Continuable(
+    "missing closing character: \"".to_string(),
+  ))
 }
 
 fn parse_wordpart_quoted_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
@@ -299,13 +370,13 @@ fn parse_wordpart_quoted_literal(src: &str) -> Result<(WordPart, &str), ParseErr
 }
 
 fn parse_wordpart_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
-  if let Ok((s, rest)) = parse_bracketed(src, BracketType::Curly) {
-    return Ok((WordPart::BracedLiteral(s), rest));
+  match parse_bracketed(src, BracketType::Curly) {
+    Ok((s, rest)) => return Ok((WordPart::BracedLiteral(s), rest)),
+    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+    Err(_) => {}
   }
 
-  parse_wordpart_bare(src)
-    .map(|(s, rest)| (WordPart::BareLiteral(s), rest))
-    .map_err(|_| ParseError::Generic("expected literal word".to_string()))
+  parse_wordpart_bare(src).map(|(s, rest)| (WordPart::BareLiteral(s), rest))
 }
 
 fn parse_wordpart_varsub(src: &str) -> Result<(WordPart, &str), ParseError> {
@@ -313,8 +384,10 @@ fn parse_wordpart_varsub(src: &str) -> Result<(WordPart, &str), ParseError> {
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
 
-  if let Ok((word, rest)) = parse_bracketed(rest, BracketType::Curly) {
-    return Ok((WordPart::BracedSub(word), rest));
+  match parse_bracketed(rest, BracketType::Curly) {
+    Ok((word, rest)) => return Ok((WordPart::BracedSub(word), rest)),
+    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
+    Err(_) => {}
   }
 
   parse_wordpart_bare(rest).map(|(word, rest)| (WordPart::VarSub(word), rest))
@@ -369,7 +442,10 @@ fn parse_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseErr
   }
 
   if depth > 0 {
-    Err(ParseError::Generic(format!("missing closing {}", close)))
+    Err(ParseError::Continuable(format!(
+      "missing closing character: {}",
+      close
+    )))
   } else {
     Ok((word, rest))
   }
