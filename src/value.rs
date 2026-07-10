@@ -222,3 +222,13 @@ arithmetic_binop!(Add, add, +);
 arithmetic_binop!(Sub, sub, -);
 arithmetic_binop!(Mul, mul, *);
 arithmetic_binop!(Div, div, /);
+
+impl ops::Rem for Value {
+  type Output = Result<Value, EvalError>;
+
+  fn rem(mut self, mut rhs: Self) -> Self::Output {
+    let a = self.repr_int()?;
+    let b = rhs.repr_int()?;
+    return Ok(Value::from(a % b));
+  }
+}

@@ -593,6 +593,7 @@ pub fn eval_expr_binary_op(
     Sub => a - b,
     Mul => a * b,
     Div => a / b,
+    Rem => a % b,
   }
 }
 
@@ -718,6 +719,14 @@ mod tests {
     eval(&parser::parse("set x 2")?, &mut ctx)?;
     let mut result = eval(&parser::parse("set x")?, &mut ctx)?;
     assert_eq!(result.repr_int()?, 2);
+    Ok(())
+  }
+
+  #[test]
+  fn eval_expr_remainder() -> Result<(), Box<dyn std::error::Error>> {
+    let mut ctx = EvalContext::new();
+    let mut result = eval(&parser::parse("expr {5 % 2}")?, &mut ctx)?;
+    assert_eq!(result.repr_int()?, 1);
     Ok(())
   }
 

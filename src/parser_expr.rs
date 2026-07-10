@@ -25,6 +25,7 @@ pub enum BinaryOp {
   Sub,
   Mul,
   Div,
+  Rem,
   Eq,
   Ne,
   Lt,
@@ -76,7 +77,7 @@ pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &st
 pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &str), ParseError> {
   static RE_P0: LazyLock<Regex> = LazyLock::new(|| Regex::new("^(<=|==|!=|>=|<|>)").unwrap());
   static RE_P1: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[+-]").unwrap());
-  static RE_P2: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[*/]").unwrap());
+  static RE_P2: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[*/%]").unwrap());
 
   let re = match precedence {
     0 => &RE_P0,
@@ -101,6 +102,7 @@ pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &st
     "-" => BinaryOp::Sub,
     "*" => BinaryOp::Mul,
     "/" => BinaryOp::Div,
+    "%" => BinaryOp::Rem,
     _ => {
       return Err(ParseError::Internal(
         "regex did not match an operator".to_string(),
@@ -164,6 +166,8 @@ mod tests {
   fn parses_binary_op() -> Result<(), ParseError> {
     let (node, _) = parse_expr("1 + 2")?;
     assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
+    let (node, _) = parse_expr("5 % 2")?;
+    assert_eq!(node, binop!(Rem, lit!("5"), lit!("2")));
     Ok(())
   }
 
