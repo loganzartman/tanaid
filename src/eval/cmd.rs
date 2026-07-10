@@ -1,0 +1,33 @@
+use super::{
+  EvalContext, FrameId, cmd_break, cmd_expr, cmd_global, cmd_if, cmd_info, cmd_proc, cmd_puts,
+  cmd_return, cmd_set, cmd_while,
+};
+use crate::eval_error::EvalError;
+use crate::parser::WordNode;
+use crate::value::Value;
+
+pub(super) type EvalCmdResult = Result<Value, EvalError>;
+type EvalCmd = fn(&[WordNode], &mut EvalContext, FrameId) -> EvalCmdResult;
+
+pub(super) fn eval_builtin(
+  name: &str,
+  words: &[WordNode],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Option<EvalCmdResult> {
+  let eval: EvalCmd = match name {
+    "break" => cmd_break::eval,
+    "expr" => cmd_expr::eval,
+    "global" => cmd_global::eval,
+    "if" => cmd_if::eval,
+    "info" => cmd_info::eval,
+    "proc" => cmd_proc::eval,
+    "puts" => cmd_puts::eval,
+    "return" => cmd_return::eval,
+    "set" => cmd_set::eval,
+    "while" => cmd_while::eval,
+    _ => return None,
+  };
+
+  Some(eval(words, context, frame))
+}
