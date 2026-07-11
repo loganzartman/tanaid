@@ -1,6 +1,6 @@
 use super::{
-  EvalContext, FrameId, cmd_break, cmd_expr, cmd_global, cmd_if, cmd_info, cmd_proc, cmd_puts,
-  cmd_return, cmd_set, cmd_while,
+  EvalContext, FrameId, cmd_break, cmd_dict, cmd_expr, cmd_global, cmd_if, cmd_info, cmd_proc,
+  cmd_puts, cmd_return, cmd_set, cmd_while,
 };
 use crate::eval_error::EvalError;
 use crate::parser::WordNode;
@@ -17,6 +17,7 @@ pub(super) fn eval_builtin(
 ) -> Option<EvalCmdResult> {
   let eval: EvalCmd = match name {
     "break" => cmd_break::eval,
+    "dict" => cmd_dict::eval,
     "expr" => cmd_expr::eval,
     "global" => cmd_global::eval,
     "if" => cmd_if::eval,

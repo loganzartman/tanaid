@@ -296,3 +296,32 @@ fn eval_info_exists() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(result_y.repr_int()?, 0);
   Ok(())
 }
+
+#[test]
+fn eval_dict_create_and_get() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("dict get [dict create answer 42 greeting {hello world}] greeting")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "hello world");
+  Ok(())
+}
+
+#[test]
+fn eval_dict_has_key() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  eval(&parser::parse("set d [dict create a 1]")?, &mut ctx)?;
+  let mut present = eval(&parser::parse("dict has $d a")?, &mut ctx)?;
+  let mut missing = eval(&parser::parse("dict has $d b")?, &mut ctx)?;
+  assert_eq!(present.repr_int()?, 1);
+  assert_eq!(missing.repr_int()?, 0);
+  Ok(())
+}
+
+#[test]
+fn eval_dict_set_updates_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set d [dict create a 1]; dict set d b 2; dict get $d b")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 2);
+  Ok(())
+}

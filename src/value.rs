@@ -1,13 +1,18 @@
 use crate::eval_error::EvalError;
+use crate::parser;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops;
+
+pub type Dict = HashMap<String, Value>;
 
 #[derive(Clone, Debug)]
 pub enum Repr {
   None,
   Int(i64),
   Float(f64),
+  Dict(Dict),
 }
 
 #[derive(Clone, Debug)]
@@ -36,9 +41,19 @@ impl Value {
       return Ok(string.clone());
     }
 
-    match self.repr {
+    match &self.repr {
       Repr::Int(i) => Ok(i.to_string()),
       Repr::Float(f) => Ok(f.to_string()),
+      Repr::Dict(d) => {
+        let mut result = String::new();
+        for (k, v) in d.iter() {
+          if !result.is_empty() {
+            result.push(' ');
+          }
+          result.push_str(format!("{{{}}} {{{}}}", k, v.to_string()).as_str());
+        }
+        Ok(result)
+      }
       Repr::None => Err(EvalError::Generic(
         "Internal error: no string and no repr".to_string(),
       )),
@@ -80,6 +95,41 @@ impl Value {
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Float(x);
     Ok(x)
+  }
+
+  pub fn repr_dict(&mut self) -> Result<&mut Dict, EvalError> {
+    if let Repr::Dict(ref mut dict) = self.repr {
+      return Ok(dict);
+    }
+
+    let str = self.repr_str()?;
+    let (words, "") = parser::parse_list(str)
+      .map_err(|e| EvalError::Generic(format!("failed to parse as dict: {}", e)))?
+    else {
+      return Err(EvalError::Generic(
+        "failed to parse dict: extra input".to_string(),
+      ));
+    };
+
+    let mut dict = Dict::new();
+    let mut it = words.iter();
+    loop {
+      let Some(k) = it.next() else { break };
+      let Some(v) = it.next() else {
+        return Err(EvalError::Generic(format!(
+          "invalid dict; missing value for key {}",
+          k
+        )));
+      };
+
+      dict.insert(k.to_string(), Value::from(v.as_str()));
+    }
+
+    self.repr = Repr::Dict(dict);
+    let Repr::Dict(dict) = &mut self.repr else {
+      unreachable!()
+    };
+    Ok(dict)
   }
 
   pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
@@ -192,6 +242,15 @@ impl From<f64> for Value {
     Value {
       string: None,
       repr: Repr::Float(value),
+    }
+  }
+}
+
+impl From<Dict> for Value {
+  fn from(value: Dict) -> Self {
+    Value {
+      string: None,
+      repr: Repr::Dict(value),
     }
   }
 }

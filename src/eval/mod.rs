@@ -4,6 +4,7 @@ use crate::value::Value;
 
 mod cmd;
 mod cmd_break;
+mod cmd_dict;
 mod cmd_expr;
 mod cmd_global;
 mod cmd_if;
