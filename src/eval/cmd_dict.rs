@@ -14,8 +14,8 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
   let rest = &words[1..];
   match subcommand_str {
     "create" => eval_create(rest, context, frame),
+    "exists" => eval_exists(rest, context, frame),
     "get" => eval_get(rest, context, frame),
-    "has" => eval_has(rest, context, frame),
     "set" => eval_set(rest, context, frame),
     _ => Err(EvalError::ArgumentError(format!(
       "unsupported dict subcommand: {}",
@@ -46,97 +46,107 @@ fn eval_create(words: &[WordNode], context: &mut EvalContext, frame: FrameId) ->
 }
 
 fn eval_get(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let mut dict_val = words
-    .get(0)
-    .ok_or_else(|| {
-      EvalError::ArgumentError(
-        "dict get missing dictValue; expects dict get dictValue key".to_string(),
-      )
-    })
-    .map(|w| eval_word(w, context, frame))??;
-
-  let mut key_val = words
-    .get(1)
-    .ok_or_else(|| {
-      EvalError::ArgumentError("dict get missing key; expects dict get dictValue key".to_string())
-    })
-    .map(|w| eval_word(w, context, frame))??;
-
-  let dict = dict_val.repr_dict()?;
-  let key_str = key_val.repr_str()?;
-  let Some(result_val) = dict.get(key_str) else {
-    return Err(EvalError::Generic(format!("dict missing key: {}", key_str)));
+  let [val, keys @ ..] = words else {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments, expects: dict get dictValue key ?key ...?".to_string(),
+    ));
   };
 
-  Ok(result_val.clone())
+  let mut val_val = eval_word(val, context, frame)?;
+
+  let mut keys_strs: Vec<String> = vec![];
+  for key in keys {
+    let mut key_val = eval_word(key, context, frame)?;
+    keys_strs.push(String::from(key_val.repr_str()?));
+  }
+
+  for key in keys_strs {
+    let child_dict = val_val.repr_dict()?;
+    let Some(child_val) = child_dict.get(&key) else {
+      return Err(EvalError::Generic(format!("dict missing key: {}", key)));
+    };
+    val_val = child_val.clone();
+  }
+
+  Ok(val_val)
 }
 
-fn eval_has(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let mut dict_val = words
-    .get(0)
-    .ok_or_else(|| {
-      EvalError::ArgumentError(
-        "dict has missing dictValue; expects dict has dictValue key".to_string(),
-      )
-    })
-    .map(|w| eval_word(w, context, frame))??;
+fn eval_exists(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let [val, keys @ ..] = words else {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments, expects: dict has dictValue key ?key ...?".to_string(),
+    ));
+  };
 
-  let mut key_val = words
-    .get(1)
-    .ok_or_else(|| {
-      EvalError::ArgumentError("dict has missing key; expects dict has dictValue key".to_string())
-    })
-    .map(|w| eval_word(w, context, frame))??;
-
-  let dict = dict_val.repr_dict()?;
-  let key_str = key_val.repr_str()?;
-
-  match dict.get(key_str) {
-    Some(_) => Ok(Value::from(1)),
-    None => Ok(Value::from(0)),
+  if keys.is_empty() {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments, expects: dict has dictValue key ?key ...?".to_string(),
+    ));
   }
+
+  let mut val_val = eval_word(val, context, frame)?;
+
+  let mut keys_strs: Vec<String> = vec![];
+  for key in keys {
+    let mut key_val = eval_word(key, context, frame)?;
+    keys_strs.push(String::from(key_val.repr_str()?));
+  }
+
+  for key in keys_strs {
+    let child_dict = val_val.repr_dict()?;
+    let Some(child_val) = child_dict.get(&key) else {
+      return Ok(Value::from(0));
+    };
+    val_val = child_val.clone();
+  }
+
+  Ok(Value::from(1))
 }
 
 fn eval_set(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let mut var_val = words
-    .get(0)
-    .ok_or_else(|| {
-      EvalError::ArgumentError(
-        "dict set missing dictVar; expects dict set dictVar key value".to_string(),
-      )
-    })
-    .map(|w| eval_word(w, context, frame))??;
+  let [var, keys @ .., val] = words else {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments, expects: dict set dictVariable key ?key ...? value".to_string(),
+    ));
+  };
 
-  let mut key_val = words
-    .get(1)
-    .ok_or_else(|| {
-      EvalError::ArgumentError(
-        "dict set missing key; expects dict set dictVar key value".to_string(),
-      )
-    })
-    .map(|w| eval_word(w, context, frame))??;
-
-  let val_val = words
-    .get(2)
-    .ok_or_else(|| {
-      EvalError::ArgumentError(
-        "dict set missing value; expects dict set dictVar key value".to_string(),
-      )
-    })
-    .map(|w| eval_word(w, context, frame))??;
-
+  let mut var_val = eval_word(var, context, frame)?;
   let var_str = var_val.repr_str()?;
 
-  let mut dict_val = context
+  let mut keys_strs: Vec<String> = vec![];
+  for key in keys {
+    let mut key_val = eval_word(key, context, frame)?;
+    keys_strs.push(String::from(key_val.repr_str()?));
+  }
+
+  let val_val = eval_word(val, context, frame)?;
+
+  let dict_val = context
     .get_variable(frame, var_str)
-    .ok_or_else(|| EvalError::UndefinedVariable(format!("undefined variable: {}", var_str)))?
-    .clone();
+    .ok_or_else(|| EvalError::UndefinedVariable(format!("undefined variable: {}", var_str)))?;
 
-  let mut dict = dict_val.repr_dict()?.as_ref().clone();
-  let key_str = key_val.repr_str()?;
-  dict.insert(key_str.to_string(), val_val);
-  let new_dict_val = Value::from(dict);
-  context.set_variable(frame, var_str, new_dict_val.clone());
+  let new_val = set_path(dict_val.clone(), keys_strs.as_slice(), &val_val)?;
+  context.set_variable(frame, var_str, new_val.clone());
 
-  Ok(new_dict_val)
+  Ok(new_val)
+}
+
+fn set_path(mut current: Value, path: &[String], value: &Value) -> EvalCmdResult {
+  let Some((first, rest)) = path.split_first() else {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments, expects: dict set dictVariable key ?key ...? value".to_string(),
+    ));
+  };
+
+  let mut dict = current.repr_dict()?.as_ref().clone();
+
+  if rest.is_empty() {
+    dict.insert(first.clone(), value.clone());
+  } else {
+    let child = dict.get(first).cloned().unwrap_or(Value::from(Dict::new()));
+
+    dict.insert(first.clone(), set_path(child, rest, value)?);
+  }
+
+  Ok(Value::from(dict))
 }

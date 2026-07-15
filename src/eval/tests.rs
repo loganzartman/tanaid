@@ -298,8 +298,19 @@ fn eval_info_exists() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn eval_dict_create_and_get() -> Result<(), Box<dyn std::error::Error>> {
-  let ast = parser::parse("dict get [dict create answer 42 greeting {hello world}] greeting")?;
+fn eval_dict_create() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("dict create answer 42 greeting {hello world}")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  let dict = result.repr_dict()?;
+  let mut answer = dict.get("answer").unwrap().clone();
+  assert_eq!(answer.repr_int()?, 42);
+  Ok(())
+}
+
+#[test]
+fn eval_dict_get_nested_key() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("dict get [dict create a [dict create b {hello world}]] a b")?;
   let mut ctx = EvalContext::new();
   let mut result = eval(&ast, &mut ctx)?;
   assert_eq!(result.repr_str()?, "hello world");
@@ -307,19 +318,24 @@ fn eval_dict_create_and_get() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn eval_dict_has_key() -> Result<(), Box<dyn std::error::Error>> {
+fn eval_dict_exists_nested_key() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  eval(&parser::parse("set d [dict create a 1]")?, &mut ctx)?;
-  let mut present = eval(&parser::parse("dict has $d a")?, &mut ctx)?;
-  let mut missing = eval(&parser::parse("dict has $d b")?, &mut ctx)?;
+  eval(
+    &parser::parse("set d [dict create a [dict create b 1]]")?,
+    &mut ctx,
+  )?;
+  let mut present = eval(&parser::parse("dict exists $d a b")?, &mut ctx)?;
+  let mut missing = eval(&parser::parse("dict exists $d a c")?, &mut ctx)?;
   assert_eq!(present.repr_int()?, 1);
   assert_eq!(missing.repr_int()?, 0);
   Ok(())
 }
 
 #[test]
-fn eval_dict_set_updates_variable() -> Result<(), Box<dyn std::error::Error>> {
-  let ast = parser::parse("set d [dict create a 1]; dict set d b 2; dict get $d b")?;
+fn eval_dict_set_updates_nested_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "set d [dict create a [dict create b 1]]; dict set d a b 2; dict get $d a b",
+  )?;
   let mut ctx = EvalContext::new();
   let mut result = eval(&ast, &mut ctx)?;
   assert_eq!(result.repr_int()?, 2);

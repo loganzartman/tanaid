@@ -14,11 +14,10 @@ implements a (probably broken) subset of tcl:
   - `"$variable and [command]"` substitution in quoted strings
 - builtin commands
   - `break`
-  - `dict`
-    - `dict create ?key value ...?`
-    - `dict get dictValue key`
-    - `dict has dictValue key`
-    - `dict set dictVariable key value`
+  - `dict create ?key value ...?`
+  - `dict get dictValue ?key ...?`
+  - `dict exists dictValue key ?key ...?`
+  - `dict set dictVariable key ?key ...? value`
   - `expr arg ?arg arg ...?`
   - `global ?varname ...?`
   - `if expr1 ?then? body1 elseif expr2 ?then? body2 elseif ... ?else? ?bodyN?`
