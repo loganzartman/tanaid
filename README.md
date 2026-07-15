@@ -27,6 +27,7 @@ implements a (probably broken) subset of tcl:
   - `return ?result?`
   - `set varName ?value?`
   - `string index string charIndex`
+  - `string length string`
   - `while test body`
 
 this is enough to write simple scripts like:

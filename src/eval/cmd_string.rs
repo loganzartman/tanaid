@@ -15,6 +15,7 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
   let rest = &words[1..];
   match subcommand_str {
     "index" => eval_index(rest, context, frame),
+    "length" => eval_length(rest, context, frame),
     _ => Err(EvalError::ArgumentError(format!(
       "unsupported string subcommand: {}",
       subcommand_str
@@ -41,4 +42,16 @@ fn eval_index(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> 
     .ok_or_else(|| EvalError::ArgumentError(format!("invalid index: {}", index)))?;
 
   Ok(Value::from(String::from(ch)))
+}
+
+fn eval_length(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let [string_word] = words else {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments, expects: string length string".to_string(),
+    ));
+  };
+
+  let mut string_val = eval_word(string_word, context, frame)?;
+
+  Ok(Value::from(string_val.repr_str()?.chars().count() as i64))
 }
