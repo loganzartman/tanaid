@@ -68,7 +68,6 @@ fn eval_get(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> Ev
     return Err(EvalError::Generic(format!("dict missing key: {}", key_str)));
   };
 
-  // TODO: this needs to be a reference/rc...
   Ok(result_val.clone())
 }
 
@@ -127,19 +126,17 @@ fn eval_set(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> Ev
     .map(|w| eval_word(w, context, frame))??;
 
   let var_str = var_val.repr_str()?;
-  let Some(dict_val) = context.get_variable(frame, var_str) else {
-    return Err(EvalError::UndefinedVariable(format!(
-      "undefined variable: {}",
-      var_str
-    )));
-  };
 
-  let mut new_dict = dict_val.clone();
-  let dict = new_dict.repr_dict()?;
+  let mut dict_val = context
+    .get_variable(frame, var_str)
+    .ok_or_else(|| EvalError::UndefinedVariable(format!("undefined variable: {}", var_str)))?
+    .clone();
+
+  let mut dict = dict_val.repr_dict()?.as_ref().clone();
   let key_str = key_val.repr_str()?;
   dict.insert(key_str.to_string(), val_val);
-  context.set_variable(frame, var_str, Value::from(new_dict.clone()));
+  let new_dict_val = Value::from(dict);
+  context.set_variable(frame, var_str, new_dict_val.clone());
 
-  // TODO: this needs to be a reference/rc...
-  Ok(new_dict)
+  Ok(new_dict_val)
 }

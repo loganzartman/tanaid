@@ -47,7 +47,6 @@ pub fn eval_command(
   let name_str = name_value.repr_str()?;
 
   // user-defined proc
-  // TODO: reference-count procs
   if let Some(proc) = context.get_proc(name_str) {
     return eval_proc(name_str, &proc, args, context, frame);
   }

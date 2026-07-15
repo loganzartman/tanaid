@@ -1,9 +1,13 @@
+use regex::Regex;
+
 use crate::eval_error::EvalError;
 use crate::parser;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops;
+use std::rc::Rc;
+use std::sync::LazyLock;
 
 pub type Dict = HashMap<String, Value>;
 
@@ -12,47 +16,63 @@ pub enum Repr {
   None,
   Int(i64),
   Float(f64),
-  Dict(Dict),
+  Dict(Rc<Dict>),
 }
 
 #[derive(Clone, Debug)]
 pub struct Value {
-  string: Option<String>,
+  string: Option<Rc<str>>,
   repr: Repr,
+}
+
+/// Return "s" if it's a valid Tcl bare word, else return "{s}"
+fn maybe_quote(s: &str) -> String {
+  static RE_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^$\[\]{}()";\s]+$"#).unwrap());
+
+  if RE_WORD.is_match(s) {
+    return String::from(s);
+  }
+
+  format!("{{{}}}", s)
 }
 
 impl Value {
   pub fn none() -> Value {
     Value {
-      string: Some("".to_string()),
+      string: Some("".into()),
       repr: Repr::None,
     }
   }
 
-  pub fn new(x: impl Into<String>) -> Value {
+  pub fn new(x: impl Into<Rc<str>>) -> Value {
     Value {
       string: Some(x.into()),
       repr: Repr::None,
     }
   }
 
-  pub fn format_string(&self) -> Result<String, EvalError> {
+  /// Converts the internal Repr into a string, or returns the existing string.
+  ///
+  /// Prefer repr_str(), which memoizes the conversion.
+  pub fn format_string(&self) -> Result<Rc<str>, EvalError> {
     if let Some(string) = &self.string {
-      return Ok(string.clone());
+      return Ok(Rc::clone(string));
     }
 
     match &self.repr {
-      Repr::Int(i) => Ok(i.to_string()),
-      Repr::Float(f) => Ok(f.to_string()),
+      Repr::Int(i) => Ok(i.to_string().into()),
+      Repr::Float(f) => Ok(f.to_string().into()),
       Repr::Dict(d) => {
         let mut result = String::new();
         for (k, v) in d.iter() {
           if !result.is_empty() {
             result.push(' ');
           }
-          result.push_str(format!("{{{}}} {{{}}}", k, v.to_string()).as_str());
+          result.push_str(
+            format!("{} {}", maybe_quote(k), maybe_quote(v.to_string().as_str())).as_str(),
+          );
         }
-        Ok(result)
+        Ok(result.into())
       }
       Repr::None => Err(EvalError::Generic(
         "Internal error: no string and no repr".to_string(),
@@ -60,6 +80,7 @@ impl Value {
     }
   }
 
+  /// Gets the string representation of the value, caching the result.
   pub fn repr_str(&mut self) -> Result<&str, EvalError> {
     if self.string.is_none() {
       self.string = Some(self.format_string()?);
@@ -97,9 +118,9 @@ impl Value {
     Ok(x)
   }
 
-  pub fn repr_dict(&mut self) -> Result<&mut Dict, EvalError> {
-    if let Repr::Dict(ref mut dict) = self.repr {
-      return Ok(dict);
+  pub fn repr_dict(&mut self) -> Result<Rc<Dict>, EvalError> {
+    if let Repr::Dict(dict) = &self.repr {
+      return Ok(Rc::clone(dict));
     }
 
     let str = self.repr_str()?;
@@ -125,11 +146,11 @@ impl Value {
       dict.insert(k.to_string(), Value::from(v.as_str()));
     }
 
-    self.repr = Repr::Dict(dict);
-    let Repr::Dict(dict) = &mut self.repr else {
+    self.repr = Repr::Dict(dict.into());
+    let Repr::Dict(dict) = &self.repr else {
       unreachable!()
     };
-    Ok(dict)
+    Ok(dict.clone())
   }
 
   pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
@@ -200,20 +221,17 @@ impl Value {
 
 impl Display for Value {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(
-      f,
-      "{}",
-      self
-        .format_string()
-        .unwrap_or("{Unprintable Value}".to_string())
-    )
+    match self.format_string() {
+      Ok(s) => f.write_str(&s),
+      Err(_) => f.write_str("{Unprintable Value}"),
+    }
   }
 }
 
 impl From<String> for Value {
   fn from(value: String) -> Self {
     Value {
-      string: Some(value),
+      string: Some(value.into()),
       repr: Repr::None,
     }
   }
@@ -222,7 +240,7 @@ impl From<String> for Value {
 impl From<&str> for Value {
   fn from(value: &str) -> Self {
     Value {
-      string: Some(value.to_string()),
+      string: Some(value.into()),
       repr: Repr::None,
     }
   }
@@ -250,7 +268,7 @@ impl From<Dict> for Value {
   fn from(value: Dict) -> Self {
     Value {
       string: None,
-      repr: Repr::Dict(value),
+      repr: Repr::Dict(Rc::new(value)),
     }
   }
 }
