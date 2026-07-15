@@ -341,3 +341,35 @@ fn eval_dict_set_updates_nested_variable() -> Result<(), Box<dyn std::error::Err
   assert_eq!(result.repr_int()?, 2);
   Ok(())
 }
+
+#[test]
+fn eval_string_index() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("string index hello 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "e");
+  Ok(())
+}
+
+#[test]
+fn eval_string_index_unicode() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("string index {a🦀b} 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "🦀");
+  Ok(())
+}
+
+#[test]
+fn eval_string_index_negative() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("string index hello -1")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_string_index_out_of_bounds() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("string index hello 5")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}

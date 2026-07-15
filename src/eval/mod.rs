@@ -13,6 +13,7 @@ mod cmd_proc;
 mod cmd_puts;
 mod cmd_return;
 mod cmd_set;
+mod cmd_string;
 mod cmd_while;
 mod context;
 mod expr;
