@@ -1,4 +1,4 @@
-proc count_letter_freq {s} {
+proc countLetterFreq {s} {
   set i 0
   set len [string length $s]
   set freq [dict create]
@@ -18,8 +18,7 @@ proc count_letter_freq {s} {
   return $freq
 }
 
-puts [count_letter_freq hello]
-puts [count_letter_freq racecar]
-puts [count_letter_freq "a gentleman"]
-puts [count_letter_freq "elegant man"]
-
+puts [countLetterFreq hello]
+puts [countLetterFreq racecar]
+puts [countLetterFreq "a gentleman"]
+puts [countLetterFreq "elegant man"]
