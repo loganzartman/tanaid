@@ -1,6 +1,7 @@
 use regex::Regex;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::mem::take;
 use std::sync::LazyLock;
 
 #[derive(Debug)]
@@ -209,26 +210,6 @@ pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
     }
     first = false;
 
-    match parse_bracketed(src, BracketType::Curly) {
-      Ok((str, rest)) => {
-        items.push(str);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    match parse_bracketed(src, BracketType::DoubleQuote) {
-      Ok((str, rest)) => {
-        items.push(str);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
     match parse_list_element_bare(src) {
       Ok((str, rest)) => {
         items.push(str);
@@ -262,228 +243,194 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
     Err(_) => {}
   }
 
+  enum State {
+    START,
+    BARE,
+    VARSUB,
+  }
+  use State::*;
+  let mut state = START;
+
   let mut parts: Vec<WordPart> = vec![];
-  while !src.is_empty() {
-    match parse_wordpart_quoted(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+  let mut part_buffer = String::new();
 
-    match parse_wordpart_cmdsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+  while src.len() > 0 {
+    let ch = src.chars().next().unwrap();
+    match state {
+      START => match ch {
+        '{' => {
+          let (s, rest) = parse_braced_word_string(src, BraceType::CURLY)?;
+          return Ok((
+            WordNode {
+              parts: vec![WordPart::BracedLiteral(s)],
+            },
+            rest,
+          ));
+        }
+        '"' => todo!(),
+        _ => {
+          state = BARE;
+        }
+      },
 
-    match parse_wordpart_varsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+      BARE => match ch {
+        ' ' | '\t' | '\n' | '\r' | ';' => {
+          // flush
+          if !part_buffer.is_empty() {
+            parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          }
 
-    match parse_wordpart_literal(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+          break;
+        }
+        '$' => {
+          // flush
+          if !part_buffer.is_empty() {
+            parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          }
 
-    break;
+          state = VARSUB;
+          src = &src[1..];
+        }
+        '[' => {
+          // flush
+          if !part_buffer.is_empty() {
+            parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          }
+
+          let (s, rest) = parse_braced_word_string(src, BraceType::SQUARE)?;
+          parts.push(WordPart::CommandSub(s));
+          src = rest;
+        }
+        '\\' => {
+          let (escaped_ch, rest) = parse_backslash_escape(src)?;
+          part_buffer.push(escaped_ch);
+          src = rest;
+        }
+        _ => {
+          part_buffer.push(ch);
+          src = &src[ch.len_utf8()..];
+        }
+      },
+
+      VARSUB => match ch {
+        ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' => {
+          // flush
+          if !part_buffer.is_empty() {
+            parts.push(WordPart::VarSub(take(&mut part_buffer)));
+          }
+
+          state = BARE;
+        }
+        '\\' => {
+          if let Some('$') = src.chars().nth(1) {
+            part_buffer.push_str(r"\$");
+            src = &src[2..];
+          } else {
+            part_buffer.push('\\');
+            src = &src[1..];
+          }
+        }
+        _ => {
+          part_buffer.push(ch);
+          src = &src[ch.len_utf8()..];
+        }
+      },
+    }
   }
 
-  if parts.is_empty() {
-    Err(ParseError::Generic("expected word".to_string()))
-  } else {
-    Ok((WordNode { parts }, src))
+  match state {
+    START => return Err(ParseError::Generic("expected word".to_string())),
+    BARE => {
+      // flush
+      if !part_buffer.is_empty() {
+        parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+      }
+    }
+    VARSUB => {
+      // flush
+      if !part_buffer.is_empty() {
+        parts.push(WordPart::VarSub(take(&mut part_buffer)));
+      }
+    }
   }
+
+  Ok((WordNode { parts }, src))
 }
 
-fn parse_wordpart_quoted(src: &str) -> Result<(WordPart, &str), ParseError> {
-  let Some(mut src) = src.strip_prefix("\"") else {
-    return Err(ParseError::Generic("expected \"".to_string()));
+enum BraceType {
+  CURLY,
+  SQUARE,
+}
+
+fn parse_braced_word_string(
+  mut src: &str,
+  brace_type: BraceType,
+) -> Result<(String, &str), ParseError> {
+  let brace_open = match brace_type {
+    BraceType::CURLY => '{',
+    BraceType::SQUARE => '[',
+  };
+  let brace_close = match brace_type {
+    BraceType::CURLY => '}',
+    BraceType::SQUARE => ']',
   };
 
-  let mut parts = vec![];
-  while !src.is_empty() {
-    if let Some(rest) = src.strip_prefix("\"") {
-      return Ok((WordPart::Quoted(parts), rest));
+  match src.chars().next() {
+    Some(ch) if ch == brace_open => {
+      src = &src[ch.len_utf8()..];
     }
-
-    match parse_wordpart_cmdsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    match parse_wordpart_varsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    match parse_wordpart_quoted_literal(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    break;
+    _ => return Err(ParseError::Generic("expected {".to_string())),
   }
-
-  Err(ParseError::Continuable(
-    "missing closing character: \"".to_string(),
-  ))
-}
-
-fn parse_wordpart_quoted_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
-  parse_wordpart_quoted_bare(src)
-    .map(|(s, rest)| (WordPart::BareLiteral(s), rest))
-    .map_err(|_| ParseError::Generic("expected literal word".to_string()))
-}
-
-fn parse_wordpart_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
-  match parse_bracketed(src, BracketType::Curly) {
-    Ok((s, rest)) => return Ok((WordPart::BracedLiteral(s), rest)),
-    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-    Err(_) => {}
-  }
-
-  parse_wordpart_bare(src).map(|(s, rest)| (WordPart::BareLiteral(s), rest))
-}
-
-fn parse_wordpart_varsub(src: &str) -> Result<(WordPart, &str), ParseError> {
-  let rest = src
-    .strip_prefix('$')
-    .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
-
-  match parse_bracketed(rest, BracketType::Curly) {
-    Ok((word, rest)) => return Ok((WordPart::BracedSub(word), rest)),
-    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-    Err(_) => {}
-  }
-
-  parse_wordpart_bare(rest).map(|(word, rest)| (WordPart::VarSub(word), rest))
-}
-
-fn parse_wordpart_cmdsub(src: &str) -> Result<(WordPart, &str), ParseError> {
-  let (word, rest) = parse_bracketed(src, BracketType::Square)?;
-  Ok((WordPart::CommandSub(word), rest))
-}
-
-enum BracketType {
-  Square,
-  Curly,
-  DoubleQuote,
-}
-
-fn parse_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseError> {
-  let open = match b {
-    BracketType::Square => '[',
-    BracketType::Curly => '{',
-    BracketType::DoubleQuote => '"',
-  };
-  let close = match b {
-    BracketType::Square => ']',
-    BracketType::Curly => '}',
-    BracketType::DoubleQuote => '"',
-  };
-
-  let mut rest = src
-    .strip_prefix(open)
-    .ok_or_else(|| ParseError::Generic(format!("expected a: {}", open)))?;
 
   let mut depth = 1;
-  let mut word = String::new();
+  let mut buffer = String::new();
 
-  while !rest.is_empty() {
-    let (ch, new_rest) = parse_char(rest)?;
-    rest = new_rest;
-
-    if ch == close {
-      depth -= 1;
-      if depth == 0 {
-        break;
+  while !src.is_empty() {
+    match src.chars().next().unwrap() {
+      ch if ch == brace_open => {
+        buffer.push(ch);
+        depth += 1;
+        src = &src[ch.len_utf8()..];
+      }
+      ch if ch == brace_close => {
+        depth -= 1;
+        src = &src[ch.len_utf8()..];
+        if depth == 0 {
+          break;
+        } else {
+          buffer.push(ch);
+        }
+      }
+      '\\' => {
+        if let Some(ch) = src.chars().nth(1)
+          && ch == brace_close
+        {
+          buffer.push('\\');
+          buffer.push(ch);
+          src = &src[1 + ch.len_utf8()..];
+        } else {
+          buffer.push('\\');
+          src = &src[1..];
+        }
+      }
+      ch => {
+        buffer.push(ch);
+        src = &src[ch.len_utf8()..];
       }
     }
-
-    if ch == open {
-      depth += 1;
-    }
-
-    word.push(ch);
   }
 
   if depth > 0 {
-    Err(ParseError::Continuable(format!(
-      "missing closing character: {}",
-      close
-    )))
-  } else {
-    Ok((word, rest))
+    return Err(ParseError::Continuable(format!(
+      "missing closing {}",
+      brace_close
+    )));
   }
+
+  Ok((buffer, src))
 }
 
-fn parse_wordpart_bare(src: &str) -> Result<(String, &str), ParseError> {
-  static RE_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^$\[\]{}()";\s]+"#).unwrap());
-
-  if let Some(captures) = RE_WORD.captures(src) {
-    Ok((captures[0].to_string(), &src[captures[0].len()..]))
-  } else {
-    Err(ParseError::Generic("expected bare word".to_string()))
-  }
-}
-
-fn parse_wordpart_quoted_bare(src: &str) -> Result<(String, &str), ParseError> {
-  let mut rest = src;
-  let mut word = String::new();
-
-  while let Some(ch) = rest.chars().next() {
-    // Stop at substitution/terminator characters, but let parse_char handle
-    // backslash escapes (so `\"` doesn't terminate the quoted string).
-    if matches!(ch, '$' | '[' | ']' | '"') {
-      break;
-    }
-    let (decoded, new_rest) = parse_char(rest)?;
-    word.push(decoded);
-    rest = new_rest;
-  }
-
-  if word.is_empty() {
-    Err(ParseError::Generic("expected bare word".to_string()))
-  } else {
-    Ok((word, rest))
-  }
-}
-
-fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
+fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
   let ch = src
     .chars()
     .next()
@@ -541,7 +488,7 @@ fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
     };
   }
 
-  // Tcl semantics: a backslash before any other character is that character.
+  // a backslash before any other character is that character.
   if let Some(escaped) = rest.chars().next() {
     return Ok((escaped, &rest[escaped.len_utf8()..]));
   }
@@ -588,15 +535,8 @@ mod tests {
   use super::*;
 
   #[test]
-  fn parse_char_ascii() -> Result<(), ParseError> {
-    let (char, _rest) = parse_char("a")?;
-    assert_eq!(char, 'a');
-    Ok(())
-  }
-
-  #[test]
   fn parse_char_escape_newline() -> Result<(), ParseError> {
-    let (char, _rest) = parse_char("\\n")?;
+    let (char, _rest) = parse_backslash_escape("\\n")?;
     assert_eq!(char, '\n');
     Ok(())
   }
@@ -647,7 +587,7 @@ mod tests {
             WordPart::VarSub("y".to_string()),
             WordPart::CommandSub("a".to_string()),
             WordPart::CommandSub("b".to_string()),
-            WordPart::BracedLiteral("c".to_string()),
+            WordPart::BareLiteral("{c}".to_string()),
           ]
         },
         ""
@@ -710,15 +650,199 @@ mod tests {
   }
 
   #[test]
-  fn parses_word_excludes_paren() -> Result<(), ParseError> {
-    let parsed = parse_word("hello(a")?;
+  fn parses_backslash_escapes_in_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r#"a\ b\;\$x\[cmd\]\{c\}\"q"#)?;
     assert_eq!(
       parsed,
       (
-        WordNode {
-          parts: vec![WordPart::BareLiteral("hello".to_string())]
-        },
-        "(a"
+        WordNode::only(WordPart::BareLiteral("a b;$x[cmd]{c}\"q".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_sequences_in_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"line\ncol\t\x41\101\q")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("line\ncol\tAAq".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn trailing_backslash_in_bare_word_is_literal() -> Result<(), ParseError> {
+    let parsed = parse_word(r"hello\")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral(r"hello\".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braces_and_quotes_are_literal_inside_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r#"pre{braced}"quoted""#)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral(r#"pre{braced}"quoted""#.to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braced_word_rejects_trailing_characters() {
+    assert!(parse_word("{hello}world").is_err());
+  }
+
+  #[test]
+  fn quoted_word_rejects_trailing_characters() {
+    assert!(parse_word(r#""hello"world"#).is_err());
+  }
+
+  #[test]
+  fn backslash_newline_continues_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word("hello\\\n \t  world")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("hello world".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn backslash_newline_continues_quoted_word() -> Result<(), ParseError> {
+    let parsed = parse_word("\"hello\\\n \t  world\"")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::Quoted(vec![WordPart::BareLiteral(
+          "hello world".to_string()
+        )])),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn backslash_newline_is_substituted_in_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word("{hello\\\n \t  world}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral("hello world".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braced_word_preserves_other_backslashes() -> Result<(), ParseError> {
+    let parsed = parse_word(r"{a\n\$x}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral(r"a\n\$x".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_brace_does_not_close_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"{a\}b}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral(r"a\}b".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_open_brace_does_not_nest_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"{a\{b}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral(r"a\{b".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_bracket_does_not_close_command_substitution() -> Result<(), ParseError> {
+    let parsed = parse_word(r"[list \]]")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(r"list \]".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_open_bracket_does_not_nest_command_substitution() -> Result<(), ParseError> {
+    let parsed = parse_word(r"[list \[]")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(r"list \[".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn command_substitution_ignores_close_bracket_in_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"[set x {]}]")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub("set x {]}".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn lone_dollar_is_not_a_word() {
+    assert!(parse_word("$").is_err());
+  }
+
+  #[test]
+  fn parses_word_includes_parentheses() -> Result<(), ParseError> {
+    let parsed = parse_word("hello(a)")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("hello(a)".to_string())),
+        ""
       )
     );
     Ok(())
