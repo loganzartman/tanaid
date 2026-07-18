@@ -259,7 +259,7 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
     match state {
       START => match ch {
         '{' => {
-          let (s, rest) = parse_braced_word_string(src, BraceType::CURLY)?;
+          let (s, rest) = parse_curly_braced_string(src)?;
           return Ok((
             WordNode {
               parts: vec![WordPart::BracedLiteral(s)],
@@ -297,7 +297,7 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
             parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
           }
 
-          let (s, rest) = parse_braced_word_string(src, BraceType::SQUARE)?;
+          let (s, rest) = todo!();
           parts.push(WordPart::CommandSub(s));
           src = rest;
         }
@@ -357,27 +357,10 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
   Ok((WordNode { parts }, src))
 }
 
-enum BraceType {
-  CURLY,
-  SQUARE,
-}
-
-fn parse_braced_word_string(
-  mut src: &str,
-  brace_type: BraceType,
-) -> Result<(String, &str), ParseError> {
-  let brace_open = match brace_type {
-    BraceType::CURLY => '{',
-    BraceType::SQUARE => '[',
-  };
-  let brace_close = match brace_type {
-    BraceType::CURLY => '}',
-    BraceType::SQUARE => ']',
-  };
-
+fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError> {
   match src.chars().next() {
-    Some(ch) if ch == brace_open => {
-      src = &src[ch.len_utf8()..];
+    Some('{') => {
+      src = &src[1..];
     }
     _ => return Err(ParseError::Generic("expected {".to_string())),
   }
@@ -387,32 +370,50 @@ fn parse_braced_word_string(
 
   while !src.is_empty() {
     match src.chars().next().unwrap() {
-      ch if ch == brace_open => {
-        buffer.push(ch);
+      '{' => {
+        buffer.push('{');
         depth += 1;
-        src = &src[ch.len_utf8()..];
+        src = &src[1..];
       }
-      ch if ch == brace_close => {
+
+      '}' => {
         depth -= 1;
-        src = &src[ch.len_utf8()..];
+        src = &src[1..];
         if depth == 0 {
           break;
         } else {
-          buffer.push(ch);
+          buffer.push('}');
         }
       }
-      '\\' => {
-        if let Some(ch) = src.chars().nth(1)
-          && ch == brace_close
-        {
+
+      '\\' => match src.chars().nth(1) {
+        Some(ch @ ('{' | '}')) => {
           buffer.push('\\');
           buffer.push(ch);
+          src = &src[2..];
+        }
+
+        Some(ch @ ('\n' | '\r')) => {
           src = &src[1 + ch.len_utf8()..];
-        } else {
+
+          // CRLF
+          if ch == '\r' {
+            src = src.strip_prefix('\n').unwrap_or(src);
+          }
+
+          while matches!(src.chars().next(), Some(' ' | '\t')) {
+            src = &src[1..];
+          }
+
+          buffer.push(' ');
+        }
+
+        _ => {
           buffer.push('\\');
           src = &src[1..];
         }
-      }
+      },
+
       ch => {
         buffer.push(ch);
         src = &src[ch.len_utf8()..];
@@ -421,10 +422,7 @@ fn parse_braced_word_string(
   }
 
   if depth > 0 {
-    return Err(ParseError::Continuable(format!(
-      "missing closing {}",
-      brace_close
-    )));
+    return Err(ParseError::Continuable("missing closing }".to_string()));
   }
 
   Ok((buffer, src))
@@ -707,6 +705,34 @@ mod tests {
   }
 
   #[test]
+  fn braced_word_allows_following_separator() -> Result<(), ParseError> {
+    let parsed = parse_word("{hello} world")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral("hello".to_string())),
+        " world"
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn curly_braced_string_preserves_nesting_and_returns_remainder() -> Result<(), ParseError> {
+    let parsed = parse_curly_braced_string("{a {nested} value}rest")?;
+    assert_eq!(parsed, ("a {nested} value".to_string(), "rest"));
+    Ok(())
+  }
+
+  #[test]
+  fn curly_braced_string_reports_missing_close() {
+    assert!(matches!(
+      parse_curly_braced_string("{unclosed"),
+      Err(ParseError::Continuable(_))
+    ));
+  }
+
+  #[test]
   fn quoted_word_rejects_trailing_characters() {
     assert!(parse_word(r#""hello"world"#).is_err());
   }
@@ -746,6 +772,19 @@ mod tests {
       parsed,
       (
         WordNode::only(WordPart::BracedLiteral("hello world".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braced_backslash_newline_does_not_consume_next_newline() -> Result<(), ParseError> {
+    let parsed = parse_word("{hello\\\n\nworld}")?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral("hello \nworld".to_string())),
         ""
       )
     );
