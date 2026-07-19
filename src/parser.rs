@@ -288,6 +288,25 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
         rest,
       ));
     }
+    Some('"') => {
+      let (parsed, rest) = parse_quoted(src, mode)?;
+
+      if let Some(next) = rest.chars().next()
+        && !is_bare_terminator(next)
+      {
+        return Err(ParseError::Generic(format!(
+          "unexpected character after \": {}",
+          next,
+        )));
+      }
+
+      return Ok((
+        WordNode {
+          parts: vec![parsed],
+        },
+        rest,
+      ));
+    }
     _ => {}
   }
 
@@ -321,16 +340,6 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
         }
 
         let (parsed, rest) = parse_cmdsub(src)?;
-        parts.push(parsed);
-        src = rest;
-      }
-      '"' => {
-        // flush
-        if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
-        }
-
-        let (parsed, rest) = parse_quoted(src, mode)?;
         parts.push(parsed);
         src = rest;
       }
