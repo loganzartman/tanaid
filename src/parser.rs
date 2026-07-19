@@ -300,7 +300,6 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
 
-        src = &src[1..];
         let (parsed, rest) = parse_varsub(src, mode)?;
         parts.push(parsed);
         src = rest;
@@ -311,13 +310,19 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
 
-        let (s, rest) = parse_script(&src[1..], ParseMode::CommandSub)?;
-        parts.push(WordPart::CommandSub(s));
+        let (parsed, rest) = parse_cmdsub(src)?;
+        parts.push(parsed);
         src = rest;
+      }
+      '"' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
 
-        src = src
-          .strip_prefix(']')
-          .ok_or_else(|| ParseError::Continuable("expected ]".to_string()))?;
+        let (parsed, rest) = parse_quoted(src, mode)?;
+        parts.push(parsed);
+        src = rest;
       }
       '\\' => {
         let (escaped_ch, rest) = parse_backslash_escape(src)?;
@@ -397,9 +402,68 @@ fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError
   Ok((buffer, src))
 }
 
+fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+  src = src
+    .strip_prefix('"')
+    .ok_or_else(|| ParseError::Generic("expected \"".to_string()))?;
+
+  let mut part_buffer = String::new();
+  let mut parts: Vec<WordPart> = vec![];
+
+  loop {
+    let ch = src.chars().next().unwrap_or('\0');
+    match ch {
+      '\0' => return Err(ParseError::Continuable("expected \"".to_string())),
+      '"' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+        src = &src[1..];
+        break;
+      }
+      '$' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (part, rest) = parse_varsub(src, mode)?;
+        parts.push(part);
+        src = rest;
+      }
+      '[' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (part, rest) = parse_cmdsub(src)?;
+        parts.push(part);
+        src = rest;
+      }
+      '\\' => {
+        let (char, rest) = parse_backslash_escape(src)?;
+        part_buffer.push(char);
+        src = rest;
+      }
+      ch => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
+
+  Ok((WordPart::Quoted(parts), src))
+}
+
 fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+  src = src
+    .strip_prefix('$')
+    .ok_or_else(|| ParseError::Generic("expected $".to_string()))?;
+
   let is_var_terminator = |ch: char| {
-    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '\0')
+    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '"' | '\0')
       || (mode == ParseMode::CommandSub && ch == ']')
   };
 
@@ -425,12 +489,27 @@ fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), Pars
           src = &src[1..];
         }
       }
-      _ => {
+      ch => {
         part_buffer.push(ch);
         src = &src[ch.len_utf8()..];
       }
     }
   }
+}
+
+fn parse_cmdsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
+  src = src
+    .strip_prefix('[')
+    .ok_or_else(|| ParseError::Generic("expected [".to_string()))?;
+
+  let (s, rest) = parse_script(src, ParseMode::CommandSub)?;
+  src = rest;
+
+  src = src
+    .strip_prefix(']')
+    .ok_or_else(|| ParseError::Continuable("expected ]".to_string()))?;
+
+  Ok((WordPart::CommandSub(s), src))
 }
 
 fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
@@ -617,6 +696,23 @@ mod tests {
             WordPart::CommandSub(bare_script(&["b"])),
             WordPart::BareLiteral("{c}".to_string()),
           ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_quoted_word_simple() -> Result<(), ParseError> {
+    let parsed = parse_word(r#""hello""#, ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::Quoted(vec![WordPart::BareLiteral(
+            "hello".to_string()
+          ),]),]
         },
         ""
       )
