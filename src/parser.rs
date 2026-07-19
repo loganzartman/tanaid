@@ -396,33 +396,23 @@ fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError
         }
       }
 
-      '\\' => match src.chars().nth(1) {
-        Some(ch @ ('{' | '}')) => {
+      '\\' => {
+        if let Some(ch @ ('{' | '}')) = src.chars().nth(1) {
           buffer.push('\\');
           buffer.push(ch);
           src = &src[2..];
+          continue;
         }
 
-        Some(ch @ ('\n' | '\r')) => {
-          src = &src[1 + ch.len_utf8()..];
-
-          // CRLF
-          if ch == '\r' {
-            src = src.strip_prefix('\n').unwrap_or(src);
-          }
-
-          while matches!(src.chars().next(), Some(' ' | '\t')) {
-            src = &src[1..];
-          }
-
-          buffer.push(' ');
+        if let Ok((ch, rest)) = parse_backslash_escape_newline(src) {
+          buffer.push(ch);
+          src = rest;
+          continue;
         }
 
-        _ => {
-          buffer.push('\\');
-          src = &src[1..];
-        }
-      },
+        buffer.push('\\');
+        src = &src[1..];
+      }
 
       ch => {
         buffer.push(ch);
@@ -444,11 +434,8 @@ fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
   };
   let rest = &src[1..];
 
-  static RE_NEWLINE_ESCAPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^((\r\n|\r|\n)[ \t]*)").unwrap());
-  if let Some(cap) = RE_NEWLINE_ESCAPE.captures(rest) {
-    let rest = &rest[cap[0].len()..];
-    return Ok(((' '), rest));
+  if let Ok(result) = parse_backslash_escape_newline(src) {
+    return Ok(result);
   }
 
   let from_radix = |string: String, radix: u32| {
@@ -497,13 +484,29 @@ fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
     };
   }
 
-  // a backslash before any other character is that character.
+  // a backslash before any other character is that character
   if let Some(escaped) = rest.chars().next() {
     return Ok((escaped, &rest[escaped.len_utf8()..]));
   }
 
-  // A lone trailing backslash is a literal backslash.
+  // trailing backslash is a literal backslash
   Ok(('\\', rest))
+}
+
+fn parse_backslash_escape_newline(src: &str) -> Result<(char, &str), ParseError> {
+  let Some('\\') = src.chars().next() else {
+    return Err(ParseError::Generic("expected \\".to_string()));
+  };
+  let rest = &src[1..];
+
+  static RE_NEWLINE_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^((\r\n|\r|\n)[ \t]*)").unwrap());
+  if let Some(cap) = RE_NEWLINE_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return Ok(((' '), rest));
+  }
+
+  Err(ParseError::Generic("expected escaped newline".to_string()))
 }
 
 pub(crate) fn parse_ws_or_command_sep(src: &str) -> Result<(String, &str), ParseError> {
