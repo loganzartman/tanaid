@@ -132,14 +132,9 @@ pub(crate) fn parse_script(
       break;
     }
 
-    match parse_command(src, mode) {
-      Ok((command, rest)) => {
-        commands.push(command);
-        src = rest;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => return Err(ParseError::Generic("expected command".to_string())),
-    }
+    let (command, rest) = parse_command(src, mode)?;
+    commands.push(command);
+    src = rest;
 
     match parse_ws(src) {
       Ok((_, rest)) => src = rest,
@@ -165,6 +160,11 @@ pub(crate) fn parse_script(
 }
 
 fn parse_command(mut src: &str, mode: ParseMode) -> Result<(CommandNode, &str), ParseError> {
+  let is_command_end = |src: &str| {
+    matches!(src.chars().next(), Some('\r' | '\n' | ';') | None)
+      || (mode == ParseMode::CommandSub && matches!(src.chars().next(), Some(']')))
+  };
+
   // eat whitespace
   match parse_ws_or_command_sep(src) {
     Ok((_, rest)) => src = rest,
@@ -196,12 +196,12 @@ fn parse_command(mut src: &str, mode: ParseMode) -> Result<(CommandNode, &str), 
     };
     src = rest;
 
+    if is_command_end(src) {
+      break;
+    }
+
     // word
-    let (word, rest) = match parse_word(src, mode) {
-      Ok(result) => result,
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => break,
-    };
+    let (word, rest) = parse_word(src, mode)?;
     words.push(word);
     src = rest;
   }
@@ -271,6 +271,16 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
     }
     Some('{') => {
       let (s, rest) = parse_curly_braced_string(src)?;
+
+      if let Some(next) = rest.chars().next()
+        && !is_bare_terminator(next)
+      {
+        return Err(ParseError::Generic(format!(
+          "unexpected character after }}: {}",
+          next,
+        )));
+      }
+
       return Ok((
         WordNode {
           parts: vec![WordPart::BracedLiteral(s)],
