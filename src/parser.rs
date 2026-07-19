@@ -462,6 +462,11 @@ fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), Pars
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected $".to_string()))?;
 
+  if matches!(src.chars().next(), Some('{')) {
+    let (parsed, rest) = parse_curly_braced_string(src)?;
+    return Ok((WordPart::BracedSub(parsed), rest));
+  }
+
   let is_var_terminator = |ch: char| {
     matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '"' | '\0')
       || (mode == ParseMode::CommandSub && ch == ']')
