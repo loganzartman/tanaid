@@ -262,8 +262,10 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
   let mut parts: Vec<WordPart> = vec![];
   let mut part_buffer = String::new();
 
-  while src.len() > 0 {
-    let ch = src.chars().next().unwrap();
+  loop {
+    // synthetic null terminator at end-of-input makes it easier to handle termination
+    let ch = src.chars().next().unwrap_or('\0');
+
     match state {
       START => match ch {
         '{' => {
@@ -276,13 +278,14 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
           ));
         }
         '"' => todo!(),
+        '\0' => return Err(ParseError::Generic("expected word".to_string())),
         _ => {
           state = BARE;
         }
       },
 
       BARE => match ch {
-        ' ' | '\t' | '\n' | '\r' | ';' => {
+        ' ' | '\t' | '\n' | '\r' | ';' | '\0' => {
           // flush
           if !part_buffer.is_empty() {
             parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
@@ -321,7 +324,7 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
       },
 
       VARSUB => match ch {
-        ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' => {
+        ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '\0' => {
           // flush
           if !part_buffer.is_empty() {
             parts.push(WordPart::VarSub(take(&mut part_buffer)));
@@ -348,21 +351,7 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
     }
   }
 
-  match state {
-    START => return Err(ParseError::Generic("expected word".to_string())),
-    BARE => {
-      // flush
-      if !part_buffer.is_empty() {
-        parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
-      }
-    }
-    VARSUB => {
-      // flush
-      if !part_buffer.is_empty() {
-        parts.push(WordPart::VarSub(take(&mut part_buffer)));
-      }
-    }
-  }
+  assert!(part_buffer.is_empty());
 
   Ok((WordNode { parts }, src))
 }
