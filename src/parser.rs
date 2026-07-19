@@ -1197,7 +1197,7 @@ mod tests {
 
   #[test]
   fn parses_backslash_escape_unicode() -> Result<(), ParseError> {
-    let parsed = parse_backslash_escape("\\x10FFFF")?;
+    let parsed = parse_backslash_escape("\\u10FFFF")?;
     assert_eq!(parsed, ('\u{10FFFF}', ""));
     Ok(())
   }
