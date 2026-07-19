@@ -1095,9 +1095,9 @@ mod tests {
   }
 
   #[test]
-  fn command_sub_script_reports_missing_closing_bracket() {
+  fn command_substitution_reports_missing_closing_bracket() {
     assert!(matches!(
-      parse_script("set x 1", ParseMode::CommandSub),
+      parse_cmdsub("[set x 1"),
       Err(ParseError::Continuable(_))
     ));
   }
