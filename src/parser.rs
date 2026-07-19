@@ -904,6 +904,111 @@ mod tests {
   }
 
   #[test]
+  fn parses_backslash_escape_literal_newline() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\n")?;
+    assert_eq!(parsed, (' ', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline_with_indent() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\n  \t")?;
+    assert_eq!(parsed, (' ', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline_rn() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\r\n  \t")?;
+    assert_eq!(parsed, (' ', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline_rest() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\n  \trest")?;
+    assert_eq!(parsed, (' ', "rest"));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_octal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\041")?;
+    assert_eq!(parsed, ('!', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_octal_short() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\41")?;
+    assert_eq!(parsed, ('!', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_octal_invalid_as_literal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\9")?;
+    assert_eq!(parsed, ('9', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_hex() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\x41")?;
+    assert_eq!(parsed, ('\x41', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_hex_short() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\xa")?;
+    assert_eq!(parsed, ('\x0a', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_hex_invalid_as_literal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\xq")?;
+    assert_eq!(parsed, ('x', "q"));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unicode() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\x10FFFF")?;
+    assert_eq!(parsed, ('\u{10FFFF}', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unicode_short() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\u2764")?;
+    assert_eq!(parsed, ('\u{2764}', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unicode_invalid_as_literal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\uzzzz")?;
+    assert_eq!(parsed, ('u', "zzzz"));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_simple() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\n")?;
+    assert_eq!(parsed, ('\n', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unknown() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\z")?;
+    assert_eq!(parsed, ('z', ""));
+    Ok(())
+  }
+
+  #[test]
   fn parses_list_decodes_braced_element() -> Result<(), ParseError> {
     let parsed = parse_list("{args}")?;
     assert_eq!(parsed, (vec!["args".to_string()], ""));
