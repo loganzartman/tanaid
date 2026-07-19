@@ -49,7 +49,7 @@ pub enum WordPart {
   VarIndex(String, String),
   BracedSub(String),
   BracedIndex(String, String),
-  CommandSub(String),
+  CommandSub(ScriptNode),
 }
 
 impl WordNode {
@@ -115,6 +115,7 @@ pub fn parse(src: &str) -> Result<ScriptNode, ParseError> {
   return Ok(script_node);
 }
 
+#[derive(PartialEq, Copy, Clone)]
 pub(crate) enum ParseMode {
   Script,
   CommandSub,
@@ -127,7 +128,11 @@ pub(crate) fn parse_script(
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
-    match parse_command(src) {
+    if mode == ParseMode::CommandSub && src.starts_with(']') {
+      break;
+    }
+
+    match parse_command(src, mode) {
       Ok((command, rest)) => {
         commands.push(command);
         src = rest;
@@ -159,7 +164,7 @@ pub(crate) fn parse_script(
   Ok((ScriptNode { commands }, src))
 }
 
-fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
+fn parse_command(mut src: &str, mode: ParseMode) -> Result<(CommandNode, &str), ParseError> {
   // eat whitespace
   match parse_ws_or_command_sep(src) {
     Ok((_, rest)) => src = rest,
@@ -168,7 +173,7 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
   }
 
   // required: first word (command name)
-  let (name, rest) = match parse_word(src) {
+  let (name, rest) = match parse_word(src, mode) {
     Ok(result) => result,
     Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
     Err(err) => {
@@ -192,7 +197,7 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
     src = rest;
 
     // word
-    let (word, rest) = match parse_word(src) {
+    let (word, rest) = match parse_word(src, mode) {
       Ok(result) => result,
       Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
       Err(_) => break,
@@ -243,7 +248,17 @@ fn parse_list_element_bare(src: &str) -> Result<(String, &str), ParseError> {
   }
 }
 
-pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
+pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &str), ParseError> {
+  let is_bare_terminator = |ch: char| {
+    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '\0')
+      || (mode == ParseMode::CommandSub && ch == ']')
+  };
+
+  let is_var_terminator = |ch: char| {
+    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '\0')
+      || (mode == ParseMode::CommandSub && ch == ']')
+  };
+
   // trim leading whitespace
   match parse_ws(src) {
     Ok((_, rest)) => src = rest,
@@ -268,6 +283,9 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
 
     match state {
       START => match ch {
+        ch if is_bare_terminator(ch) => {
+          return Err(ParseError::Generic("expected word".to_string()));
+        }
         '{' => {
           let (s, rest) = parse_curly_braced_string(src)?;
           return Ok((
@@ -278,14 +296,13 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
           ));
         }
         '"' => todo!(),
-        '\0' => return Err(ParseError::Generic("expected word".to_string())),
         _ => {
           state = BARE;
         }
       },
 
       BARE => match ch {
-        ' ' | '\t' | '\n' | '\r' | ';' | '\0' => {
+        ch if is_bare_terminator(ch) => {
           // flush
           if !part_buffer.is_empty() {
             parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
@@ -308,9 +325,13 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
             parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
           }
 
-          let (s, rest) = todo!();
+          let (s, rest) = parse_script(&src[1..], ParseMode::CommandSub)?;
           parts.push(WordPart::CommandSub(s));
           src = rest;
+
+          src = src
+            .strip_prefix(']')
+            .ok_or_else(|| ParseError::Continuable("expected ]".to_string()))?;
         }
         '\\' => {
           let (escaped_ch, rest) = parse_backslash_escape(src)?;
@@ -324,7 +345,7 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
       },
 
       VARSUB => match ch {
-        ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '\0' => {
+        ch if is_var_terminator(ch) => {
           // flush
           if !part_buffer.is_empty() {
             parts.push(WordPart::VarSub(take(&mut part_buffer)));
@@ -535,6 +556,17 @@ pub(crate) fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
 mod tests {
   use super::*;
 
+  fn bare_script(words: &[&str]) -> ScriptNode {
+    ScriptNode {
+      commands: vec![CommandNode {
+        words: words
+          .iter()
+          .map(|word| WordNode::only(WordPart::BareLiteral((*word).to_string())))
+          .collect(),
+      }],
+    }
+  }
+
   #[test]
   fn parse_char_escape_newline() -> Result<(), ParseError> {
     let (char, _rest) = parse_backslash_escape("\\n")?;
@@ -544,7 +576,7 @@ mod tests {
 
   #[test]
   fn parses_word_with_two_varsubs() -> Result<(), ParseError> {
-    let parsed = parse_word("$x$y")?;
+    let parsed = parse_word("$x$y", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -562,7 +594,7 @@ mod tests {
 
   #[test]
   fn parses_word_braced_sub() -> Result<(), ParseError> {
-    let parsed = parse_word("${hello}")?;
+    let parsed = parse_word("${hello}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -577,17 +609,17 @@ mod tests {
 
   #[test]
   fn parses_word_with_many_parts() -> Result<(), ParseError> {
-    let parsed = parse_word("$x[expr 1 + 2]$y[a][b]{c}")?;
+    let parsed = parse_word("$x[expr 1 + 2]$y[a][b]{c}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
         WordNode {
           parts: vec![
             WordPart::VarSub("x".to_string()),
-            WordPart::CommandSub("expr 1 + 2".to_string()),
+            WordPart::CommandSub(bare_script(&["expr", "1", "+", "2"])),
             WordPart::VarSub("y".to_string()),
-            WordPart::CommandSub("a".to_string()),
-            WordPart::CommandSub("b".to_string()),
+            WordPart::CommandSub(bare_script(&["a"])),
+            WordPart::CommandSub(bare_script(&["b"])),
             WordPart::BareLiteral("{c}".to_string()),
           ]
         },
@@ -599,7 +631,7 @@ mod tests {
 
   #[test]
   fn parses_quoted_word_with_var_sub() -> Result<(), ParseError> {
-    let parsed = parse_word(r#""hello $name""#)?;
+    let parsed = parse_word(r#""hello $name""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -617,14 +649,14 @@ mod tests {
 
   #[test]
   fn parses_quoted_word_with_command_sub() -> Result<(), ParseError> {
-    let parsed = parse_word(r#""sum [expr 1 + 2]""#)?;
+    let parsed = parse_word(r#""sum [expr 1 + 2]""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
         WordNode {
           parts: vec![WordPart::Quoted(vec![
             WordPart::BareLiteral("sum ".to_string()),
-            WordPart::CommandSub("expr 1 + 2".to_string())
+            WordPart::CommandSub(bare_script(&["expr", "1", "+", "2"]))
           ]),]
         },
         ""
@@ -635,7 +667,7 @@ mod tests {
 
   #[test]
   fn parses_quoted_word_with_backslash_sub() -> Result<(), ParseError> {
-    let parsed = parse_word(r#""a\nb\"c""#)?;
+    let parsed = parse_word(r#""a\nb\"c""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -652,7 +684,7 @@ mod tests {
 
   #[test]
   fn parses_backslash_escapes_in_bare_word() -> Result<(), ParseError> {
-    let parsed = parse_word(r#"a\ b\;\$x\[cmd\]\{c\}\"q"#)?;
+    let parsed = parse_word(r#"a\ b\;\$x\[cmd\]\{c\}\"q"#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -665,7 +697,7 @@ mod tests {
 
   #[test]
   fn parses_backslash_sequences_in_bare_word() -> Result<(), ParseError> {
-    let parsed = parse_word(r"line\ncol\t\x41\101\q")?;
+    let parsed = parse_word(r"line\ncol\t\x41\101\q", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -678,7 +710,7 @@ mod tests {
 
   #[test]
   fn trailing_backslash_in_bare_word_is_literal() -> Result<(), ParseError> {
-    let parsed = parse_word(r"hello\")?;
+    let parsed = parse_word(r"hello\", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -691,7 +723,7 @@ mod tests {
 
   #[test]
   fn braces_and_quotes_are_literal_inside_bare_word() -> Result<(), ParseError> {
-    let parsed = parse_word(r#"pre{braced}"quoted""#)?;
+    let parsed = parse_word(r#"pre{braced}"quoted""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -704,12 +736,12 @@ mod tests {
 
   #[test]
   fn braced_word_rejects_trailing_characters() {
-    assert!(parse_word("{hello}world").is_err());
+    assert!(parse_word("{hello}world", ParseMode::Script).is_err());
   }
 
   #[test]
   fn braced_word_allows_following_separator() -> Result<(), ParseError> {
-    let parsed = parse_word("{hello} world")?;
+    let parsed = parse_word("{hello} world", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -737,12 +769,12 @@ mod tests {
 
   #[test]
   fn quoted_word_rejects_trailing_characters() {
-    assert!(parse_word(r#""hello"world"#).is_err());
+    assert!(parse_word(r#""hello"world"#, ParseMode::Script).is_err());
   }
 
   #[test]
   fn backslash_newline_continues_bare_word() -> Result<(), ParseError> {
-    let parsed = parse_word("hello\\\n \t  world")?;
+    let parsed = parse_word("hello\\\n \t  world", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -755,7 +787,7 @@ mod tests {
 
   #[test]
   fn backslash_newline_continues_quoted_word() -> Result<(), ParseError> {
-    let parsed = parse_word("\"hello\\\n \t  world\"")?;
+    let parsed = parse_word("\"hello\\\n \t  world\"", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -770,7 +802,7 @@ mod tests {
 
   #[test]
   fn backslash_newline_is_substituted_in_braced_word() -> Result<(), ParseError> {
-    let parsed = parse_word("{hello\\\n \t  world}")?;
+    let parsed = parse_word("{hello\\\n \t  world}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -783,7 +815,7 @@ mod tests {
 
   #[test]
   fn braced_backslash_newline_does_not_consume_next_newline() -> Result<(), ParseError> {
-    let parsed = parse_word("{hello\\\n\nworld}")?;
+    let parsed = parse_word("{hello\\\n\nworld}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -796,7 +828,7 @@ mod tests {
 
   #[test]
   fn braced_word_preserves_other_backslashes() -> Result<(), ParseError> {
-    let parsed = parse_word(r"{a\n\$x}")?;
+    let parsed = parse_word(r"{a\n\$x}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -809,7 +841,7 @@ mod tests {
 
   #[test]
   fn escaped_brace_does_not_close_braced_word() -> Result<(), ParseError> {
-    let parsed = parse_word(r"{a\}b}")?;
+    let parsed = parse_word(r"{a\}b}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -822,7 +854,7 @@ mod tests {
 
   #[test]
   fn escaped_open_brace_does_not_nest_braced_word() -> Result<(), ParseError> {
-    let parsed = parse_word(r"{a\{b}")?;
+    let parsed = parse_word(r"{a\{b}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -835,11 +867,11 @@ mod tests {
 
   #[test]
   fn escaped_bracket_does_not_close_command_substitution() -> Result<(), ParseError> {
-    let parsed = parse_word(r"[list \]]")?;
+    let parsed = parse_word(r"[list \]]", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
-        WordNode::only(WordPart::CommandSub(r"list \]".to_string())),
+        WordNode::only(WordPart::CommandSub(bare_script(&["list", "]"]))),
         ""
       )
     );
@@ -848,11 +880,11 @@ mod tests {
 
   #[test]
   fn escaped_open_bracket_does_not_nest_command_substitution() -> Result<(), ParseError> {
-    let parsed = parse_word(r"[list \[]")?;
+    let parsed = parse_word(r"[list \[]", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
-        WordNode::only(WordPart::CommandSub(r"list \[".to_string())),
+        WordNode::only(WordPart::CommandSub(bare_script(&["list", "["]))),
         ""
       )
     );
@@ -861,11 +893,19 @@ mod tests {
 
   #[test]
   fn command_substitution_ignores_close_bracket_in_braced_word() -> Result<(), ParseError> {
-    let parsed = parse_word(r"[set x {]}]")?;
+    let parsed = parse_word(r"[set x {]}]", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
-        WordNode::only(WordPart::CommandSub("set x {]}".to_string())),
+        WordNode::only(WordPart::CommandSub(ScriptNode {
+          commands: vec![CommandNode {
+            words: vec![
+              WordNode::only(WordPart::BareLiteral("set".to_string())),
+              WordNode::only(WordPart::BareLiteral("x".to_string())),
+              WordNode::only(WordPart::BracedLiteral("]".to_string())),
+            ],
+          }],
+        })),
         ""
       )
     );
@@ -873,8 +913,83 @@ mod tests {
   }
 
   #[test]
+  fn command_sub_script_stops_before_closing_bracket() -> Result<(), ParseError> {
+    let (parsed, rest) = parse_script("set x 1; incr x]suffix", ParseMode::CommandSub)?;
+
+    assert_eq!(parsed.commands.len(), 2);
+    assert_eq!(rest, "]suffix");
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_script_stops_after_trailing_newline() -> Result<(), ParseError> {
+    let (parsed, rest) = parse_script("expr 1 + 1\n]suffix", ParseMode::CommandSub)?;
+
+    assert_eq!(parsed, bare_script(&["expr", "1", "+", "1"]));
+    assert_eq!(rest, "]suffix");
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_script_can_be_empty() -> Result<(), ParseError> {
+    let (parsed, rest) = parse_script("]suffix", ParseMode::CommandSub)?;
+
+    assert!(parsed.commands.is_empty());
+    assert_eq!(rest, "]suffix");
+    Ok(())
+  }
+
+  #[test]
+  fn parses_empty_command_substitution() -> Result<(), ParseError> {
+    let parsed = parse_word("[]", ParseMode::Script)?;
+
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(ScriptNode { commands: vec![] })),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn command_substitution_matches_nested_closing_brackets() -> Result<(), ParseError> {
+    let parsed = parse_word("[list [expr 1 + 2]]suffix", ParseMode::Script)?;
+
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::CommandSub(ScriptNode {
+              commands: vec![CommandNode {
+                words: vec![
+                  WordNode::only(WordPart::BareLiteral("list".to_string())),
+                  WordNode::only(WordPart::CommandSub(bare_script(&["expr", "1", "+", "2",]))),
+                ],
+              }],
+            }),
+            WordPart::BareLiteral("suffix".to_string()),
+          ],
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_script_reports_missing_closing_bracket() {
+    assert!(matches!(
+      parse_script("set x 1", ParseMode::CommandSub),
+      Err(ParseError::Continuable(_))
+    ));
+  }
+
+  #[test]
   fn lone_dollar_is_a_word() -> Result<(), ParseError> {
-    let parsed = parse_word("$")?;
+    let parsed = parse_word("$", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (WordNode::only(WordPart::BareLiteral("$".to_string())), "")
@@ -884,7 +999,7 @@ mod tests {
 
   #[test]
   fn parses_word_includes_parentheses() -> Result<(), ParseError> {
-    let parsed = parse_word("hello(a)")?;
+    let parsed = parse_word("hello(a)", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -1090,7 +1205,16 @@ mod tests {
             WordNode::only(WordPart::BareLiteral("expr".to_string())),
             WordNode::only(WordPart::BareLiteral("2".to_string())),
             WordNode::only(WordPart::BareLiteral("+".to_string())),
-            WordNode::only(WordPart::CommandSub("expr 3 + [expr 4 + 5]".to_string())),
+            WordNode::only(WordPart::CommandSub(ScriptNode {
+              commands: vec![CommandNode {
+                words: vec![
+                  WordNode::only(WordPart::BareLiteral("expr".to_string())),
+                  WordNode::only(WordPart::BareLiteral("3".to_string())),
+                  WordNode::only(WordPart::BareLiteral("+".to_string())),
+                  WordNode::only(WordPart::CommandSub(bare_script(&["expr", "4", "+", "5",]))),
+                ],
+              }],
+            })),
           ]
         },]
       }
@@ -1147,7 +1271,7 @@ mod tests {
 
   #[test]
   fn parses_cmd_with_leading_cmd_sep() -> Result<(), ParseError> {
-    let (parsed, _) = parse_command("\n;; puts hey")?;
+    let (parsed, _) = parse_command("\n;; puts hey", ParseMode::Script)?;
     assert_eq!(
       parsed,
       CommandNode {

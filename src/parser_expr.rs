@@ -124,7 +124,7 @@ pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
     Err(_) => {}
   }
 
-  let (word, rest) = parser::parse_word(src)?;
+  let (word, rest) = parser::parse_word(src, parser::ParseMode::Script)?;
   Ok((ExprNode::Word(word), rest))
 }
 
