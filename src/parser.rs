@@ -254,11 +254,6 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
       || (mode == ParseMode::CommandSub && ch == ']')
   };
 
-  let is_var_terminator = |ch: char| {
-    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '\0')
-      || (mode == ParseMode::CommandSub && ch == ']')
-  };
-
   // trim leading whitespace
   match parse_ws(src) {
     Ok((_, rest)) => src = rest,
@@ -266,110 +261,74 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
     Err(_) => {}
   }
 
-  enum State {
-    START,
-    BARE,
-    VARSUB,
-  }
-  use State::*;
-  let mut state = START;
-
   let mut parts: Vec<WordPart> = vec![];
   let mut part_buffer = String::new();
+
+  let ch_first = src.chars().next();
+  match ch_first {
+    Some(ch) if is_bare_terminator(ch) => {
+      return Err(ParseError::Generic("expected word".to_string()));
+    }
+    Some('{') => {
+      let (s, rest) = parse_curly_braced_string(src)?;
+      return Ok((
+        WordNode {
+          parts: vec![WordPart::BracedLiteral(s)],
+        },
+        rest,
+      ));
+    }
+    _ => {}
+  }
 
   loop {
     // synthetic null terminator at end-of-input makes it easier to handle termination
     let ch = src.chars().next().unwrap_or('\0');
 
-    match state {
-      START => match ch {
-        ch if is_bare_terminator(ch) => {
-          return Err(ParseError::Generic("expected word".to_string()));
+    match ch {
+      ch if is_bare_terminator(ch) => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
-        '{' => {
-          let (s, rest) = parse_curly_braced_string(src)?;
-          return Ok((
-            WordNode {
-              parts: vec![WordPart::BracedLiteral(s)],
-            },
-            rest,
-          ));
-        }
-        '"' => todo!(),
-        _ => {
-          state = BARE;
-        }
-      },
 
-      BARE => match ch {
-        ch if is_bare_terminator(ch) => {
-          // flush
-          if !part_buffer.is_empty() {
-            parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
-          }
+        break;
+      }
+      '$' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
 
-          break;
+        src = &src[1..];
+        let (parsed, rest) = parse_varsub(src, mode)?;
+        parts.push(parsed);
+        src = rest;
+      }
+      '[' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
-        '$' => {
-          // flush
-          if !part_buffer.is_empty() {
-            parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
-          }
 
-          state = VARSUB;
-          src = &src[1..];
-        }
-        '[' => {
-          // flush
-          if !part_buffer.is_empty() {
-            parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
-          }
+        let (s, rest) = parse_script(&src[1..], ParseMode::CommandSub)?;
+        parts.push(WordPart::CommandSub(s));
+        src = rest;
 
-          let (s, rest) = parse_script(&src[1..], ParseMode::CommandSub)?;
-          parts.push(WordPart::CommandSub(s));
-          src = rest;
-
-          src = src
-            .strip_prefix(']')
-            .ok_or_else(|| ParseError::Continuable("expected ]".to_string()))?;
-        }
-        '\\' => {
-          let (escaped_ch, rest) = parse_backslash_escape(src)?;
-          part_buffer.push(escaped_ch);
-          src = rest;
-        }
-        _ => {
-          part_buffer.push(ch);
-          src = &src[ch.len_utf8()..];
-        }
-      },
-
-      VARSUB => match ch {
-        ch if is_var_terminator(ch) => {
-          // flush
-          if !part_buffer.is_empty() {
-            parts.push(WordPart::VarSub(take(&mut part_buffer)));
-          } else {
-            parts.push(WordPart::BareLiteral("$".to_string()));
-          }
-
-          state = BARE;
-        }
-        '\\' => {
-          if let Some('$') = src.chars().nth(1) {
-            part_buffer.push_str(r"\$");
-            src = &src[2..];
-          } else {
-            part_buffer.push('\\');
-            src = &src[1..];
-          }
-        }
-        _ => {
-          part_buffer.push(ch);
-          src = &src[ch.len_utf8()..];
-        }
-      },
-    }
+        src = src
+          .strip_prefix(']')
+          .ok_or_else(|| ParseError::Continuable("expected ]".to_string()))?;
+      }
+      '\\' => {
+        let (escaped_ch, rest) = parse_backslash_escape(src)?;
+        part_buffer.push(escaped_ch);
+        src = rest;
+      }
+      _ => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    };
   }
 
   assert!(part_buffer.is_empty());
@@ -436,6 +395,42 @@ fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError
   }
 
   Ok((buffer, src))
+}
+
+fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+  let is_var_terminator = |ch: char| {
+    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '\0')
+      || (mode == ParseMode::CommandSub && ch == ']')
+  };
+
+  let mut part_buffer = String::new();
+
+  loop {
+    let ch = src.chars().next().unwrap_or('\0');
+    match ch {
+      ch if is_var_terminator(ch) => {
+        // flush
+        if !part_buffer.is_empty() {
+          return Ok((WordPart::VarSub(take(&mut part_buffer)), src));
+        } else {
+          return Ok((WordPart::BareLiteral("$".to_string()), src));
+        }
+      }
+      '\\' => {
+        if let Some('$') = src.chars().nth(1) {
+          part_buffer.push_str(r"\$");
+          src = &src[2..];
+        } else {
+          part_buffer.push('\\');
+          src = &src[1..];
+        }
+      }
+      _ => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
 }
 
 fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
