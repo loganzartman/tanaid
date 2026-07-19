@@ -111,11 +111,19 @@ impl Display for WordPart {
 }
 
 pub fn parse(src: &str) -> Result<ScriptNode, ParseError> {
-  let (script_node, _) = parse_script(src)?;
+  let (script_node, _) = parse_script(src, ParseMode::Script)?;
   return Ok(script_node);
 }
 
-pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
+pub(crate) enum ParseMode {
+  Script,
+  CommandSub,
+}
+
+pub(crate) fn parse_script(
+  mut src: &str,
+  mode: ParseMode,
+) -> Result<(ScriptNode, &str), ParseError> {
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
@@ -317,6 +325,8 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
           // flush
           if !part_buffer.is_empty() {
             parts.push(WordPart::VarSub(take(&mut part_buffer)));
+          } else {
+            parts.push(WordPart::BareLiteral("$".to_string()));
           }
 
           state = BARE;
@@ -429,22 +439,17 @@ fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError
 }
 
 fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
-  let ch = src
-    .chars()
-    .next()
-    .ok_or_else(|| ParseError::Generic("expected character".to_string()))?;
+  let Some('\\') = src.chars().next() else {
+    return Err(ParseError::Generic("expected \\".to_string()));
+  };
+  let rest = &src[1..];
 
-  let rest = &src[ch.len_utf8()..];
-  if ch != '\\' {
-    return Ok((ch, rest));
+  static RE_NEWLINE_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^((\r\n|\r|\n)[ \t]*)").unwrap());
+  if let Some(cap) = RE_NEWLINE_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return Ok(((' '), rest));
   }
-
-  static RE_OCTAL_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-7]{1,3})").unwrap());
-  static RE_HEX_ESCAPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^x([0-9a-fA-F]{1,2})").unwrap());
-  static RE_UNICODE_ESCAPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^u([0-9a-fA-F]{1,6})").unwrap());
-  static RE_SIMPLE_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([abfnrtv])").unwrap());
 
   let from_radix = |string: String, radix: u32| {
     let parse_err =
@@ -454,21 +459,27 @@ fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
     Ok(val)
   };
 
+  static RE_OCTAL_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-7]{1,3})").unwrap());
   if let Some(cap) = RE_OCTAL_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return Ok((from_radix(cap[1].to_string(), 8)?, rest));
   }
 
+  static RE_HEX_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^x([0-9a-fA-F]{1,2})").unwrap());
   if let Some(cap) = RE_HEX_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return Ok((from_radix(cap[1].to_string(), 16)?, rest));
   }
 
+  static RE_UNICODE_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^u([0-9a-fA-F]{1,6})").unwrap());
   if let Some(cap) = RE_UNICODE_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return Ok((from_radix(cap[1].to_string(), 16)?, rest));
   }
 
+  static RE_SIMPLE_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([abfnrtv])").unwrap());
   if let Some(cap) = RE_SIMPLE_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return match cap[1].to_string().as_str() {
@@ -870,8 +881,13 @@ mod tests {
   }
 
   #[test]
-  fn lone_dollar_is_not_a_word() {
-    assert!(parse_word("$").is_err());
+  fn lone_dollar_is_a_word() -> Result<(), ParseError> {
+    let parsed = parse_word("$")?;
+    assert_eq!(
+      parsed,
+      (WordNode::only(WordPart::BareLiteral("$".to_string())), "")
+    );
+    Ok(())
   }
 
   #[test]
