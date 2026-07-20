@@ -215,36 +215,74 @@ pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
 
   while !src.is_empty() {
     // required whitespace separator
-    match parse_ws(src) {
-      Ok((_, rest)) => src = rest,
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) if !first => break,
-      Err(_) => {}
+    let mut found_whitespace = false;
+    while let Some(ch @ (' ' | '\t' | '\r' | '\n')) = src.chars().next() {
+      found_whitespace = true;
+      src = &src[ch.len_utf8()..];
+    }
+    if !first && !found_whitespace {
+      break;
     }
     first = false;
 
-    match parse_list_element_bare(src) {
-      Ok((str, rest)) => {
-        items.push(str);
-        src = rest;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => break,
-    }
+    let (parsed, rest) = match src.chars().next() {
+      Some('{') => parse_curly_braced_string(src)?,
+      Some('"') => parse_list_element_quoted(src)?,
+      Some(_) => parse_list_element_bare(src)?,
+      None => break,
+    };
+
+    items.push(parsed);
+    src = rest;
   }
 
   Ok((items, src))
 }
 
-fn parse_list_element_bare(src: &str) -> Result<(String, &str), ParseError> {
-  static RE_BARE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^{}"\s]+"#).unwrap());
+fn parse_list_element_quoted(mut src: &str) -> Result<(String, &str), ParseError> {
+  src = src
+    .strip_prefix('"')
+    .ok_or_else(|| ParseError::Generic("expected \"".to_string()))?;
 
-  if let Some(captures) = RE_BARE.captures(src) {
-    Ok((captures[0].to_string(), &src[captures[0].len()..]))
-  } else {
-    Err(ParseError::Generic(
-      "expected bare list element".to_string(),
-    ))
+  let mut buffer = String::new();
+
+  loop {
+    match src.chars().next() {
+      None => return Err(ParseError::Continuable("expected \"".to_string())),
+      Some('"') => {
+        return Ok((buffer, &src[1..]));
+      }
+      Some('\\') => {
+        let (char, rest) = parse_backslash_escape(src)?;
+        buffer.push(char);
+        src = rest;
+      }
+      Some(ch) => {
+        buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
+}
+
+fn parse_list_element_bare(mut src: &str) -> Result<(String, &str), ParseError> {
+  let mut buffer = String::new();
+
+  loop {
+    match src.chars().next() {
+      None | Some(' ' | '\t' | '\r' | '\n') => {
+        return Ok((buffer, src));
+      }
+      Some('\\') => {
+        let (char, rest) = parse_backslash_escape(src)?;
+        buffer.push(char);
+        src = rest;
+      }
+      Some(ch) => {
+        buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
   }
 }
 
@@ -1241,6 +1279,47 @@ mod tests {
   fn parses_list_leaves_substitution_syntax_literal() -> Result<(), ParseError> {
     let parsed = parse_list("$x [foo]")?;
     assert_eq!(parsed, (vec!["$x".to_string(), "[foo]".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_quoted_element() -> Result<(), ParseError> {
+    let parsed = parse_list(r#""hello world" tail"#)?;
+    assert_eq!(
+      parsed,
+      (vec!["hello world".to_string(), "tail".to_string()], "")
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_backslash_sequences() -> Result<(), ParseError> {
+    let parsed = parse_list(r"a\ b line\n")?;
+    assert_eq!(parsed, (vec!["a b".to_string(), "line\n".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_with_newline_separator() -> Result<(), ParseError> {
+    let parsed = parse_list("first\nsecond")?;
+    assert_eq!(
+      parsed,
+      (vec!["first".to_string(), "second".to_string()], "")
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_empty_braced_and_quoted_elements() -> Result<(), ParseError> {
+    let parsed = parse_list(r#"{} """#)?;
+    assert_eq!(parsed, (vec!["".to_string(), "".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_bare_element_with_embedded_braces_and_quotes() -> Result<(), ParseError> {
+    let parsed = parse_list(r#"a"b c{d"#)?;
+    assert_eq!(parsed, (vec![r#"a"b"#.to_string(), "c{d".to_string()], ""));
     Ok(())
   }
 
