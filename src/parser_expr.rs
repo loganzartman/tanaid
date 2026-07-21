@@ -152,7 +152,7 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
 
-        let (parsed, rest) = parser::parse_varsub(src, ParseMode::Script)?;
+        let (parsed, rest) = parser::parse_varsub(src)?;
         parts.push(parsed);
         src = rest;
       }

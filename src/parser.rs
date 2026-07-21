@@ -367,7 +367,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
 
-        let (parsed, rest) = parse_varsub(src, mode)?;
+        let (parsed, rest) = parse_varsub(src)?;
         parts.push(parsed);
         src = rest;
       }
@@ -485,7 +485,7 @@ pub(crate) fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, 
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
 
-        let (part, rest) = parse_varsub(src, mode)?;
+        let (part, rest) = parse_varsub(src)?;
         parts.push(part);
         src = rest;
       }
@@ -514,7 +514,7 @@ pub(crate) fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, 
   Ok((WordPart::Quoted(parts), src))
 }
 
-pub(crate) fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+pub(crate) fn parse_varsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
   src = src
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected $".to_string()))?;
@@ -524,25 +524,17 @@ pub(crate) fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, 
     return Ok((WordPart::BracedSub(parsed), rest));
   }
 
-  let is_var_terminator = |ch: char| {
-    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '$' | '[' | '"' | '\0')
-      || (mode == ParseMode::CommandSub && ch == ']')
-  };
-
   let mut part_buffer = String::new();
+  static VAR_CHAR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9_]|:{2,})").unwrap());
 
   loop {
-    let ch = src.chars().next().unwrap_or('\0');
-    match ch {
-      ch if is_var_terminator(ch) => {
-        // flush
-        if !part_buffer.is_empty() {
-          return Ok((WordPart::VarSub(take(&mut part_buffer)), src));
-        } else {
-          return Ok((WordPart::BareLiteral("$".to_string()), src));
-        }
+    match (src.chars().next(), VAR_CHAR.find(src)) {
+      (Some(_), Some(m)) => {
+        part_buffer.push_str(m.as_str());
+        src = &src[m.end()..];
       }
-      '\\' => {
+      (Some('\\'), _) => {
         if let Some('$') = src.chars().nth(1) {
           part_buffer.push_str(r"\$");
           src = &src[2..];
@@ -551,9 +543,13 @@ pub(crate) fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, 
           src = &src[1..];
         }
       }
-      ch => {
-        part_buffer.push(ch);
-        src = &src[ch.len_utf8()..];
+      (None | Some(_), _) => {
+        // flush
+        if !part_buffer.is_empty() {
+          return Ok((WordPart::VarSub(take(&mut part_buffer)), src));
+        } else {
+          return Ok((WordPart::BareLiteral("$".to_string()), src));
+        }
       }
     }
   }
