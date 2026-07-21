@@ -1,8 +1,9 @@
 use regex::Regex;
 
-use crate::parser;
+use crate::parser::{self, ParseMode, WordPart};
 use crate::parser::{ParseError, WordNode};
 
+use std::mem::take;
 use std::sync::LazyLock;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -124,8 +125,64 @@ pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
     Err(_) => {}
   }
 
-  let (word, rest) = parser::parse_word(src, parser::ParseMode::Script)?;
-  Ok((ExprNode::Word(word), rest))
+  let (word, rest) = parse_expr_word(src)?;
+  Ok((word, rest))
+}
+
+fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
+  let mut part_buffer = String::new();
+  let mut parts: Vec<WordPart> = vec![];
+
+  loop {
+    match src.chars().next() {
+      None
+      | Some(' ' | '\t' | '\r' | '\n')
+      | Some(
+        '(' | ')' | '+' | '-' | '*' | '/' | '%' | '<' | '>' | '=' | '!' | '&' | '|' | '?' | ':',
+      ) => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        return Ok((ExprNode::Word(WordNode { parts }), src));
+      }
+
+      Some('$') => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (parsed, rest) = parser::parse_varsub(src, ParseMode::Script)?;
+        parts.push(parsed);
+        src = rest;
+      }
+
+      Some('[') => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (parsed, rest) = parser::parse_cmdsub(src)?;
+        parts.push(parsed);
+        src = rest;
+      }
+
+      Some('"') => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (parsed, rest) = parser::parse_quoted(src, ParseMode::Script)?;
+        parts.push(parsed);
+        src = rest;
+      }
+
+      Some(ch) => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
 }
 
 pub fn parse_expr_group(src: &str) -> Result<(ExprNode, &str), ParseError> {

@@ -226,7 +226,7 @@ pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
     first = false;
 
     let (parsed, rest) = match src.chars().next() {
-      Some('{') => parse_curly_braced_string(src)?,
+      Some('{') => parse_braced_string(src)?,
       Some('"') => parse_list_element_quoted(src)?,
       Some(_) => parse_list_element_bare(src)?,
       None => break,
@@ -308,7 +308,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
       return Err(ParseError::Generic("expected word".to_string()));
     }
     Some('{') => {
-      let (s, rest) = parse_curly_braced_string(src)?;
+      let (s, rest) = parse_braced_string(src)?;
 
       if let Some(next) = rest.chars().next()
         && !is_bare_terminator(next)
@@ -398,7 +398,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
   Ok((WordNode { parts }, src))
 }
 
-fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError> {
+fn parse_braced_string(mut src: &str) -> Result<(String, &str), ParseError> {
   match src.chars().next() {
     Some('{') => {
       src = &src[1..];
@@ -459,7 +459,7 @@ fn parse_curly_braced_string(mut src: &str) -> Result<(String, &str), ParseError
   Ok((buffer, src))
 }
 
-fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+pub(crate) fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
   src = src
     .strip_prefix('"')
     .ok_or_else(|| ParseError::Generic("expected \"".to_string()))?;
@@ -514,13 +514,13 @@ fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), Pars
   Ok((WordPart::Quoted(parts), src))
 }
 
-fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+pub(crate) fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
   src = src
     .strip_prefix('$')
     .ok_or_else(|| ParseError::Generic("expected $".to_string()))?;
 
   if matches!(src.chars().next(), Some('{')) {
-    let (parsed, rest) = parse_curly_braced_string(src)?;
+    let (parsed, rest) = parse_braced_string(src)?;
     return Ok((WordPart::BracedSub(parsed), rest));
   }
 
@@ -559,7 +559,7 @@ fn parse_varsub(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), Pars
   }
 }
 
-fn parse_cmdsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
+pub(crate) fn parse_cmdsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
   src = src
     .strip_prefix('[')
     .ok_or_else(|| ParseError::Generic("expected [".to_string()))?;
@@ -574,7 +574,7 @@ fn parse_cmdsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
   Ok((WordPart::CommandSub(s), src))
 }
 
-fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
+pub(crate) fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
   let Some('\\') = src.chars().next() else {
     return Err(ParseError::Generic("expected \\".to_string()));
   };
@@ -720,6 +720,25 @@ mod tests {
           parts: vec![
             WordPart::VarSub("x".to_string()),
             WordPart::VarSub("y".to_string())
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn punctuation_terminates_unbraced_variable_name() -> Result<(), ParseError> {
+    let parsed = parse_word("$x+$x", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("x".to_string()),
+            WordPart::BareLiteral("+".to_string()),
+            WordPart::VarSub("x".to_string()),
           ]
         },
         ""
@@ -907,7 +926,7 @@ mod tests {
 
   #[test]
   fn curly_braced_string_preserves_nesting_and_returns_remainder() -> Result<(), ParseError> {
-    let parsed = parse_curly_braced_string("{a {nested} value}rest")?;
+    let parsed = parse_braced_string("{a {nested} value}rest")?;
     assert_eq!(parsed, ("a {nested} value".to_string(), "rest"));
     Ok(())
   }
@@ -915,7 +934,7 @@ mod tests {
   #[test]
   fn curly_braced_string_reports_missing_close() {
     assert!(matches!(
-      parse_curly_braced_string("{unclosed"),
+      parse_braced_string("{unclosed"),
       Err(ParseError::Continuable(_))
     ));
   }
