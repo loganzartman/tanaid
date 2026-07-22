@@ -165,6 +165,31 @@ impl Value {
     Ok(dict.clone())
   }
 
+  pub fn repr_list(&mut self) -> Result<Rc<List>, EvalError> {
+    if let Repr::List(list) = &self.repr {
+      return Ok(Rc::clone(list));
+    }
+
+    let str = self.repr_str()?;
+    let (words, "") = parser::parse_list(str)
+      .map_err(|e| EvalError::Generic(format!("failed to parse as dict: {}", e)))?
+    else {
+      return Err(EvalError::Generic(
+        "failed to parse dict: extra input".to_string(),
+      ));
+    };
+
+    let mut list = List::new();
+    for word in words {
+      list.push(Value::new(word));
+    }
+    self.repr = Repr::List(list.into());
+    let Repr::List(list) = &self.repr else {
+      unreachable!()
+    };
+    Ok(list.clone())
+  }
+
   pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
     if let (Ok(a), Ok(b)) = (self.repr_int(), other.repr_int()) {
       return Ok(Some(a.cmp(&b)));

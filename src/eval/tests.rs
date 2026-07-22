@@ -421,3 +421,83 @@ fn eval_list_nested() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(result.repr_str()?, "{a b} c");
   Ok(())
 }
+
+#[test]
+fn eval_llength_empty() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("llength [list]")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 0);
+  Ok(())
+}
+
+#[test]
+fn eval_llength_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("llength [list a b c]")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 3);
+  Ok(())
+}
+
+#[test]
+fn eval_llength_from_string() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("llength {a b {c d}}")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 3);
+  Ok(())
+}
+
+#[test]
+fn eval_llength_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("llength")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex [list a b c] 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "b");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_braced_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex {a {hello world} c} 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "hello world");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_nested_list() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex [list [list a b] c] 0")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_negative() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lindex [list a b] -1")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::IndexOutOfBounds(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_out_of_bounds() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lindex [list a b] 2")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::IndexOutOfBounds(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lindex [list a]")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
