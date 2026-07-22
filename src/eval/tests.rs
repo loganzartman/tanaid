@@ -552,3 +552,73 @@ fn eval_lreverse_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
   assert_matches!(result, Err(EvalError::ArgumentError(_)));
   Ok(())
 }
+
+#[test]
+fn eval_lappend_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a b]; lappend xs c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_multiple_values() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a]; lappend xs b c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_creates_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lappend xs a b; set xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_mutates_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set xs [list a]; lappend xs b; set xs")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_no_values() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a b]; lappend xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_braced_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lappend xs {hello world}")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{hello world}");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_evals_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set x 1; lappend xs $x [expr 1 + 2]")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "1 3");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lappend")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}

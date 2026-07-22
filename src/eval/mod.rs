@@ -9,6 +9,7 @@ mod cmd_expr;
 mod cmd_global;
 mod cmd_if;
 mod cmd_info;
+mod cmd_lappend;
 mod cmd_lindex;
 mod cmd_list;
 mod cmd_llength;
