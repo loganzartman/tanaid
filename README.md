@@ -30,7 +30,7 @@ implements a (probably broken) subset of tcl:
   - `lindex listVal index`
   - `list ?arg arg ...?`
   - `llength listVal`
-  - `lreverse listVar`
+  - `lreverse listVal`
   - `proc name args body`
   - `puts string`
   - `return ?result?`

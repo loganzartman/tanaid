@@ -505,7 +505,7 @@ fn eval_lindex_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn eval_lreverse_simple() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let mut result = eval(&parser::parse("set xs [list a b c]; lreverse xs")?, &mut ctx)?;
+  let mut result = eval(&parser::parse("lreverse [list a b c]")?, &mut ctx)?;
   assert_eq!(result.repr_str()?, "c b a");
   Ok(())
 }
@@ -513,7 +513,7 @@ fn eval_lreverse_simple() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn eval_lreverse_empty() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let mut result = eval(&parser::parse("set xs [list]; lreverse xs")?, &mut ctx)?;
+  let mut result = eval(&parser::parse("lreverse [list]")?, &mut ctx)?;
   assert_eq!(result.repr_str()?, "");
   Ok(())
 }
@@ -521,7 +521,7 @@ fn eval_lreverse_empty() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn eval_lreverse_nested() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let mut result = eval(&parser::parse("set xs [list [list a b] c]; lreverse xs")?, &mut ctx)?;
+  let mut result = eval(&parser::parse("lreverse [list [list a b] c]")?, &mut ctx)?;
   assert_eq!(result.repr_str()?, "c {a b}");
   Ok(())
 }
@@ -530,7 +530,7 @@ fn eval_lreverse_nested() -> Result<(), Box<dyn std::error::Error>> {
 fn eval_lreverse_does_not_mutate_variable() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let mut result = eval(
-    &parser::parse("set xs [list a b c]; lreverse xs; set xs")?,
+    &parser::parse("set xs [list a b c]; lreverse $xs; set xs")?,
     &mut ctx,
   )?;
   assert_eq!(result.repr_str()?, "a b c");
@@ -540,7 +540,7 @@ fn eval_lreverse_does_not_mutate_variable() -> Result<(), Box<dyn std::error::Er
 #[test]
 fn eval_lreverse_undefined_variable() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("lreverse xs")?, &mut ctx);
+  let result = eval(&parser::parse("lreverse $xs")?, &mut ctx);
   assert_matches!(result, Err(EvalError::UndefinedVariable(_)));
   Ok(())
 }
