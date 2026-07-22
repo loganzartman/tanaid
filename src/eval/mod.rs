@@ -8,6 +8,7 @@ mod cmd_dict;
 mod cmd_expr;
 mod cmd_global;
 mod cmd_if;
+mod cmd_incr;
 mod cmd_info;
 mod cmd_lappend;
 mod cmd_lindex;

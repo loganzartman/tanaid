@@ -622,3 +622,37 @@ fn eval_lappend_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
   assert_matches!(result, Err(EvalError::ArgumentError(_)));
   Ok(())
 }
+
+#[test]
+fn eval_incr_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set x 1; incr x")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 2);
+  Ok(())
+}
+
+#[test]
+fn eval_incr_with_increment() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set x 1; incr x 5")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 6);
+  Ok(())
+}
+
+#[test]
+fn eval_incr_creates_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("incr x; set x")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 1);
+  Ok(())
+}
+
+#[test]
+fn eval_incr_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("incr")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("incr x 1 2")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
