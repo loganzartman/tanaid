@@ -6,6 +6,7 @@ mod cmd;
 mod cmd_break;
 mod cmd_dict;
 mod cmd_expr;
+mod cmd_foreach;
 mod cmd_global;
 mod cmd_if;
 mod cmd_incr;

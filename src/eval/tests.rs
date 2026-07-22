@@ -656,3 +656,87 @@ fn eval_incr_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
   assert_matches!(result, Err(EvalError::ArgumentError(_)));
   Ok(())
 }
+
+#[test]
+fn eval_foreach_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("foreach x {a b c} {lappend out $x}; set out")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_multi_var() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("foreach {a b} {1 2 3 4} {lappend out \"$a$b\"}; set out")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "12 34");
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_multi_varlist() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("foreach x {a b} y {1 2} {lappend out \"$x$y\"}; set out")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "a1 b2");
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("foreach")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("foreach x {a b}")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_mutates_containing_scope() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("proc f {} {foreach x {a b c} {incr n}; return \"$n $x\"}; f")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "3 c");
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_empty_varlist() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("foreach {} {a b} {}")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_break() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("foreach x {1 2 3 4} {lappend out $x; if {$x == 2} {break}}; set out")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "1 2");
+  Ok(())
+}
+
+#[test]
+fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("foreach {a b} {1 2 3} {lappend out \"$a$b\"}; set out")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "12 3");
+  Ok(())
+}
