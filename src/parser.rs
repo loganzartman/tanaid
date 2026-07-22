@@ -133,7 +133,7 @@ pub(crate) fn parse_script(
       Err(_) => {}
     }
 
-    if mode == ParseMode::CommandSub && src.starts_with(']') {
+    if src.is_empty() || mode == ParseMode::CommandSub && src.starts_with(']') {
       break;
     }
 
