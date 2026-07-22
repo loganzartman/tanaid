@@ -1,8 +1,9 @@
 use regex::Regex;
 
-use crate::parser;
+use crate::parser::{self, WordPart};
 use crate::parser::{ParseError, WordNode};
 
+use std::mem::take;
 use std::sync::LazyLock;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -124,11 +125,97 @@ pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
     Err(_) => {}
   }
 
-  let (word, rest) = parser::parse_word(src)?;
-  Ok((ExprNode::Word(word), rest))
+  let (word, rest) = parse_expr_word(src)?;
+  Ok((word, rest))
 }
 
-pub fn parse_expr_group(src: &str) -> Result<(ExprNode, &str), ParseError> {
+fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
+  let mut part_buffer = String::new();
+  let mut parts: Vec<WordPart> = vec![];
+
+  match parser::parse_ws(src) {
+    Ok((_, rest)) => src = rest,
+    Err(_) => {}
+  }
+
+  let ch_first = src.chars().next();
+  match ch_first {
+    None => return Err(ParseError::Generic("expected word".to_string())),
+    Some('{') => {
+      let (parsed, rest) = parser::parse_braced_string(src)?;
+
+      return Ok((
+        ExprNode::Word(WordNode {
+          parts: vec![WordPart::BracedLiteral(parsed)],
+        }),
+        rest,
+      ));
+    }
+    Some('"') => {
+      let (parsed, rest) = parser::parse_quoted(src)?;
+
+      return Ok((
+        ExprNode::Word(WordNode {
+          parts: vec![parsed],
+        }),
+        rest,
+      ));
+    }
+    _ => {}
+  }
+
+  loop {
+    match src.chars().next() {
+      None
+      | Some(' ' | '\t' | '\r' | '\n')
+      | Some(
+        '(' | ')' | '+' | '-' | '*' | '/' | '%' | '<' | '>' | '=' | '!' | '&' | '|' | '?' | ':',
+      ) => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        if parts.is_empty() {
+          return Err(ParseError::Generic("expected word".to_string()));
+        }
+
+        return Ok((ExprNode::Word(WordNode { parts }), src));
+      }
+
+      Some('$') => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (parsed, rest) = parser::parse_varsub(src)?;
+        parts.push(parsed);
+        src = rest;
+      }
+
+      Some('[') => {
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (parsed, rest) = parser::parse_cmdsub(src)?;
+        parts.push(parsed);
+        src = rest;
+      }
+
+      Some(ch) => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
+}
+
+pub fn parse_expr_group(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
+  match parser::parse_ws(src) {
+    Ok((_, rest)) => src = rest,
+    Err(_) => {}
+  }
+
   let Some(src) = src.strip_prefix("(") else {
     return Err(ParseError::Generic("expected open parenthesis".to_string()));
   };
@@ -244,6 +331,85 @@ mod tests {
     assert_eq!(parse_expr("1 != 2")?.0, binop!(Ne, lit!("1"), lit!("2")));
     assert_eq!(parse_expr("1 >= 2")?.0, binop!(Ge, lit!("1"), lit!("2")));
     assert_eq!(parse_expr("1 > 2")?.0, binop!(Gt, lit!("1"), lit!("2")));
+    Ok(())
+  }
+
+  #[test]
+  fn skips_leading_and_trailing_whitespace() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("  1 + 2  ")?;
+    assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
+    assert!(rest.chars().all(|c| c.is_whitespace()));
+    Ok(())
+  }
+
+  #[test]
+  fn skips_whitespace_inside_groups() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("( 1 + 2 )")?;
+    assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
+    let (node, _) = parse_expr("1 + ( 2 * 3 )")?;
+    assert_eq!(
+      node,
+      binop!(Add, lit!("1"), binop!(Mul, lit!("2"), lit!("3")))
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_compact_binary_ops() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("1/2")?;
+    assert_eq!(node, binop!(Div, lit!("1"), lit!("2")));
+    let (node, _) = parse_expr("5%2")?;
+    assert_eq!(node, binop!(Rem, lit!("5"), lit!("2")));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_braced_literal_atoms() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("{2}")?;
+    assert_eq!(
+      node,
+      ExprNode::Word(WordNode {
+        parts: vec![parser::WordPart::BracedLiteral("2".to_string())],
+      })
+    );
+    assert_eq!(rest, "");
+
+    let (node, _) = parse_expr("{2} + 3")?;
+    assert_eq!(
+      node,
+      binop!(
+        Add,
+        ExprNode::Word(WordNode {
+          parts: vec![parser::WordPart::BracedLiteral("2".to_string())],
+        }),
+        lit!("3")
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn rejects_operator_without_operands() {
+    assert!(parse_expr("==").is_err());
+    assert!(parse_expr("+").is_err());
+    assert!(parse_expr("1 +").is_err());
+  }
+
+  #[test]
+  fn rejects_empty_expr_words() {
+    for src in ["=", "!", "?", ":", "&", "|", "()", "( )"] {
+      assert!(
+        parse_expr(src).is_err(),
+        "expected error for empty expr word {src:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn leaves_unsupported_operators_unconsumed() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("0||1")?;
+    assert_eq!(node, lit!("0"));
+    assert_eq!(rest, "||1");
     Ok(())
   }
 }

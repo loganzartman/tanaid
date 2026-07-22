@@ -33,13 +33,7 @@ pub fn eval_wordpart(
       .get_variable(frame, &v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
-    WordPart::CommandSub(c) => {
-      let parsed = context
-        .parse_script_caching(c)
-        .map_err(|e| EvalError::CommandParseError(e.to_string()))?;
-      let (script, _) = parsed.as_ref();
-      eval_script(script, context, frame)
-    }
+    WordPart::CommandSub(script) => eval_script(script, context, frame),
     WordPart::Quoted(parts) => {
       let mut result: String = "".to_string();
       for part in parts {

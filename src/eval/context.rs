@@ -73,7 +73,7 @@ impl EvalContext {
     src: &str,
   ) -> Result<Rc<(ScriptNode, String)>, ParseError> {
     if !self.parse_cache_script.contains(src) {
-      let (node, rest) = parser::parse_script(src)?;
+      let (node, rest) = parser::parse_script(src, parser::ParseMode::Script)?;
       self
         .parse_cache_script
         .put(src.to_string(), Rc::new((node, rest.to_string())));

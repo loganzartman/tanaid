@@ -1,6 +1,7 @@
 use regex::Regex;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::mem::take;
 use std::sync::LazyLock;
 
 #[derive(Debug)]
@@ -48,7 +49,7 @@ pub enum WordPart {
   VarIndex(String, String),
   BracedSub(String),
   BracedIndex(String, String),
-  CommandSub(String),
+  CommandSub(ScriptNode),
 }
 
 impl WordNode {
@@ -110,26 +111,41 @@ impl Display for WordPart {
 }
 
 pub fn parse(src: &str) -> Result<ScriptNode, ParseError> {
-  let (script_node, _) = parse_script(src)?;
+  let (script_node, _) = parse_script(src, ParseMode::Script)?;
   return Ok(script_node);
 }
 
-pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseError> {
+#[derive(PartialEq, Copy, Clone)]
+pub(crate) enum ParseMode {
+  Script,
+  CommandSub,
+}
+
+pub(crate) fn parse_script(
+  mut src: &str,
+  mode: ParseMode,
+) -> Result<(ScriptNode, &str), ParseError> {
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
-    match parse_command(src) {
-      Ok((command, rest)) => {
-        commands.push(command);
-        src = rest;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => return Err(ParseError::Generic("expected command".to_string())),
+    // optional preceding whitespace or command separators
+    match parse_ws_or_command_sep(src) {
+      Ok((_, rest)) => src = rest,
+      Err(_) => {}
     }
 
+    // empty words will fail to parse; end here if no input
+    if src.is_empty() || mode == ParseMode::CommandSub && src.starts_with(']') {
+      break;
+    }
+
+    let (command, rest) = parse_command(src, mode)?;
+    commands.push(command);
+    src = rest;
+
+    // optional trailing whitespace
     match parse_ws(src) {
       Ok((_, rest)) => src = rest,
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
       Err(_) => {}
     }
 
@@ -150,7 +166,12 @@ pub(crate) fn parse_script(mut src: &str) -> Result<(ScriptNode, &str), ParseErr
   Ok((ScriptNode { commands }, src))
 }
 
-fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
+fn parse_command(mut src: &str, mode: ParseMode) -> Result<(CommandNode, &str), ParseError> {
+  let is_command_end = |src: &str| {
+    matches!(src.chars().next(), Some('\r' | '\n' | ';') | None)
+      || (mode == ParseMode::CommandSub && matches!(src.chars().next(), Some(']')))
+  };
+
   // eat whitespace
   match parse_ws_or_command_sep(src) {
     Ok((_, rest)) => src = rest,
@@ -159,7 +180,7 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
   }
 
   // required: first word (command name)
-  let (name, rest) = match parse_word(src) {
+  let (name, rest) = match parse_word(src, mode) {
     Ok(result) => result,
     Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
     Err(err) => {
@@ -182,12 +203,12 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
     };
     src = rest;
 
+    if is_command_end(src) {
+      break;
+    }
+
     // word
-    let (word, rest) = match parse_word(src) {
-      Ok(result) => result,
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => break,
-    };
+    let (word, rest) = parse_word(src, mode)?;
     words.push(word);
     src = rest;
   }
@@ -196,65 +217,123 @@ fn parse_command(mut src: &str) -> Result<(CommandNode, &str), ParseError> {
 }
 
 pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
+  let is_list_element_terminator =
+    |ch: Option<char>| matches!(ch, None | Some(' ' | '\t' | '\r' | '\n'));
+
   let mut items: Vec<String> = vec![];
   let mut first = true;
 
   while !src.is_empty() {
     // required whitespace separator
-    match parse_ws(src) {
-      Ok((_, rest)) => src = rest,
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) if !first => break,
-      Err(_) => {}
+    let mut found_whitespace = false;
+    while let Some(ch) = src.chars().next()
+      && is_list_element_terminator(Option::from(ch))
+    {
+      found_whitespace = true;
+      src = &src[ch.len_utf8()..];
+    }
+    if !first && !found_whitespace {
+      break;
     }
     first = false;
 
-    match parse_bracketed(src, BracketType::Curly) {
-      Ok((str, rest)) => {
-        items.push(str);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+    match src.chars().next() {
+      Some('{') => {
+        let (parsed, rest) = parse_braced_string(src)?;
 
-    match parse_bracketed(src, BracketType::DoubleQuote) {
-      Ok((str, rest)) => {
-        items.push(str);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+        if let ch = rest.chars().next()
+          && !is_list_element_terminator(ch)
+        {
+          return Err(ParseError::Generic(format!(
+            "unexpected character after {}: {}",
+            parsed,
+            ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
+          )));
+        }
 
-    match parse_list_element_bare(src) {
-      Ok((str, rest)) => {
-        items.push(str);
+        items.push(parsed);
         src = rest;
       }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => break,
-    }
+      Some('"') => {
+        let (parsed, rest) = parse_list_element_quoted(src)?;
+
+        let ch = rest.chars().next();
+        if !is_list_element_terminator(ch) {
+          return Err(ParseError::Generic(format!(
+            "unexpected character after {}: {}",
+            parsed,
+            ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string())
+          )));
+        }
+
+        items.push(parsed);
+        src = rest;
+      }
+      Some(_) => {
+        let (parsed, rest) = parse_list_element_bare(src)?;
+        items.push(parsed);
+        src = rest;
+      }
+      None => break,
+    };
   }
 
   Ok((items, src))
 }
 
-fn parse_list_element_bare(src: &str) -> Result<(String, &str), ParseError> {
-  static RE_BARE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^{}"\s]+"#).unwrap());
+fn parse_list_element_quoted(mut src: &str) -> Result<(String, &str), ParseError> {
+  src = src
+    .strip_prefix('"')
+    .ok_or_else(|| ParseError::Generic("expected \"".to_string()))?;
 
-  if let Some(captures) = RE_BARE.captures(src) {
-    Ok((captures[0].to_string(), &src[captures[0].len()..]))
-  } else {
-    Err(ParseError::Generic(
-      "expected bare list element".to_string(),
-    ))
+  let mut buffer = String::new();
+
+  loop {
+    match src.chars().next() {
+      None => return Err(ParseError::Continuable("expected \"".to_string())),
+      Some('"') => {
+        return Ok((buffer, &src[1..]));
+      }
+      Some('\\') => {
+        let (char, rest) = parse_backslash_escape(src)?;
+        buffer.push(char);
+        src = rest;
+      }
+      Some(ch) => {
+        buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
   }
 }
 
-pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
+fn parse_list_element_bare(mut src: &str) -> Result<(String, &str), ParseError> {
+  let mut buffer = String::new();
+
+  loop {
+    match src.chars().next() {
+      None | Some(' ' | '\t' | '\r' | '\n') => {
+        return Ok((buffer, src));
+      }
+      Some('\\') => {
+        let (char, rest) = parse_backslash_escape(src)?;
+        buffer.push(char);
+        src = rest;
+      }
+      Some(ch) => {
+        buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
+}
+
+pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &str), ParseError> {
+  let is_bare_terminator = |ch: Option<char>| {
+    matches!(ch, None | Some(' ' | '\t' | '\n' | '\r' | ';'))
+      || (mode == ParseMode::CommandSub && matches!(ch, Some(']')))
+  };
+
   // trim leading whitespace
   match parse_ws(src) {
     Ok((_, rest)) => src = rest,
@@ -263,243 +342,274 @@ pub(crate) fn parse_word(mut src: &str) -> Result<(WordNode, &str), ParseError> 
   }
 
   let mut parts: Vec<WordPart> = vec![];
-  while !src.is_empty() {
-    match parse_wordpart_quoted(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
+  let mut part_buffer = String::new();
 
-    match parse_wordpart_cmdsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
+  let ch_first = src.chars().next();
+  match ch_first {
+    ch if is_bare_terminator(ch) => {
+      return Err(ParseError::Generic("expected word".to_string()));
     }
+    Some('{') => {
+      let (s, rest) = parse_braced_string(src)?;
 
-    match parse_wordpart_varsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
+      if let ch = rest.chars().next()
+        && !is_bare_terminator(ch)
+      {
+        return Err(ParseError::Generic(format!(
+          "unexpected character after }}: {}",
+          ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
+        )));
       }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
 
-    match parse_wordpart_literal(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
+      return Ok((
+        WordNode {
+          parts: vec![WordPart::BracedLiteral(s)],
+        },
+        rest,
+      ));
+    }
+    Some('"') => {
+      let (parsed, rest) = parse_quoted(src)?;
+
+      if let ch = rest.chars().next()
+        && !is_bare_terminator(ch)
+      {
+        return Err(ParseError::Generic(format!(
+          "unexpected character after \": {}",
+          ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
+        )));
       }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
 
-    break;
+      return Ok((
+        WordNode {
+          parts: vec![parsed],
+        },
+        rest,
+      ));
+    }
+    _ => {}
   }
 
-  if parts.is_empty() {
-    Err(ParseError::Generic("expected word".to_string()))
-  } else {
-    Ok((WordNode { parts }, src))
-  }
-}
+  loop {
+    match src.chars().next() {
+      ch if is_bare_terminator(ch) => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
 
-fn parse_wordpart_quoted(src: &str) -> Result<(WordPart, &str), ParseError> {
-  let Some(mut src) = src.strip_prefix("\"") else {
-    return Err(ParseError::Generic("expected \"".to_string()));
-  };
-
-  let mut parts = vec![];
-  while !src.is_empty() {
-    if let Some(rest) = src.strip_prefix("\"") {
-      return Ok((WordPart::Quoted(parts), rest));
-    }
-
-    match parse_wordpart_cmdsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    match parse_wordpart_varsub(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    match parse_wordpart_quoted_literal(src) {
-      Ok((part, rest)) => {
-        parts.push(part);
-        src = rest;
-        continue;
-      }
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-      Err(_) => {}
-    }
-
-    break;
-  }
-
-  Err(ParseError::Continuable(
-    "missing closing character: \"".to_string(),
-  ))
-}
-
-fn parse_wordpart_quoted_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
-  parse_wordpart_quoted_bare(src)
-    .map(|(s, rest)| (WordPart::BareLiteral(s), rest))
-    .map_err(|_| ParseError::Generic("expected literal word".to_string()))
-}
-
-fn parse_wordpart_literal(src: &str) -> Result<(WordPart, &str), ParseError> {
-  match parse_bracketed(src, BracketType::Curly) {
-    Ok((s, rest)) => return Ok((WordPart::BracedLiteral(s), rest)),
-    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-    Err(_) => {}
-  }
-
-  parse_wordpart_bare(src).map(|(s, rest)| (WordPart::BareLiteral(s), rest))
-}
-
-fn parse_wordpart_varsub(src: &str) -> Result<(WordPart, &str), ParseError> {
-  let rest = src
-    .strip_prefix('$')
-    .ok_or_else(|| ParseError::Generic("expected variable substitution".to_string()))?;
-
-  match parse_bracketed(rest, BracketType::Curly) {
-    Ok((word, rest)) => return Ok((WordPart::BracedSub(word), rest)),
-    Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
-    Err(_) => {}
-  }
-
-  parse_wordpart_bare(rest).map(|(word, rest)| (WordPart::VarSub(word), rest))
-}
-
-fn parse_wordpart_cmdsub(src: &str) -> Result<(WordPart, &str), ParseError> {
-  let (word, rest) = parse_bracketed(src, BracketType::Square)?;
-  Ok((WordPart::CommandSub(word), rest))
-}
-
-enum BracketType {
-  Square,
-  Curly,
-  DoubleQuote,
-}
-
-fn parse_bracketed(src: &str, b: BracketType) -> Result<(String, &str), ParseError> {
-  let open = match b {
-    BracketType::Square => '[',
-    BracketType::Curly => '{',
-    BracketType::DoubleQuote => '"',
-  };
-  let close = match b {
-    BracketType::Square => ']',
-    BracketType::Curly => '}',
-    BracketType::DoubleQuote => '"',
-  };
-
-  let mut rest = src
-    .strip_prefix(open)
-    .ok_or_else(|| ParseError::Generic(format!("expected a: {}", open)))?;
-
-  let mut depth = 1;
-  let mut word = String::new();
-
-  while !rest.is_empty() {
-    let (ch, new_rest) = parse_char(rest)?;
-    rest = new_rest;
-
-    if ch == close {
-      depth -= 1;
-      if depth == 0 {
         break;
       }
-    }
+      Some('$') => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
 
-    if ch == open {
-      depth += 1;
-    }
+        let (parsed, rest) = parse_varsub(src)?;
+        parts.push(parsed);
+        src = rest;
+      }
+      Some('[') => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
 
-    word.push(ch);
+        let (parsed, rest) = parse_cmdsub(src)?;
+        parts.push(parsed);
+        src = rest;
+      }
+      Some('\\') => {
+        let (escaped_ch, rest) = parse_backslash_escape(src)?;
+        part_buffer.push(escaped_ch);
+        src = rest;
+      }
+      Some(ch) => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+      None => unreachable!("is_bare_terminator should have matched None"),
+    };
+  }
+
+  assert!(part_buffer.is_empty());
+
+  Ok((WordNode { parts }, src))
+}
+
+pub(crate) fn parse_braced_string(mut src: &str) -> Result<(String, &str), ParseError> {
+  match src.chars().next() {
+    Some('{') => {
+      src = &src[1..];
+    }
+    _ => return Err(ParseError::Generic("expected {".to_string())),
+  }
+
+  let mut depth = 1;
+  let mut buffer = String::new();
+
+  while !src.is_empty() {
+    match src.chars().next().unwrap() {
+      '{' => {
+        buffer.push('{');
+        depth += 1;
+        src = &src[1..];
+      }
+
+      '}' => {
+        depth -= 1;
+        src = &src[1..];
+        if depth == 0 {
+          break;
+        } else {
+          buffer.push('}');
+        }
+      }
+
+      '\\' => {
+        if let Some(ch @ ('{' | '}')) = src.chars().nth(1) {
+          buffer.push('\\');
+          buffer.push(ch);
+          src = &src[2..];
+          continue;
+        }
+
+        if let Ok((ch, rest)) = parse_backslash_escape_newline(src) {
+          buffer.push(ch);
+          src = rest;
+          continue;
+        }
+
+        buffer.push('\\');
+        src = &src[1..];
+      }
+
+      ch => {
+        buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
+    }
   }
 
   if depth > 0 {
-    Err(ParseError::Continuable(format!(
-      "missing closing character: {}",
-      close
-    )))
-  } else {
-    Ok((word, rest))
+    return Err(ParseError::Continuable("missing closing }".to_string()));
   }
+
+  Ok((buffer, src))
 }
 
-fn parse_wordpart_bare(src: &str) -> Result<(String, &str), ParseError> {
-  static RE_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^$\[\]{}()";\s]+"#).unwrap());
+pub(crate) fn parse_quoted(mut src: &str) -> Result<(WordPart, &str), ParseError> {
+  src = src
+    .strip_prefix('"')
+    .ok_or_else(|| ParseError::Generic("expected \"".to_string()))?;
 
-  if let Some(captures) = RE_WORD.captures(src) {
-    Ok((captures[0].to_string(), &src[captures[0].len()..]))
-  } else {
-    Err(ParseError::Generic("expected bare word".to_string()))
-  }
-}
+  let mut part_buffer = String::new();
+  let mut parts: Vec<WordPart> = vec![];
 
-fn parse_wordpart_quoted_bare(src: &str) -> Result<(String, &str), ParseError> {
-  let mut rest = src;
-  let mut word = String::new();
+  loop {
+    let ch = src.chars().next().unwrap_or('\0');
+    match ch {
+      '\0' => return Err(ParseError::Continuable("expected \"".to_string())),
+      '"' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+        src = &src[1..];
+        break;
+      }
+      '$' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
 
-  while let Some(ch) = rest.chars().next() {
-    // Stop at substitution/terminator characters, but let parse_char handle
-    // backslash escapes (so `\"` doesn't terminate the quoted string).
-    if matches!(ch, '$' | '[' | ']' | '"') {
-      break;
+        let (part, rest) = parse_varsub(src)?;
+        parts.push(part);
+        src = rest;
+      }
+      '[' => {
+        // flush
+        if !part_buffer.is_empty() {
+          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+        }
+
+        let (part, rest) = parse_cmdsub(src)?;
+        parts.push(part);
+        src = rest;
+      }
+      '\\' => {
+        let (char, rest) = parse_backslash_escape(src)?;
+        part_buffer.push(char);
+        src = rest;
+      }
+      ch => {
+        part_buffer.push(ch);
+        src = &src[ch.len_utf8()..];
+      }
     }
-    let (decoded, new_rest) = parse_char(rest)?;
-    word.push(decoded);
-    rest = new_rest;
   }
 
-  if word.is_empty() {
-    Err(ParseError::Generic("expected bare word".to_string()))
-  } else {
-    Ok((word, rest))
+  Ok((WordPart::Quoted(parts), src))
+}
+
+pub(crate) fn parse_varsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
+  src = src
+    .strip_prefix('$')
+    .ok_or_else(|| ParseError::Generic("expected $".to_string()))?;
+
+  if matches!(src.chars().next(), Some('{')) {
+    let (parsed, rest) = parse_braced_string(src)?;
+    return Ok((WordPart::BracedSub(parsed), rest));
+  }
+
+  let mut part_buffer = String::new();
+  static VAR_CHAR: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9_]|:{2,})").unwrap());
+
+  loop {
+    match (src.chars().next(), VAR_CHAR.find(src)) {
+      (Some(_), Some(m)) => {
+        part_buffer.push_str(m.as_str());
+        src = &src[m.end()..];
+      }
+      (None | Some(_), _) => {
+        // flush
+        if !part_buffer.is_empty() {
+          return Ok((WordPart::VarSub(take(&mut part_buffer)), src));
+        } else {
+          return Ok((WordPart::BareLiteral("$".to_string()), src));
+        }
+      }
+    }
   }
 }
 
-fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
-  let ch = src
-    .chars()
-    .next()
-    .ok_or_else(|| ParseError::Generic("expected character".to_string()))?;
+pub(crate) fn parse_cmdsub(mut src: &str) -> Result<(WordPart, &str), ParseError> {
+  src = src
+    .strip_prefix('[')
+    .ok_or_else(|| ParseError::Generic("expected [".to_string()))?;
 
-  let rest = &src[ch.len_utf8()..];
-  if ch != '\\' {
-    return Ok((ch, rest));
+  let (s, rest) = parse_script(src, ParseMode::CommandSub)?;
+  src = rest;
+
+  src = src
+    .strip_prefix(']')
+    .ok_or_else(|| ParseError::Continuable("expected ]".to_string()))?;
+
+  Ok((WordPart::CommandSub(s), src))
+}
+
+pub(crate) fn parse_backslash_escape(src: &str) -> Result<(char, &str), ParseError> {
+  let Some('\\') = src.chars().next() else {
+    return Err(ParseError::Generic("expected \\".to_string()));
+  };
+  let rest = &src[1..];
+
+  if let Ok(result) = parse_backslash_escape_newline(src) {
+    return Ok(result);
   }
-
-  static RE_OCTAL_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-7]{1,3})").unwrap());
-  static RE_HEX_ESCAPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^x([0-9a-fA-F]{1,2})").unwrap());
-  static RE_UNICODE_ESCAPE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^u([0-9a-fA-F]{1,6})").unwrap());
-  static RE_SIMPLE_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([abfnrtv])").unwrap());
 
   let from_radix = |string: String, radix: u32| {
     let parse_err =
@@ -509,21 +619,27 @@ fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
     Ok(val)
   };
 
+  static RE_OCTAL_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-7]{1,3})").unwrap());
   if let Some(cap) = RE_OCTAL_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return Ok((from_radix(cap[1].to_string(), 8)?, rest));
   }
 
+  static RE_HEX_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^x([0-9a-fA-F]{1,2})").unwrap());
   if let Some(cap) = RE_HEX_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return Ok((from_radix(cap[1].to_string(), 16)?, rest));
   }
 
+  static RE_UNICODE_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^u([0-9a-fA-F]{1,6})").unwrap());
   if let Some(cap) = RE_UNICODE_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return Ok((from_radix(cap[1].to_string(), 16)?, rest));
   }
 
+  static RE_SIMPLE_ESCAPE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([abfnrtv])").unwrap());
   if let Some(cap) = RE_SIMPLE_ESCAPE.captures(rest) {
     let rest = &rest[cap[0].len()..];
     return match cap[1].to_string().as_str() {
@@ -541,13 +657,29 @@ fn parse_char(src: &str) -> Result<(char, &str), ParseError> {
     };
   }
 
-  // Tcl semantics: a backslash before any other character is that character.
+  // a backslash before any other character is that character
   if let Some(escaped) = rest.chars().next() {
     return Ok((escaped, &rest[escaped.len_utf8()..]));
   }
 
-  // A lone trailing backslash is a literal backslash.
+  // trailing backslash is a literal backslash
   Ok(('\\', rest))
+}
+
+fn parse_backslash_escape_newline(src: &str) -> Result<(char, &str), ParseError> {
+  let Some('\\') = src.chars().next() else {
+    return Err(ParseError::Generic("expected \\".to_string()));
+  };
+  let rest = &src[1..];
+
+  static RE_NEWLINE_ESCAPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^((\r\n|\r|\n)[ \t]*)").unwrap());
+  if let Some(cap) = RE_NEWLINE_ESCAPE.captures(rest) {
+    let rest = &rest[cap[0].len()..];
+    return Ok(((' '), rest));
+  }
+
+  Err(ParseError::Generic("expected escaped newline".to_string()))
 }
 
 pub(crate) fn parse_ws_or_command_sep(src: &str) -> Result<(String, &str), ParseError> {
@@ -587,23 +719,27 @@ pub(crate) fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
 mod tests {
   use super::*;
 
-  #[test]
-  fn parse_char_ascii() -> Result<(), ParseError> {
-    let (char, _rest) = parse_char("a")?;
-    assert_eq!(char, 'a');
-    Ok(())
+  fn bare_script(words: &[&str]) -> ScriptNode {
+    ScriptNode {
+      commands: vec![CommandNode {
+        words: words
+          .iter()
+          .map(|word| WordNode::only(WordPart::BareLiteral((*word).to_string())))
+          .collect(),
+      }],
+    }
   }
 
   #[test]
   fn parse_char_escape_newline() -> Result<(), ParseError> {
-    let (char, _rest) = parse_char("\\n")?;
+    let (char, _rest) = parse_backslash_escape("\\n")?;
     assert_eq!(char, '\n');
     Ok(())
   }
 
   #[test]
   fn parses_word_with_two_varsubs() -> Result<(), ParseError> {
-    let parsed = parse_word("$x$y")?;
+    let parsed = parse_word("$x$y", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -620,8 +756,63 @@ mod tests {
   }
 
   #[test]
+  fn punctuation_terminates_unbraced_variable_name() -> Result<(), ParseError> {
+    let parsed = parse_word("$x+$x", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("x".to_string()),
+            WordPart::BareLiteral("+".to_string()),
+            WordPart::VarSub("x".to_string()),
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn backslash_terminates_unbraced_variable_name() -> Result<(), ParseError> {
+    let parsed = parse_word(r"$foo\$bar", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("foo".to_string()),
+            WordPart::BareLiteral("$bar".to_string()),
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_bracket_after_varsub_is_literal() -> Result<(), ParseError> {
+    let parsed = parse_word(r"$foo\[bar\]", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("foo".to_string()),
+            WordPart::BareLiteral("[bar]".to_string()),
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
   fn parses_word_braced_sub() -> Result<(), ParseError> {
-    let parsed = parse_word("${hello}")?;
+    let parsed = parse_word("${hello}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -636,18 +827,18 @@ mod tests {
 
   #[test]
   fn parses_word_with_many_parts() -> Result<(), ParseError> {
-    let parsed = parse_word("$x[expr 1 + 2]$y[a][b]{c}")?;
+    let parsed = parse_word("$x[expr 1 + 2]$y[a][b]{c}", ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
         WordNode {
           parts: vec![
             WordPart::VarSub("x".to_string()),
-            WordPart::CommandSub("expr 1 + 2".to_string()),
+            WordPart::CommandSub(bare_script(&["expr", "1", "+", "2"])),
             WordPart::VarSub("y".to_string()),
-            WordPart::CommandSub("a".to_string()),
-            WordPart::CommandSub("b".to_string()),
-            WordPart::BracedLiteral("c".to_string()),
+            WordPart::CommandSub(bare_script(&["a"])),
+            WordPart::CommandSub(bare_script(&["b"])),
+            WordPart::BareLiteral("{c}".to_string()),
           ]
         },
         ""
@@ -657,8 +848,25 @@ mod tests {
   }
 
   #[test]
+  fn parses_quoted_word_simple() -> Result<(), ParseError> {
+    let parsed = parse_word(r#""hello""#, ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![WordPart::Quoted(vec![WordPart::BareLiteral(
+            "hello".to_string()
+          ),]),]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
   fn parses_quoted_word_with_var_sub() -> Result<(), ParseError> {
-    let parsed = parse_word(r#""hello $name""#)?;
+    let parsed = parse_word(r#""hello $name""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -676,14 +884,14 @@ mod tests {
 
   #[test]
   fn parses_quoted_word_with_command_sub() -> Result<(), ParseError> {
-    let parsed = parse_word(r#""sum [expr 1 + 2]""#)?;
+    let parsed = parse_word(r#""sum [expr 1 + 2]""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
         WordNode {
           parts: vec![WordPart::Quoted(vec![
             WordPart::BareLiteral("sum ".to_string()),
-            WordPart::CommandSub("expr 1 + 2".to_string())
+            WordPart::CommandSub(bare_script(&["expr", "1", "+", "2"]))
           ]),]
         },
         ""
@@ -694,7 +902,7 @@ mod tests {
 
   #[test]
   fn parses_quoted_word_with_backslash_sub() -> Result<(), ParseError> {
-    let parsed = parse_word(r#""a\nb\"c""#)?;
+    let parsed = parse_word(r#""a\nb\"c""#, ParseMode::Script)?;
     assert_eq!(
       parsed,
       (
@@ -710,17 +918,451 @@ mod tests {
   }
 
   #[test]
-  fn parses_word_excludes_paren() -> Result<(), ParseError> {
-    let parsed = parse_word("hello(a")?;
+  fn parses_backslash_escapes_in_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r#"a\ b\;\$x\[cmd\]\{c\}\"q"#, ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("a b;$x[cmd]{c}\"q".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_sequences_in_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"line\ncol\t\x41\101\q", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("line\ncol\tAAq".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn trailing_backslash_in_bare_word_is_literal() -> Result<(), ParseError> {
+    let parsed = parse_word(r"hello\", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral(r"hello\".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braces_and_quotes_are_literal_inside_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r#"pre{braced}"quoted""#, ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral(r#"pre{braced}"quoted""#.to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braced_word_rejects_trailing_characters() {
+    assert!(parse_word("{hello}world", ParseMode::Script).is_err());
+  }
+
+  #[test]
+  fn braced_word_allows_following_separator() -> Result<(), ParseError> {
+    let parsed = parse_word("{hello} world", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral("hello".to_string())),
+        " world"
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn curly_braced_string_preserves_nesting_and_returns_remainder() -> Result<(), ParseError> {
+    let parsed = parse_braced_string("{a {nested} value}rest")?;
+    assert_eq!(parsed, ("a {nested} value".to_string(), "rest"));
+    Ok(())
+  }
+
+  #[test]
+  fn curly_braced_string_reports_missing_close() {
+    assert!(matches!(
+      parse_braced_string("{unclosed"),
+      Err(ParseError::Continuable(_))
+    ));
+  }
+
+  #[test]
+  fn quoted_word_rejects_trailing_characters() {
+    assert!(parse_word(r#""hello"world"#, ParseMode::Script).is_err());
+  }
+
+  #[test]
+  fn backslash_newline_continues_bare_word() -> Result<(), ParseError> {
+    let parsed = parse_word("hello\\\n \t  world", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("hello world".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn backslash_newline_continues_quoted_word() -> Result<(), ParseError> {
+    let parsed = parse_word("\"hello\\\n \t  world\"", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::Quoted(vec![WordPart::BareLiteral(
+          "hello world".to_string()
+        )])),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn backslash_newline_is_substituted_in_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word("{hello\\\n \t  world}", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral("hello world".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braced_backslash_newline_does_not_consume_next_newline() -> Result<(), ParseError> {
+    let parsed = parse_word("{hello\\\n\nworld}", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral("hello \nworld".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn braced_word_preserves_other_backslashes() -> Result<(), ParseError> {
+    let parsed = parse_word(r"{a\n\$x}", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral(r"a\n\$x".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_brace_does_not_close_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"{a\}b}", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral(r"a\}b".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_open_brace_does_not_nest_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"{a\{b}", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BracedLiteral(r"a\{b".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_bracket_does_not_close_command_substitution() -> Result<(), ParseError> {
+    let parsed = parse_word(r"[list \]]", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(bare_script(&["list", "]"]))),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_open_bracket_does_not_nest_command_substitution() -> Result<(), ParseError> {
+    let parsed = parse_word(r"[list \[]", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(bare_script(&["list", "["]))),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn command_substitution_ignores_close_bracket_in_braced_word() -> Result<(), ParseError> {
+    let parsed = parse_word(r"[set x {]}]", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(ScriptNode {
+          commands: vec![CommandNode {
+            words: vec![
+              WordNode::only(WordPart::BareLiteral("set".to_string())),
+              WordNode::only(WordPart::BareLiteral("x".to_string())),
+              WordNode::only(WordPart::BracedLiteral("]".to_string())),
+            ],
+          }],
+        })),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_script_stops_before_closing_bracket() -> Result<(), ParseError> {
+    let (parsed, rest) = parse_script("set x 1; incr x]suffix", ParseMode::CommandSub)?;
+
+    assert_eq!(parsed.commands.len(), 2);
+    assert_eq!(rest, "]suffix");
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_script_stops_after_trailing_newline() -> Result<(), ParseError> {
+    let (parsed, rest) = parse_script("expr 1 + 1\n]suffix", ParseMode::CommandSub)?;
+
+    assert_eq!(parsed, bare_script(&["expr", "1", "+", "1"]));
+    assert_eq!(rest, "]suffix");
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_script_can_be_empty() -> Result<(), ParseError> {
+    let (parsed, rest) = parse_script("]suffix", ParseMode::CommandSub)?;
+
+    assert!(parsed.commands.is_empty());
+    assert_eq!(rest, "]suffix");
+    Ok(())
+  }
+
+  #[test]
+  fn parses_empty_command_substitution() -> Result<(), ParseError> {
+    let parsed = parse_word("[]", ParseMode::Script)?;
+
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::CommandSub(ScriptNode { commands: vec![] })),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_whitespace_only_command_substitution() -> Result<(), ParseError> {
+    for src in ["[ ]", "[;]", "[\n]", "[ \t\n;]"] {
+      let parsed = parse_word(src, ParseMode::Script)?;
+      assert_eq!(
+        parsed,
+        (
+          WordNode::only(WordPart::CommandSub(ScriptNode { commands: vec![] })),
+          ""
+        ),
+        "failed for {src:?}"
+      );
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn command_substitution_matches_nested_closing_brackets() -> Result<(), ParseError> {
+    let parsed = parse_word("[list [expr 1 + 2]]suffix", ParseMode::Script)?;
+
     assert_eq!(
       parsed,
       (
         WordNode {
-          parts: vec![WordPart::BareLiteral("hello".to_string())]
+          parts: vec![
+            WordPart::CommandSub(ScriptNode {
+              commands: vec![CommandNode {
+                words: vec![
+                  WordNode::only(WordPart::BareLiteral("list".to_string())),
+                  WordNode::only(WordPart::CommandSub(bare_script(&["expr", "1", "+", "2",]))),
+                ],
+              }],
+            }),
+            WordPart::BareLiteral("suffix".to_string()),
+          ],
         },
-        "(a"
+        ""
       )
     );
+    Ok(())
+  }
+
+  #[test]
+  fn command_substitution_reports_missing_closing_bracket() {
+    assert!(matches!(
+      parse_cmdsub("[set x 1"),
+      Err(ParseError::Continuable(_))
+    ));
+  }
+
+  #[test]
+  fn lone_dollar_is_a_word() -> Result<(), ParseError> {
+    let parsed = parse_word("$", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (WordNode::only(WordPart::BareLiteral("$".to_string())), "")
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_word_includes_parentheses() -> Result<(), ParseError> {
+    let parsed = parse_word("hello(a)", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode::only(WordPart::BareLiteral("hello(a)".to_string())),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\n")?;
+    assert_eq!(parsed, (' ', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline_with_indent() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\n  \t")?;
+    assert_eq!(parsed, (' ', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline_rn() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\r\n  \t")?;
+    assert_eq!(parsed, (' ', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_literal_newline_rest() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\\n  \trest")?;
+    assert_eq!(parsed, (' ', "rest"));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_octal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\041")?;
+    assert_eq!(parsed, ('!', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_octal_short() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\41")?;
+    assert_eq!(parsed, ('!', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_octal_invalid_as_literal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\9")?;
+    assert_eq!(parsed, ('9', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_hex() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\x41")?;
+    assert_eq!(parsed, ('\x41', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_hex_short() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\xa")?;
+    assert_eq!(parsed, ('\x0a', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_hex_invalid_as_literal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\xq")?;
+    assert_eq!(parsed, ('x', "q"));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unicode() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\u10FFFF")?;
+    assert_eq!(parsed, ('\u{10FFFF}', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unicode_short() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\u2764")?;
+    assert_eq!(parsed, ('\u{2764}', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unicode_invalid_as_literal() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\uzzzz")?;
+    assert_eq!(parsed, ('u', "zzzz"));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_simple() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\n")?;
+    assert_eq!(parsed, ('\n', ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_backslash_escape_unknown() -> Result<(), ParseError> {
+    let parsed = parse_backslash_escape("\\z")?;
+    assert_eq!(parsed, ('z', ""));
     Ok(())
   }
 
@@ -735,6 +1377,71 @@ mod tests {
   fn parses_list_leaves_substitution_syntax_literal() -> Result<(), ParseError> {
     let parsed = parse_list("$x [foo]")?;
     assert_eq!(parsed, (vec!["$x".to_string(), "[foo]".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_quoted_element() -> Result<(), ParseError> {
+    let parsed = parse_list(r#""hello world" tail"#)?;
+    assert_eq!(
+      parsed,
+      (vec!["hello world".to_string(), "tail".to_string()], "")
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_backslash_sequences() -> Result<(), ParseError> {
+    let parsed = parse_list(r"a\ b line\n")?;
+    assert_eq!(parsed, (vec!["a b".to_string(), "line\n".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_with_newline_separator() -> Result<(), ParseError> {
+    let parsed = parse_list("first\nsecond")?;
+    assert_eq!(
+      parsed,
+      (vec!["first".to_string(), "second".to_string()], "")
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_empty_braced_and_quoted_elements() -> Result<(), ParseError> {
+    let parsed = parse_list(r#"{} """#)?;
+    assert_eq!(parsed, (vec!["".to_string(), "".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_list_bare_element_with_embedded_braces_and_quotes() -> Result<(), ParseError> {
+    let parsed = parse_list(r#"a"b c{d"#)?;
+    assert_eq!(parsed, (vec![r#"a"b"#.to_string(), "c{d".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn list_rejects_trailing_characters_after_braced_element() {
+    assert!(parse_list("{}x").is_err());
+    assert!(parse_list("{a}b").is_err());
+  }
+
+  #[test]
+  fn list_rejects_trailing_characters_after_quoted_element() {
+    assert!(parse_list(r#"""x"#).is_err());
+    assert!(parse_list(r#""a"b"#).is_err());
+  }
+
+  #[test]
+  fn empty_and_whitespace_only_scripts_have_no_commands() -> Result<(), ParseError> {
+    for src in ["", "\n", "   ", ";\n;", "\n;;\n"] {
+      let parsed = parse(src)?;
+      assert!(
+        parsed.commands.is_empty(),
+        "expected no commands for {src:?}, got {parsed:?}"
+      );
+    }
     Ok(())
   }
 
@@ -814,7 +1521,16 @@ mod tests {
             WordNode::only(WordPart::BareLiteral("expr".to_string())),
             WordNode::only(WordPart::BareLiteral("2".to_string())),
             WordNode::only(WordPart::BareLiteral("+".to_string())),
-            WordNode::only(WordPart::CommandSub("expr 3 + [expr 4 + 5]".to_string())),
+            WordNode::only(WordPart::CommandSub(ScriptNode {
+              commands: vec![CommandNode {
+                words: vec![
+                  WordNode::only(WordPart::BareLiteral("expr".to_string())),
+                  WordNode::only(WordPart::BareLiteral("3".to_string())),
+                  WordNode::only(WordPart::BareLiteral("+".to_string())),
+                  WordNode::only(WordPart::CommandSub(bare_script(&["expr", "4", "+", "5",]))),
+                ],
+              }],
+            })),
           ]
         },]
       }
@@ -871,7 +1587,7 @@ mod tests {
 
   #[test]
   fn parses_cmd_with_leading_cmd_sep() -> Result<(), ParseError> {
-    let (parsed, _) = parse_command("\n;; puts hey")?;
+    let (parsed, _) = parse_command("\n;; puts hey", ParseMode::Script)?;
     assert_eq!(
       parsed,
       CommandNode {
