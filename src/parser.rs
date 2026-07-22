@@ -128,6 +128,11 @@ pub(crate) fn parse_script(
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
+    match parse_ws_or_command_sep(src) {
+      Ok((_, rest)) => src = rest,
+      Err(_) => {}
+    }
+
     if mode == ParseMode::CommandSub && src.starts_with(']') {
       break;
     }
@@ -138,7 +143,6 @@ pub(crate) fn parse_script(
 
     match parse_ws(src) {
       Ok((_, rest)) => src = rest,
-      Err(err @ (ParseError::Continuable(_) | ParseError::Internal(_))) => return Err(err),
       Err(_) => {}
     }
 
@@ -287,9 +291,9 @@ fn parse_list_element_bare(mut src: &str) -> Result<(String, &str), ParseError> 
 }
 
 pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &str), ParseError> {
-  let is_bare_terminator = |ch: char| {
-    matches!(ch, ' ' | '\t' | '\n' | '\r' | ';' | '\0')
-      || (mode == ParseMode::CommandSub && ch == ']')
+  let is_bare_terminator = |ch: Option<char>| {
+    matches!(ch, None | Some(' ' | '\t' | '\n' | '\r' | ';'))
+      || (mode == ParseMode::CommandSub && matches!(ch, Some(']')))
   };
 
   // trim leading whitespace
@@ -304,18 +308,18 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
 
   let ch_first = src.chars().next();
   match ch_first {
-    Some(ch) if is_bare_terminator(ch) => {
+    ch if is_bare_terminator(ch) => {
       return Err(ParseError::Generic("expected word".to_string()));
     }
     Some('{') => {
       let (s, rest) = parse_braced_string(src)?;
 
-      if let Some(next) = rest.chars().next()
-        && !is_bare_terminator(next)
+      if let ch = rest.chars().next()
+        && !is_bare_terminator(ch)
       {
         return Err(ParseError::Generic(format!(
           "unexpected character after }}: {}",
-          next,
+          ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
         )));
       }
 
@@ -327,14 +331,14 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
       ));
     }
     Some('"') => {
-      let (parsed, rest) = parse_quoted(src, mode)?;
+      let (parsed, rest) = parse_quoted(src)?;
 
-      if let Some(next) = rest.chars().next()
-        && !is_bare_terminator(next)
+      if let ch = rest.chars().next()
+        && !is_bare_terminator(ch)
       {
         return Err(ParseError::Generic(format!(
           "unexpected character after \": {}",
-          next,
+          ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
         )));
       }
 
@@ -349,10 +353,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
   }
 
   loop {
-    // synthetic null terminator at end-of-input makes it easier to handle termination
-    let ch = src.chars().next().unwrap_or('\0');
-
-    match ch {
+    match src.chars().next() {
       ch if is_bare_terminator(ch) => {
         // flush
         if !part_buffer.is_empty() {
@@ -361,7 +362,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
 
         break;
       }
-      '$' => {
+      Some('$') => {
         // flush
         if !part_buffer.is_empty() {
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
@@ -371,7 +372,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
         parts.push(parsed);
         src = rest;
       }
-      '[' => {
+      Some('[') => {
         // flush
         if !part_buffer.is_empty() {
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
@@ -381,15 +382,16 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
         parts.push(parsed);
         src = rest;
       }
-      '\\' => {
+      Some('\\') => {
         let (escaped_ch, rest) = parse_backslash_escape(src)?;
         part_buffer.push(escaped_ch);
         src = rest;
       }
-      _ => {
+      Some(ch) => {
         part_buffer.push(ch);
         src = &src[ch.len_utf8()..];
       }
+      None => unreachable!("is_bare_terminator should have matched None"),
     };
   }
 
@@ -459,7 +461,7 @@ pub(crate) fn parse_braced_string(mut src: &str) -> Result<(String, &str), Parse
   Ok((buffer, src))
 }
 
-pub(crate) fn parse_quoted(mut src: &str, mode: ParseMode) -> Result<(WordPart, &str), ParseError> {
+pub(crate) fn parse_quoted(mut src: &str) -> Result<(WordPart, &str), ParseError> {
   src = src
     .strip_prefix('"')
     .ok_or_else(|| ParseError::Generic("expected \"".to_string()))?;

@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::parser::{self, ParseMode, WordPart};
+use crate::parser::{self, WordPart};
 use crate::parser::{ParseError, WordNode};
 
 use std::mem::take;
@@ -152,7 +152,7 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
       ));
     }
     Some('"') => {
-      let (parsed, rest) = parser::parse_quoted(src, ParseMode::Script)?;
+      let (parsed, rest) = parser::parse_quoted(src)?;
 
       return Ok((
         ExprNode::Word(WordNode {
