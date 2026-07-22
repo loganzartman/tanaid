@@ -172,10 +172,10 @@ impl Value {
 
     let str = self.repr_str()?;
     let (words, "") = parser::parse_list(str)
-      .map_err(|e| EvalError::Generic(format!("failed to parse as dict: {}", e)))?
+      .map_err(|e| EvalError::Generic(format!("failed to parse as list: {}", e)))?
     else {
       return Err(EvalError::Generic(
-        "failed to parse dict: extra input".to_string(),
+        "failed to parse list: extra input".to_string(),
       ));
     };
 

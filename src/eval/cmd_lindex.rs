@@ -2,6 +2,7 @@ use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::eval::eval_word;
 use crate::eval_error::EvalError;
 use crate::parser::WordNode;
+use crate::value::Value;
 
 pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
   let [list_val, index] = words else {
@@ -16,9 +17,8 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
   let mut index_val = eval_word(index, context, frame)?;
   let index_int = index_val.repr_int()?;
 
-  match usize::try_from(index_int).map(|i| list_list.get(i)) {
-    Err(_) => Err(EvalError::IndexOutOfBounds(index_int.to_string())),
-    Ok(None) => Err(EvalError::IndexOutOfBounds(index_int.to_string())),
-    Ok(Some(value)) => Ok(value.clone()),
+  match usize::try_from(index_int).ok().and_then(|i| list_list.get(i)) {
+    None => Ok(Value::none()),
+    Some(value) => Ok(value.clone()),
   }
 }

@@ -481,16 +481,16 @@ fn eval_lindex_nested_list() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn eval_lindex_negative() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("lindex [list a b] -1")?, &mut ctx);
-  assert_matches!(result, Err(EvalError::IndexOutOfBounds(_)));
+  let mut result = eval(&parser::parse("lindex [list a b] -1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
   Ok(())
 }
 
 #[test]
 fn eval_lindex_out_of_bounds() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("lindex [list a b] 2")?, &mut ctx);
-  assert_matches!(result, Err(EvalError::IndexOutOfBounds(_)));
+  let mut result = eval(&parser::parse("lindex [list a b] 2")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
   Ok(())
 }
 
