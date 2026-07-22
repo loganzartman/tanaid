@@ -1,6 +1,7 @@
 use super::{
-  EvalContext, FrameId, cmd_break, cmd_dict, cmd_expr, cmd_global, cmd_if, cmd_info, cmd_proc,
-  cmd_puts, cmd_return, cmd_set, cmd_string, cmd_while,
+  EvalContext, FrameId, cmd_break, cmd_dict, cmd_expr, cmd_global, cmd_if, cmd_info, cmd_lappend,
+  cmd_lindex, cmd_list, cmd_llength, cmd_lreverse, cmd_proc, cmd_puts, cmd_return, cmd_set,
+  cmd_string, cmd_while,
 };
 use crate::eval_error::EvalError;
 use crate::parser::WordNode;
@@ -22,6 +23,11 @@ pub(super) fn eval_builtin(
     "global" => cmd_global::eval,
     "if" => cmd_if::eval,
     "info" => cmd_info::eval,
+    "lappend" => cmd_lappend::eval,
+    "lindex" => cmd_lindex::eval,
+    "list" => cmd_list::eval,
+    "llength" => cmd_llength::eval,
+    "lreverse" => cmd_lreverse::eval,
     "proc" => cmd_proc::eval,
     "puts" => cmd_puts::eval,
     "return" => cmd_return::eval,

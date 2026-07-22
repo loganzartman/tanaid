@@ -381,3 +381,244 @@ fn eval_string_length() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(result.repr_int()?, 5);
   Ok(())
 }
+
+#[test]
+fn eval_list_empty() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
+  Ok(())
+}
+
+#[test]
+fn eval_list_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list a b c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_list_braced_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list {hello world} x")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{hello world} x");
+  Ok(())
+}
+
+#[test]
+fn eval_list_evals_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set x 1; list $x [expr 1 + 2]")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "1 3");
+  Ok(())
+}
+
+#[test]
+fn eval_list_nested() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list [list a b] c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{a b} c");
+  Ok(())
+}
+
+#[test]
+fn eval_llength_empty() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("llength [list]")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 0);
+  Ok(())
+}
+
+#[test]
+fn eval_llength_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("llength [list a b c]")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 3);
+  Ok(())
+}
+
+#[test]
+fn eval_llength_from_string() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("llength {a b {c d}}")?, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 3);
+  Ok(())
+}
+
+#[test]
+fn eval_llength_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("llength")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex [list a b c] 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "b");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_braced_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex {a {hello world} c} 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "hello world");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_nested_list() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex [list [list a b] c] 0")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_negative() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex [list a b] -1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_out_of_bounds() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lindex [list a b] 2")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
+  Ok(())
+}
+
+#[test]
+fn eval_lindex_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lindex [list a]")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lreverse_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a b c]; lreverse xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "c b a");
+  Ok(())
+}
+
+#[test]
+fn eval_lreverse_empty() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list]; lreverse xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
+  Ok(())
+}
+
+#[test]
+fn eval_lreverse_nested() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list [list a b] c]; lreverse xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "c {a b}");
+  Ok(())
+}
+
+#[test]
+fn eval_lreverse_does_not_mutate_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set xs [list a b c]; lreverse xs; set xs")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_lreverse_undefined_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lreverse xs")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::UndefinedVariable(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lreverse_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lreverse")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a b]; lappend xs c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_multiple_values() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a]; lappend xs b c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_creates_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lappend xs a b; set xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_mutates_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set xs [list a]; lappend xs b; set xs")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_no_values() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs [list a b]; lappend xs")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_braced_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lappend xs {hello world}")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{hello world}");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_evals_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set x 1; lappend xs $x [expr 1 + 2]")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "1 3");
+  Ok(())
+}
+
+#[test]
+fn eval_lappend_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lappend")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}

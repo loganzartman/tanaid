@@ -9,6 +9,7 @@ use std::ops;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
+pub type List = Vec<Value>;
 pub type Dict = HashMap<String, Value>;
 
 #[derive(Clone, Debug)]
@@ -17,6 +18,7 @@ pub enum Repr {
   Int(i64),
   Float(f64),
   Dict(Rc<Dict>),
+  List(Rc<List>),
 }
 
 #[derive(Clone, Debug)]
@@ -62,6 +64,16 @@ impl Value {
     match &self.repr {
       Repr::Int(i) => Ok(i.to_string().into()),
       Repr::Float(f) => Ok(f.to_string().into()),
+      Repr::List(l) => {
+        let mut result = String::new();
+        for v in l.iter() {
+          if !result.is_empty() {
+            result.push(' ')
+          }
+          result.push_str(maybe_quote(v.to_string().as_str()).as_str());
+        }
+        Ok(result.into())
+      }
       Repr::Dict(d) => {
         let mut result = String::new();
         for (k, v) in d.iter() {
@@ -151,6 +163,31 @@ impl Value {
       unreachable!()
     };
     Ok(dict.clone())
+  }
+
+  pub fn repr_list(&mut self) -> Result<Rc<List>, EvalError> {
+    if let Repr::List(list) = &self.repr {
+      return Ok(Rc::clone(list));
+    }
+
+    let str = self.repr_str()?;
+    let (words, "") = parser::parse_list(str)
+      .map_err(|e| EvalError::Generic(format!("failed to parse as list: {}", e)))?
+    else {
+      return Err(EvalError::Generic(
+        "failed to parse list: extra input".to_string(),
+      ));
+    };
+
+    let mut list = List::new();
+    for word in words {
+      list.push(Value::new(word));
+    }
+    self.repr = Repr::List(list.into());
+    let Repr::List(list) = &self.repr else {
+      unreachable!()
+    };
+    Ok(list.clone())
   }
 
   pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
@@ -269,6 +306,15 @@ impl From<Dict> for Value {
     Value {
       string: None,
       repr: Repr::Dict(Rc::new(value)),
+    }
+  }
+}
+
+impl From<List> for Value {
+  fn from(value: List) -> Self {
+    Value {
+      string: None,
+      repr: Repr::List(Rc::new(value)),
     }
   }
 }
