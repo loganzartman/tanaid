@@ -128,11 +128,13 @@ pub(crate) fn parse_script(
   let mut commands: Vec<CommandNode> = vec![];
 
   while !src.is_empty() {
+    // optional preceding whitespace or command separators
     match parse_ws_or_command_sep(src) {
       Ok((_, rest)) => src = rest,
       Err(_) => {}
     }
 
+    // empty words will fail to parse; end here if no input
     if src.is_empty() || mode == ParseMode::CommandSub && src.starts_with(']') {
       break;
     }
@@ -141,6 +143,7 @@ pub(crate) fn parse_script(
     commands.push(command);
     src = rest;
 
+    // optional trailing whitespace
     match parse_ws(src) {
       Ok((_, rest)) => src = rest,
       Err(_) => {}
