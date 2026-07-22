@@ -133,6 +133,11 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
   let mut part_buffer = String::new();
   let mut parts: Vec<WordPart> = vec![];
 
+  match parser::parse_ws(src) {
+    Ok((_, rest)) => src = rest,
+    Err(_) => {}
+  }
+
   loop {
     match src.chars().next() {
       None
@@ -185,7 +190,12 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
   }
 }
 
-pub fn parse_expr_group(src: &str) -> Result<(ExprNode, &str), ParseError> {
+pub fn parse_expr_group(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
+  match parser::parse_ws(src) {
+    Ok((_, rest)) => src = rest,
+    Err(_) => {}
+  }
+
   let Some(src) = src.strip_prefix("(") else {
     return Err(ParseError::Generic("expected open parenthesis".to_string()));
   };
