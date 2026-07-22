@@ -744,6 +744,42 @@ mod tests {
   }
 
   #[test]
+  fn backslash_terminates_unbraced_variable_name() -> Result<(), ParseError> {
+    let parsed = parse_word(r"$foo\$bar", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("foo".to_string()),
+            WordPart::BareLiteral("$bar".to_string()),
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn escaped_bracket_after_varsub_is_literal() -> Result<(), ParseError> {
+    let parsed = parse_word(r"$foo\[bar\]", ParseMode::Script)?;
+    assert_eq!(
+      parsed,
+      (
+        WordNode {
+          parts: vec![
+            WordPart::VarSub("foo".to_string()),
+            WordPart::BareLiteral("[bar]".to_string()),
+          ]
+        },
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
   fn parses_word_braced_sub() -> Result<(), ParseError> {
     let parsed = parse_word("${hello}", ParseMode::Script)?;
     assert_eq!(
@@ -1122,6 +1158,22 @@ mod tests {
   }
 
   #[test]
+  fn parses_whitespace_only_command_substitution() -> Result<(), ParseError> {
+    for src in ["[ ]", "[;]", "[\n]", "[ \t\n;]"] {
+      let parsed = parse_word(src, ParseMode::Script)?;
+      assert_eq!(
+        parsed,
+        (
+          WordNode::only(WordPart::CommandSub(ScriptNode { commands: vec![] })),
+          ""
+        ),
+        "failed for {src:?}"
+      );
+    }
+    Ok(())
+  }
+
+  #[test]
   fn command_substitution_matches_nested_closing_brackets() -> Result<(), ParseError> {
     let parsed = parse_word("[list [expr 1 + 2]]suffix", ParseMode::Script)?;
 
@@ -1335,6 +1387,30 @@ mod tests {
   fn parses_list_bare_element_with_embedded_braces_and_quotes() -> Result<(), ParseError> {
     let parsed = parse_list(r#"a"b c{d"#)?;
     assert_eq!(parsed, (vec![r#"a"b"#.to_string(), "c{d".to_string()], ""));
+    Ok(())
+  }
+
+  #[test]
+  fn list_rejects_trailing_characters_after_braced_element() {
+    assert!(parse_list("{}x").is_err());
+    assert!(parse_list("{a}b").is_err());
+  }
+
+  #[test]
+  fn list_rejects_trailing_characters_after_quoted_element() {
+    assert!(parse_list(r#"""x"#).is_err());
+    assert!(parse_list(r#""a"b"#).is_err());
+  }
+
+  #[test]
+  fn empty_and_whitespace_only_scripts_have_no_commands() -> Result<(), ParseError> {
+    for src in ["", "\n", "   ", ";\n;", "\n;;\n"] {
+      let parsed = parse(src)?;
+      assert!(
+        parsed.commands.is_empty(),
+        "expected no commands for {src:?}, got {parsed:?}"
+      );
+    }
     Ok(())
   }
 

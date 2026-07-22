@@ -303,4 +303,70 @@ mod tests {
     assert_eq!(parse_expr("1 > 2")?.0, binop!(Gt, lit!("1"), lit!("2")));
     Ok(())
   }
+
+  #[test]
+  fn skips_leading_and_trailing_whitespace() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("  1 + 2  ")?;
+    assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
+    assert!(rest.chars().all(|c| c.is_whitespace()));
+    Ok(())
+  }
+
+  #[test]
+  fn skips_whitespace_inside_groups() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("( 1 + 2 )")?;
+    assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
+    let (node, _) = parse_expr("1 + ( 2 * 3 )")?;
+    assert_eq!(node, binop!(Add, lit!("1"), binop!(Mul, lit!("2"), lit!("3"))));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_compact_binary_ops() -> Result<(), ParseError> {
+    let (node, _) = parse_expr("1/2")?;
+    assert_eq!(node, binop!(Div, lit!("1"), lit!("2")));
+    let (node, _) = parse_expr("5%2")?;
+    assert_eq!(node, binop!(Rem, lit!("5"), lit!("2")));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_braced_literal_atoms() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("{2}")?;
+    assert_eq!(
+      node,
+      ExprNode::Word(WordNode {
+        parts: vec![parser::WordPart::BracedLiteral("2".to_string())],
+      })
+    );
+    assert_eq!(rest, "");
+
+    let (node, _) = parse_expr("{2} + 3")?;
+    assert_eq!(
+      node,
+      binop!(
+        Add,
+        ExprNode::Word(WordNode {
+          parts: vec![parser::WordPart::BracedLiteral("2".to_string())],
+        }),
+        lit!("3")
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn rejects_operator_without_operands() {
+    assert!(parse_expr("==").is_err());
+    assert!(parse_expr("+").is_err());
+    assert!(parse_expr("1 +").is_err());
+  }
+
+  #[test]
+  fn leaves_unsupported_operators_unconsumed() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("0||1")?;
+    assert_eq!(node, lit!("0"));
+    assert_eq!(rest, "||1");
+    Ok(())
+  }
 }
