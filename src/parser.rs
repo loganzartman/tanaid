@@ -257,13 +257,12 @@ pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
       Some('"') => {
         let (parsed, rest) = parse_list_element_quoted(src)?;
 
-        if let ch = rest.chars().next()
-          && !is_list_element_terminator(ch)
-        {
+        let ch = rest.chars().next();
+        if !is_list_element_terminator(ch) {
           return Err(ParseError::Generic(format!(
             "unexpected character after {}: {}",
             parsed,
-            ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
+            ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string())
           )));
         }
 

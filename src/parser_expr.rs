@@ -175,6 +175,10 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
         }
 
+        if parts.is_empty() {
+          return Err(ParseError::Generic("expected word".to_string()));
+        }
+
         return Ok((ExprNode::Word(WordNode { parts }), src));
       }
 
@@ -389,6 +393,16 @@ mod tests {
     assert!(parse_expr("==").is_err());
     assert!(parse_expr("+").is_err());
     assert!(parse_expr("1 +").is_err());
+  }
+
+  #[test]
+  fn rejects_empty_expr_words() {
+    for src in ["=", "!", "?", ":", "&", "|", "()", "( )"] {
+      assert!(
+        parse_expr(src).is_err(),
+        "expected error for empty expr word {src:?}"
+      );
+    }
   }
 
   #[test]
