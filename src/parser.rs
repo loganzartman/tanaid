@@ -534,15 +534,6 @@ pub(crate) fn parse_varsub(mut src: &str) -> Result<(WordPart, &str), ParseError
         part_buffer.push_str(m.as_str());
         src = &src[m.end()..];
       }
-      (Some('\\'), _) => {
-        if let Some('$') = src.chars().nth(1) {
-          part_buffer.push_str(r"\$");
-          src = &src[2..];
-        } else {
-          part_buffer.push('\\');
-          src = &src[1..];
-        }
-      }
       (None | Some(_), _) => {
         // flush
         if !part_buffer.is_empty() {
