@@ -19,9 +19,16 @@ implements a (probably broken) subset of tcl:
   - `dict exists dictValue key ?key ...?`
   - `dict set dictVariable key ?key ...? value`
   - `expr arg ?arg arg ...?`
+  - `foreach varlist1 list1 ?varlist2 list2 ...? body`
   - `global ?varname ...?`
   - `if expr1 ?then? body1 elseif expr2 ?then? body2 elseif ... ?else? ?bodyN?`
+  - `incr varName ?increment?`
   - `info exists varName`
+  - `lappend listVar ?value value value ...?`
+  - `lindex listVal index`
+  - `list ?arg arg ...?`
+  - `llength listVal`
+  - `lreverse listVar`
   - `proc name args body`
   - `puts string`
   - `return ?result?`
