@@ -217,13 +217,18 @@ fn parse_command(mut src: &str, mode: ParseMode) -> Result<(CommandNode, &str), 
 }
 
 pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
+  let is_list_element_terminator =
+    |ch: Option<char>| matches!(ch, None | Some(' ' | '\t' | '\r' | '\n'));
+
   let mut items: Vec<String> = vec![];
   let mut first = true;
 
   while !src.is_empty() {
     // required whitespace separator
     let mut found_whitespace = false;
-    while let Some(ch @ (' ' | '\t' | '\r' | '\n')) = src.chars().next() {
+    while let Some(ch) = src.chars().next()
+      && is_list_element_terminator(Option::from(ch))
+    {
       found_whitespace = true;
       src = &src[ch.len_utf8()..];
     }
@@ -232,15 +237,46 @@ pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
     }
     first = false;
 
-    let (parsed, rest) = match src.chars().next() {
-      Some('{') => parse_braced_string(src)?,
-      Some('"') => parse_list_element_quoted(src)?,
-      Some(_) => parse_list_element_bare(src)?,
+    match src.chars().next() {
+      Some('{') => {
+        let (parsed, rest) = parse_braced_string(src)?;
+
+        if let ch = rest.chars().next()
+          && !is_list_element_terminator(ch)
+        {
+          return Err(ParseError::Generic(format!(
+            "unexpected character after {}: {}",
+            parsed,
+            ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
+          )));
+        }
+
+        items.push(parsed);
+        src = rest;
+      }
+      Some('"') => {
+        let (parsed, rest) = parse_list_element_quoted(src)?;
+
+        if let ch = rest.chars().next()
+          && !is_list_element_terminator(ch)
+        {
+          return Err(ParseError::Generic(format!(
+            "unexpected character after {}: {}",
+            parsed,
+            ch.map(|c| c.to_string()).unwrap_or("<eof>".to_string()),
+          )));
+        }
+
+        items.push(parsed);
+        src = rest;
+      }
+      Some(_) => {
+        let (parsed, rest) = parse_list_element_bare(src)?;
+        items.push(parsed);
+        src = rest;
+      }
       None => break,
     };
-
-    items.push(parsed);
-    src = rest;
   }
 
   Ok((items, src))
