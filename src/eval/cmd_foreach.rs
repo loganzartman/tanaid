@@ -73,9 +73,8 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
     // execute body
     match eval_script(&body_script, context, frame) {
       Ok(_) => Ok(()),
-      Err(EvalError::BreakError) => {
-        break;
-      }
+      Err(EvalError::BreakError) => break,
+      Err(EvalError::ContinueError) => Ok(()),
       Err(err) => Err(err),
     }?
   }

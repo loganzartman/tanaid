@@ -731,6 +731,32 @@ fn eval_foreach_break() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn eval_foreach_continue() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse(
+      "foreach x {1 2 3 4} {if {$x == 2} {continue}; lappend out $x}; set out",
+    )?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "1 3 4");
+  Ok(())
+}
+
+#[test]
+fn eval_while_continue() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse(
+      "set i 0; while {$i < 4} {incr i; if {$i == 2} {continue}; lappend out $i}; set out",
+    )?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "1 3 4");
+  Ok(())
+}
+
+#[test]
 fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let mut result = eval(

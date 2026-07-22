@@ -11,6 +11,7 @@ pub enum EvalError {
   ExprParseError(String),
   NotNumericError(String),
   BreakError,
+  ContinueError,
   ReturnError(Value),
   NotImplemented,
 }
@@ -28,6 +29,7 @@ impl std::fmt::Display for EvalError {
       ExprParseError(s) => write!(f, "Failed to parse expr: {}", s),
       NotNumericError(s) => write!(f, "Expected numeric value, got: {}", s),
       BreakError => write!(f, "Unexpected break command"),
+      ContinueError => write!(f, "Unexpected continue command"),
       ReturnError(_) => write!(f, "Unexpected return command"),
       NotImplemented => write!(f, "Not implemented"),
     }

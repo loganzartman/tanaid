@@ -25,6 +25,7 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
   while eval_expr(&test_expr, context, frame)?.repr_int()? != 0 {
     match eval_script(&body_script, context, frame) {
       Err(EvalError::BreakError) => break,
+      Err(EvalError::ContinueError) => {}
       Err(e) => return Err(e),
       Ok(_) => {}
     }
