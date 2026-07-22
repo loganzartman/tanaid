@@ -1,5 +1,7 @@
 # tanaid
 
+[_tan-uh-id_](https://en.wikipedia.org/wiki/Tanaidacea)
+
 i am learning rust and tcl by writing a tcl interpreter. i chose tcl because it is "very simple" and actually used for some things.
 
 implements a (probably broken) subset of tcl:
