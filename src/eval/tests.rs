@@ -381,3 +381,43 @@ fn eval_string_length() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(result.repr_int()?, 5);
   Ok(())
 }
+
+#[test]
+fn eval_list_empty() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
+  Ok(())
+}
+
+#[test]
+fn eval_list_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list a b c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b c");
+  Ok(())
+}
+
+#[test]
+fn eval_list_braced_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list {hello world} x")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{hello world} x");
+  Ok(())
+}
+
+#[test]
+fn eval_list_evals_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set x 1; list $x [expr 1 + 2]")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "1 3");
+  Ok(())
+}
+
+#[test]
+fn eval_list_nested() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("list [list a b] c")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{a b} c");
+  Ok(())
+}
