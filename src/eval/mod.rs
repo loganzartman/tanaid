@@ -12,6 +12,7 @@ mod cmd_info;
 mod cmd_lindex;
 mod cmd_list;
 mod cmd_llength;
+mod cmd_lreverse;
 mod cmd_proc;
 mod cmd_puts;
 mod cmd_return;
