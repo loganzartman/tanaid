@@ -398,7 +398,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
   Ok((WordNode { parts }, src))
 }
 
-fn parse_braced_string(mut src: &str) -> Result<(String, &str), ParseError> {
+pub(crate) fn parse_braced_string(mut src: &str) -> Result<(String, &str), ParseError> {
   match src.chars().next() {
     Some('{') => {
       src = &src[1..];

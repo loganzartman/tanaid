@@ -138,6 +138,32 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
     Err(_) => {}
   }
 
+  let ch_first = src.chars().next();
+  match ch_first {
+    None => return Err(ParseError::Generic("expected word".to_string())),
+    Some('{') => {
+      let (parsed, rest) = parser::parse_braced_string(src)?;
+
+      return Ok((
+        ExprNode::Word(WordNode {
+          parts: vec![WordPart::BracedLiteral(parsed)],
+        }),
+        rest,
+      ));
+    }
+    Some('"') => {
+      let (parsed, rest) = parser::parse_quoted(src, ParseMode::Script)?;
+
+      return Ok((
+        ExprNode::Word(WordNode {
+          parts: vec![parsed],
+        }),
+        rest,
+      ));
+    }
+    _ => {}
+  }
+
   loop {
     match src.chars().next() {
       None
@@ -168,16 +194,6 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
         }
 
         let (parsed, rest) = parser::parse_cmdsub(src)?;
-        parts.push(parsed);
-        src = rest;
-      }
-
-      Some('"') => {
-        if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
-        }
-
-        let (parsed, rest) = parser::parse_quoted(src, ParseMode::Script)?;
         parts.push(parsed);
         src = rest;
       }
@@ -327,7 +343,10 @@ mod tests {
     let (node, _) = parse_expr("( 1 + 2 )")?;
     assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
     let (node, _) = parse_expr("1 + ( 2 * 3 )")?;
-    assert_eq!(node, binop!(Add, lit!("1"), binop!(Mul, lit!("2"), lit!("3"))));
+    assert_eq!(
+      node,
+      binop!(Add, lit!("1"), binop!(Mul, lit!("2"), lit!("3")))
+    );
     Ok(())
   }
 
