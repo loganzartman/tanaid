@@ -44,8 +44,9 @@ pub fn eval_command(
     .iter()
     .map(|word| eval_word(word, context, frame))
     .collect::<Result<Vec<_>, _>>()?;
+  let name_and_args = words_evaled.as_mut_slice();
 
-  let [name, args @ ..] = words_evaled.as_mut_slice() else {
+  let [name, args @ ..] = name_and_args else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
 
@@ -58,8 +59,18 @@ pub fn eval_command(
 
   // builtin
   if let Some(result) = eval_builtin(name_str, args, context, frame) {
-    result
-  } else {
-    Err(EvalError::UndefinedCommand(name_str.to_string()))
+    return result;
   }
+
+  // user-defined unknown handler
+  if let Some(proc) = context.get_proc("unknown") {
+    return eval_proc("unknown", &proc, name_and_args, context, frame);
+  }
+
+  // builtin unknown handler
+  if let Some(result) = eval_builtin("unknown", name_and_args, context, frame) {
+    return result;
+  }
+
+  unreachable!("missing builtin handler for unknown command");
 }

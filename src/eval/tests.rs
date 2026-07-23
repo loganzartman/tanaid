@@ -766,3 +766,60 @@ fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
   assert_eq!(result.repr_str()?, "12 3");
   Ok(())
 }
+
+#[test]
+fn eval_undefined_command() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("bogus 1 2")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::UndefinedCommand(name)) if name == "bogus");
+  Ok(())
+}
+
+#[test]
+fn eval_unknown_invoke() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("unknown bogus 1 2")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::UndefinedCommand(name)) if name == "bogus");
+  Ok(())
+}
+
+#[test]
+fn eval_unknown_no_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("unknown")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_unknown_proc_receives_command_name() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("proc unknown {args} {return \"$args\"}; bogus a b")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "bogus a b");
+  Ok(())
+}
+
+#[test]
+fn eval_unknown_proc_invoked_directly() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("proc unknown {args} {return \"$args\"}; unknown a b")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_unknown_proc_not_used_for_defined_commands() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("proc unknown {args} {return oops}; proc f {} {return ok}; f; set x [expr 1]")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "1");
+  Ok(())
+}
