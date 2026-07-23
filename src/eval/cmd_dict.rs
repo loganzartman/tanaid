@@ -1,21 +1,19 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
-use crate::eval::eval_word;
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::{Dict, Value};
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let mut subcommand = words
+pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let mut subcommand = args
     .get(0)
-    .ok_or_else(|| EvalError::ArgumentError("dict requires subcommand".to_string()))
-    .map(|w| eval_word(w, context, frame))??;
+    .ok_or_else(|| EvalError::ArgumentError("dict requires subcommand".to_string()))?
+    .clone();
 
   let subcommand_str = subcommand.repr_str()?;
-  let rest = &words[1..];
+  let rest = &mut args[1..];
   match subcommand_str {
-    "create" => eval_create(rest, context, frame),
-    "exists" => eval_exists(rest, context, frame),
-    "get" => eval_get(rest, context, frame),
+    "create" => eval_create(rest),
+    "exists" => eval_exists(rest),
+    "get" => eval_get(rest),
     "set" => eval_set(rest, context, frame),
     _ => Err(EvalError::ArgumentError(format!(
       "unsupported dict subcommand: {}",
@@ -24,9 +22,9 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
   }
 }
 
-fn eval_create(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+fn eval_create(args: &mut [Value]) -> EvalCmdResult {
   let mut dict = Dict::new();
-  let mut it = words.iter();
+  let mut it = args.iter_mut();
   loop {
     let Some(k) = it.next() else { break };
     let Some(v) = it.next() else {
@@ -36,43 +34,33 @@ fn eval_create(words: &[WordNode], context: &mut EvalContext, frame: FrameId) ->
       )));
     };
 
-    let mut k_val = eval_word(k, context, frame)?;
-    let v_val = eval_word(v, context, frame)?;
-
-    dict.insert(k_val.repr_str()?.to_string(), v_val);
+    dict.insert(k.repr_str()?.to_string(), v.clone());
   }
 
   Ok(Value::from(dict))
 }
 
-fn eval_get(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let [val, keys @ ..] = words else {
+fn eval_get(args: &mut [Value]) -> EvalCmdResult {
+  let [val, keys @ ..] = args else {
     return Err(EvalError::ArgumentError(
       "wrong number of arguments, expects: dict get dictValue key ?key ...?".to_string(),
     ));
   };
 
-  let mut val_val = eval_word(val, context, frame)?;
-
-  let mut keys_strs: Vec<String> = vec![];
+  let mut current = val.clone();
   for key in keys {
-    let mut key_val = eval_word(key, context, frame)?;
-    keys_strs.push(String::from(key_val.repr_str()?));
-  }
-
-  for key in keys_strs {
-    let child_dict = val_val.repr_dict()?;
-    let Some(child_val) = child_dict.get(&key) else {
+    let dict = current.repr_dict()?;
+    let Some(child_val) = dict.get(key.repr_str()?) else {
       return Err(EvalError::Generic(format!("dict missing key: {}", key)));
     };
-    val_val = child_val.clone();
+    current = child_val.clone();
   }
 
-  Ok(val_val)
+  Ok(current)
 }
 
-fn eval_exists(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let [val, keys @ ..] = words else {
+fn eval_exists(args: &mut [Value]) -> EvalCmdResult {
+  let [val, keys @ ..] = args else {
     return Err(EvalError::ArgumentError(
       "wrong number of arguments, expects: dict has dictValue key ?key ...?".to_string(),
     ));
@@ -84,49 +72,36 @@ fn eval_exists(words: &[WordNode], context: &mut EvalContext, frame: FrameId) ->
     ));
   }
 
-  let mut val_val = eval_word(val, context, frame)?;
-
-  let mut keys_strs: Vec<String> = vec![];
+  let mut current = val.clone();
   for key in keys {
-    let mut key_val = eval_word(key, context, frame)?;
-    keys_strs.push(String::from(key_val.repr_str()?));
-  }
-
-  for key in keys_strs {
-    let child_dict = val_val.repr_dict()?;
-    let Some(child_val) = child_dict.get(&key) else {
+    let dict = current.repr_dict()?;
+    let Some(child_val) = dict.get(key.repr_str()?) else {
       return Ok(Value::from(0));
     };
-    val_val = child_val.clone();
+    current = child_val.clone();
   }
 
   Ok(Value::from(1))
 }
 
-fn eval_set(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let [var, keys @ .., val] = words else {
+fn eval_set(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let [var, keys @ .., val] = args else {
     return Err(EvalError::ArgumentError(
       "wrong number of arguments, expects: dict set dictVariable key ?key ...? value".to_string(),
     ));
   };
 
-  let mut var_val = eval_word(var, context, frame)?;
-  let var_str = var_val.repr_str()?;
-
   let mut keys_strs: Vec<String> = vec![];
   for key in keys {
-    let mut key_val = eval_word(key, context, frame)?;
-    keys_strs.push(String::from(key_val.repr_str()?));
+    keys_strs.push(String::from(key.repr_str()?));
   }
 
-  let val_val = eval_word(val, context, frame)?;
-
   let dict_val = context
-    .get_variable(frame, var_str)
-    .ok_or_else(|| EvalError::UndefinedVariable(format!("undefined variable: {}", var_str)))?;
+    .get_variable(frame, var.repr_str()?)
+    .ok_or_else(|| EvalError::UndefinedVariable(format!("undefined variable: {}", var)))?;
 
-  let new_val = set_path(dict_val.clone(), keys_strs.as_slice(), &val_val)?;
-  context.set_variable(frame, var_str, new_val.clone());
+  let new_val = set_path(dict_val.clone(), keys_strs.as_slice(), val)?;
+  context.set_variable(frame, var.repr_str()?, new_val.clone());
 
   Ok(new_val)
 }

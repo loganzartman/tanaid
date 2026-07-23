@@ -1,20 +1,17 @@
-use super::{EvalContext, FrameId, Proc, cmd::EvalCmdResult, eval_word};
+use super::{EvalContext, FrameId, Proc, cmd::EvalCmdResult};
 use crate::eval_error::EvalError;
-use crate::parser::{self, WordNode};
+use crate::parser::{self};
 use crate::value::Value;
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let (mut name_val, mut params_val, mut body_val) = match words {
-    [name, params, body] => (
-      eval_word(name, context, frame)?,
-      eval_word(params, context, frame)?,
-      eval_word(body, context, frame)?,
-    ),
-    [..] => {
-      return Err(EvalError::ArgumentError(
-        "wrong number of arguments; expects: proc name params body".to_string(),
-      ));
-    }
+pub(super) fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  _frame: FrameId,
+) -> EvalCmdResult {
+  let [name_val, params_val, body_val] = args else {
+    return Err(EvalError::ArgumentError(
+      "wrong number of arguments; expects: proc name params body".to_string(),
+    ));
   };
 
   let name = name_val.repr_str()?;

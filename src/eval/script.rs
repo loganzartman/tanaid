@@ -39,12 +39,17 @@ pub fn eval_command(
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Result<Value, EvalError> {
-  let [name, args @ ..] = command.words.as_slice() else {
+  let mut words_evaled = command
+    .words
+    .iter()
+    .map(|word| eval_word(word, context, frame))
+    .collect::<Result<Vec<_>, _>>()?;
+
+  let [name, args @ ..] = words_evaled.as_mut_slice() else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
 
-  let mut name_value = eval_word(&name, context, frame)?;
-  let name_str = name_value.repr_str()?;
+  let name_str = name.repr_str()?;
 
   // user-defined proc
   if let Some(proc) = context.get_proc(name_str) {

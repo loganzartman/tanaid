@@ -4,15 +4,14 @@ use super::{
   cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string, cmd_while,
 };
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::Value;
 
 pub(super) type EvalCmdResult = Result<Value, EvalError>;
-type EvalCmd = fn(&[WordNode], &mut EvalContext, FrameId) -> EvalCmdResult;
+type EvalCmd = fn(&mut [Value], &mut EvalContext, FrameId) -> EvalCmdResult;
 
 pub(super) fn eval_builtin(
   name: &str,
-  words: &[WordNode],
+  args: &mut [Value],
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Option<EvalCmdResult> {
@@ -40,5 +39,5 @@ pub(super) fn eval_builtin(
     _ => return None,
   };
 
-  Some(eval(words, context, frame))
+  Some(eval(args, context, frame))
 }

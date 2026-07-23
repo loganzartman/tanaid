@@ -1,13 +1,16 @@
-use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_word};
+use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::Value;
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let [mut string] = match words {
+pub(super) fn eval(
+  args: &mut [Value],
+  _context: &mut EvalContext,
+  _frame: FrameId,
+) -> EvalCmdResult {
+  let string = match args {
     [_, _, _] => todo!(),
     [_, _] => todo!(),
-    [string] => [eval_word(string, context, frame)?],
+    [string] => string,
     [..] => {
       return Err(EvalError::Generic(
         "too many arguments; expects string".to_string(),

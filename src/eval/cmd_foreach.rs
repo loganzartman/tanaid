@@ -1,34 +1,30 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
-use crate::eval::{eval_script, eval_word};
+use crate::eval::eval_script;
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::{List, Value};
 
 const WRONG_ARGS_MSG: &str =
   "wrong number of arguments; expects: foreach varlist1 list1 ?varlist2 list2 ...? body";
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let [varlists_lists_words @ .., body] = words else {
+pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let [varlists_lists_args @ .., body] = args else {
     return Err(EvalError::ArgumentError(WRONG_ARGS_MSG.to_string()));
   };
 
   // eval args
   let mut varlists_lists: Vec<(Vec<String>, List)> = vec![];
-  let mut vl_it = varlists_lists_words.iter();
+  let mut vl_it = varlists_lists_args.iter_mut();
   loop {
-    let Some(varlist_word) = vl_it.next() else {
+    let Some(varlist_val) = vl_it.next() else {
       break;
     };
-    let Some(list_word) = vl_it.next() else {
+    let Some(list) = vl_it.next() else {
       return Err(EvalError::ArgumentError(WRONG_ARGS_MSG.to_string()));
     };
 
-    let mut varlist_vals = eval_word(varlist_word, context, frame)?
-      .repr_list()?
-      .as_ref()
-      .clone();
     let mut varlist: Vec<String> = vec![];
-    for val in varlist_vals.iter_mut() {
+    let mut varlist_elems = varlist_val.repr_list()?.as_ref().clone();
+    for val in varlist_elems.iter_mut() {
       varlist.push(val.repr_str()?.to_string());
     }
     if varlist.is_empty() {
@@ -37,13 +33,10 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
       ));
     }
 
-    let list = eval_word(list_word, context, frame)?.repr_list()?;
-
-    varlists_lists.push((varlist, list.as_ref().clone()));
+    varlists_lists.push((varlist, list.repr_list()?.as_ref().clone()));
   }
 
-  let mut body_val = eval_word(body, context, frame)?;
-  let body_str = body_val.repr_str()?;
+  let body_str = body.repr_str()?;
   let (body_script, _) = context
     .parse_script_caching(body_str)
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?

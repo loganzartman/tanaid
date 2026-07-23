@@ -1,9 +1,9 @@
-use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_word};
+use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
+use crate::value::Value;
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let (name, maybe_value) = match words {
+pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let (name, maybe_value) = match args {
     [name, value] => (name, Some(value)),
     [name] => (name, None),
     [] => return Err(EvalError::Generic("missing variable name".to_string())),
@@ -14,11 +14,9 @@ pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId
     }
   };
 
-  let mut name = eval_word(&name, context, frame)?;
   if let Some(value) = maybe_value {
-    let value = eval_word(&value, context, frame)?;
     context.set_variable(frame, name.repr_str()?, value.clone());
-    Ok(value)
+    Ok(value.clone())
   } else {
     Ok(
       context

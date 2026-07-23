@@ -1,17 +1,14 @@
-use super::{EvalContext, FrameId, GLOBAL_FRAME, cmd::EvalCmdResult, eval_word};
+use super::{EvalContext, FrameId, GLOBAL_FRAME, cmd::EvalCmdResult};
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::Value;
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  for word in words {
-    let mut name_node = eval_word(word, context, frame)?;
-
+pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  for name_val in args {
     if frame == GLOBAL_FRAME {
       continue;
     }
 
-    let name = name_node.repr_str()?;
+    let name = name_val.repr_str()?;
 
     if context.get_variable(frame, name).is_some() {
       return Err(EvalError::ArgumentError(format!(
