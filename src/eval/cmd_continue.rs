@@ -1,13 +1,12 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
-use crate::eval_error::EvalError;
-use crate::parser::WordNode;
+use crate::{eval_error::EvalError, value::Value};
 
 pub(super) fn eval(
-  words: &[WordNode],
+  args: &mut [Value],
   _context: &mut EvalContext,
   _frame: FrameId,
 ) -> EvalCmdResult {
-  if !words.is_empty() {
+  if !args.is_empty() {
     return Err(EvalError::ArgumentError(
       "continue expects no arguments".to_string(),
     ));

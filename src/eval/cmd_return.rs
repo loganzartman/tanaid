@@ -1,12 +1,14 @@
-use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_word};
+use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::Value;
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  match words.get(0).map(|w| eval_word(w, context, frame)) {
-    Some(Ok(val)) => Err(EvalError::ReturnError(val)),
-    Some(Err(e)) => Err(e),
+pub(super) fn eval(
+  args: &mut [Value],
+  _context: &mut EvalContext,
+  _frame: FrameId,
+) -> EvalCmdResult {
+  match args.get(0) {
+    Some(val) => Err(EvalError::ReturnError(val.clone())),
     None => Err(EvalError::ReturnError(Value::none())),
-  }?
+  }
 }

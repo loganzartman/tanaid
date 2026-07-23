@@ -1,24 +1,21 @@
-use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_expr, eval_script, eval_word};
+use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_expr, eval_script};
 use crate::eval_error::EvalError;
-use crate::parser::WordNode;
 use crate::value::Value;
 
-pub(super) fn eval(words: &[WordNode], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let [test, body] = words else {
+pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+  let [test, body] = args else {
     return Err(EvalError::Generic(
       "while requires two arguments: test and body".to_string(),
     ));
   };
 
-  let mut expr_src = eval_word(test, context, frame)?;
-  let expr_parsed = context
-    .parse_expr_caching(expr_src.repr_str()?)
+  let test_parsed = context
+    .parse_expr_caching(test.repr_str()?)
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
-  let (test_expr, _) = expr_parsed.as_ref();
+  let (test_expr, _) = test_parsed.as_ref();
 
-  let mut body_src = eval_word(body, context, frame)?;
   let body_parsed = context
-    .parse_script_caching(body_src.repr_str()?)
+    .parse_script_caching(body.repr_str()?)
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
   let (body_script, _) = body_parsed.as_ref();
 
