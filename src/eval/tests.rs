@@ -196,6 +196,81 @@ fn eval_global_does_not_overwrite_local_variable() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+fn eval_uplevel_relative_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {uplevel 1 {set x 2}}; f; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 2);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_relative_reads_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 1; proc f {} {uplevel 1 {expr $x}}; f")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 1);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_absolute_writes_global_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {uplevel #0 {set x 3}}; f; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 3);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_relative_nested_to_global() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "proc inner {} {uplevel 2 {set x 4}}; proc outer {} {inner}; outer; expr $x",
+  )?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 4);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_relative_nested_to_caller() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "proc inner {} {uplevel 1 {set y 5}}; proc outer {} {inner; expr $y}; outer",
+  )?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 5);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("uplevel")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("uplevel 1")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_invalid_level() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("proc f {} {uplevel -1 {expr 1}}; f")?,
+    &mut ctx,
+  );
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(
+    &parser::parse("proc f {} {uplevel 2 {expr 1}}; f")?,
+    &mut ctx,
+  );
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
 fn eval_proc_args_rest_invoke() -> Result<(), Box<dyn std::error::Error>> {
   let ast =
     parser::parse("proc drop_first_two {x y args} {return \"$args\"}; drop_first_two a b c d e")?;
