@@ -205,6 +205,24 @@ fn eval_uplevel_relative_writes_caller_variable() -> Result<(), Box<dyn std::err
 }
 
 #[test]
+fn eval_uplevel_default_level_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {uplevel {set x 2}}; f; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 2);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_default_level_reads_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 1; proc f {} {uplevel {expr $x}}; f")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 1);
+  Ok(())
+}
+
+#[test]
 fn eval_uplevel_relative_reads_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
   let ast = parser::parse("set x 1; proc f {} {uplevel 1 {expr $x}}; f")?;
   let mut ctx = EvalContext::new();
