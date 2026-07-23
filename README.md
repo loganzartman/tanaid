@@ -15,29 +15,31 @@ implements a (probably broken) subset of tcl:
   - `"quoted strings"`
   - `"$variable and [command]"` substitution in quoted strings
 - builtin commands
-  - `break`
-  - `dict create ?key value ...?`
-  - `dict get dictValue ?key ...?`
-  - `dict exists dictValue key ?key ...?`
-  - `dict set dictVariable key ?key ...? value`
-  - `expr arg ?arg arg ...?`
-  - `foreach varlist1 list1 ?varlist2 list2 ...? body`
-  - `global ?varname ...?`
-  - `if expr1 ?then? body1 elseif expr2 ?then? body2 elseif ... ?else? ?bodyN?`
-  - `incr varName ?increment?`
-  - `info exists varName`
-  - `lappend listVar ?value value value ...?`
-  - `lindex listVal index`
-  - `list ?arg arg ...?`
-  - `llength listVal`
-  - `lreverse listVal`
-  - `proc name args body`
-  - `puts string`
-  - `return ?result?`
-  - `set varName ?value?`
-  - `string index string charIndex`
-  - `string length string`
-  - `while test body`
+  - [`break`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/break.html)
+  - [`continue`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/continue.html)
+  - [`dict create ?key value ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M6)
+  - [`dict get dictValue ?key ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M13)
+  - [`dict exists dictValue key ?key ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M7)
+  - [`dict set dictVariable key ?key ...? value`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M24)
+  - [`expr arg ?arg arg ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/expr.html)
+  - [`foreach varlist1 list1 ?varlist2 list2 ...? body`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/foreach.html)
+  - [`global ?varname ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/global.html)
+  - [`if expr1 ?then? body1 elseif expr2 ?then? body2 elseif ... ?else? ?bodyN?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/if.html)
+  - [`incr varName ?increment?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/incr.html)
+  - [`info exists varName`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/info.html#M27)
+  - [`lappend listVar ?value value value ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/lappend.html)
+  - [`lindex listVal index`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/lindex.html)
+  - [`list ?arg arg ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/list.html)
+  - [`llength listVal`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/llength.html)
+  - [`lreverse listVal`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/lreverse.html)
+  - [`proc name args body`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/proc.html)
+  - [`puts string`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/puts.html)
+  - [`return ?result?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/return.html)
+  - [`set varName ?value?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/set.html)
+  - [`string index string charIndex`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/string.html#M9)
+  - [`string length string`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/string.html#M35)
+  - [`unknown cmdName ?arg arg ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/unknown.html)
+  - [`while test body`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/while.html)
 
 this is enough to write simple scripts like:
 

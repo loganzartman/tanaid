@@ -3,6 +3,7 @@ use super::{
   cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lindex, cmd_list, cmd_llength, cmd_lreverse,
   cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string, cmd_while,
 };
+use crate::eval::cmd_unknown;
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
@@ -35,6 +36,7 @@ pub(super) fn eval_builtin(
     "return" => cmd_return::eval,
     "set" => cmd_set::eval,
     "string" => cmd_string::eval,
+    "unknown" => cmd_unknown::eval,
     "while" => cmd_while::eval,
     _ => return None,
   };
