@@ -22,10 +22,13 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     absolute if absolute.starts_with('#') => {
       usize::try_from(Value::new(absolute.strip_prefix('#').unwrap()).repr_int()?)
         .map(|u| GLOBAL_FRAME + u)
+        .ok()
     }
-    _ => usize::try_from(level.repr_int()?).map(|u| u - frame),
+    _ => usize::try_from(level.repr_int()?)
+      .ok()
+      .and_then(|u| frame.checked_sub(u)),
   };
-  let Ok(target_frame) = target_frame else {
+  let Some(target_frame) = target_frame else {
     return Err(EvalError::ArgumentError(format!(
       "invalid level: {}",
       level
