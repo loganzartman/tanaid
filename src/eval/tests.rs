@@ -365,9 +365,31 @@ fn eval_upvar_reading_unset_target_is_undefined() -> Result<(), Box<dyn std::err
 }
 
 #[test]
-fn eval_upvar_odd_args() -> Result<(), Box<dyn std::error::Error>> {
+fn eval_upvar_even_argcount_omits_level() -> Result<(), Box<dyn std::error::Error>> {
+  // With an even number of args the level is omitted (defaults to 1), so "1" is
+  // the name of the caller's variable and "a" is the local alias. This matches
+  // Tcl's argument-count parity rule.
+  let ast = parser::parse("proc f {} {upvar 1 a; set a NEW}; f; set 1")?;
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("proc f {} {upvar 1 a}; f")?, &mut ctx);
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "NEW");
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_odd_argcount_requires_valid_level() -> Result<(), Box<dyn std::error::Error>> {
+  // With an odd number of args the first arg must be a level; a non-level value
+  // is an error rather than being reinterpreted as a variable name.
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("proc f {} {upvar foo x v}; f")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_level_without_pairs() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("proc f {} {upvar 1}; f")?, &mut ctx);
   assert_matches!(result, Err(EvalError::ArgumentError(_)));
   Ok(())
 }

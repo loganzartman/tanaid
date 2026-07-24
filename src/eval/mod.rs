@@ -28,7 +28,6 @@ mod cmd_upvar;
 mod cmd_while;
 mod context;
 mod expr;
-mod extract_target_frame_and_rest;
 mod proc;
 mod script;
 #[cfg(test)]
