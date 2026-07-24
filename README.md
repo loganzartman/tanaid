@@ -39,6 +39,8 @@ implements a (probably broken) subset of tcl:
   - [`string index string charIndex`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/string.html#M9)
   - [`string length string`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/string.html#M35)
   - [`unknown cmdName ?arg arg ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/unknown.html)
+  - [`uplevel ?level? arg ?arg ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/uplevel.html)
+  - [`upvar ?level? otherVar myVar ?otherVar myVar ...?`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/upvar.html)
   - [`while test body`](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/while.html)
 
 this is enough to write simple scripts like:
