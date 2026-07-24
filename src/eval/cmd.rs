@@ -1,7 +1,7 @@
 use super::{
   EvalContext, FrameId, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_global,
   cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lindex, cmd_list, cmd_llength, cmd_lreverse,
-  cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string, cmd_uplevel, cmd_while,
+  cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string, cmd_uplevel, cmd_upvar, cmd_while,
 };
 use crate::eval::cmd_unknown;
 use crate::eval_error::EvalError;
@@ -38,6 +38,7 @@ pub(super) fn eval_builtin(
     "string" => cmd_string::eval,
     "unknown" => cmd_unknown::eval,
     "uplevel" => cmd_uplevel::eval,
+    "upvar" => cmd_upvar::eval,
     "while" => cmd_while::eval,
     _ => return None,
   };

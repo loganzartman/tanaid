@@ -4,7 +4,7 @@ use crate::eval::extract_target_frame_and_rest::extract_target_frame_and_rest;
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
-const WRONG_ARGS_MSG: &str = "wrong number of args; expected: {} ?level? arg ?arg ...?";
+const WRONG_ARGS_MSG: &str = "wrong number of args; expected: uplevel ?level? arg ?arg ...?";
 
 pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
   let (target_frame, rest) = extract_target_frame_and_rest(args, frame, WRONG_ARGS_MSG)?;
