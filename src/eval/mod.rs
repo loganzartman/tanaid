@@ -23,6 +23,8 @@ mod cmd_return;
 mod cmd_set;
 mod cmd_string;
 mod cmd_unknown;
+mod cmd_uplevel;
+mod cmd_upvar;
 mod cmd_while;
 mod context;
 mod expr;

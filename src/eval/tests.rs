@@ -196,6 +196,221 @@ fn eval_global_does_not_overwrite_local_variable() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+fn eval_uplevel_relative_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {uplevel 1 {set x 2}}; f; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 2);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_default_level_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {uplevel {set x 2}}; f; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 2);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_default_level_reads_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 1; proc f {} {uplevel {expr $x}}; f")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 1);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_relative_reads_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 1; proc f {} {uplevel 1 {expr $x}}; f")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 1);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_absolute_writes_global_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {uplevel #0 {set x 3}}; f; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 3);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_relative_nested_to_global() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "proc inner {} {uplevel 2 {set x 4}}; proc outer {} {inner}; outer; expr $x",
+  )?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 4);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_relative_nested_to_caller() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "proc inner {} {uplevel 1 {set y 5}}; proc outer {} {inner; expr $y}; outer",
+  )?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 5);
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("uplevel")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("uplevel 1")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_uplevel_invalid_level() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("proc f {} {uplevel -1 {expr 1}}; f")?,
+    &mut ctx,
+  );
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(
+    &parser::parse("proc f {} {uplevel 2 {expr 1}}; f")?,
+    &mut ctx,
+  );
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_relative_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 1; proc f {name} {upvar 1 $name v; set v 99}; f x; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 99);
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_default_level_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 1; proc f {name} {upvar $name v; set v 99}; f x; expr $x")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 99);
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_reads_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set x 42; proc f {} {upvar 1 x v; expr $v}; f")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 42);
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_absolute_links_global_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {upvar #0 g v; set v 7}; f; expr $g")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 7);
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_multiple_pairs() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "proc f {} {upvar 1 a x b y; set x 1; set y 2}; f; return \"$a $b\"",
+  )?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "1 2");
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_creates_target_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {upvar 1 newvar v; set v 5}; f; expr $newvar")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 5);
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_nested_level_two() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse(
+    "set x 0; proc inner {} {upvar 2 x v; set v 8}; proc outer {} {inner}; outer; expr $x",
+  )?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_int()?, 8);
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_reading_unset_target_is_undefined() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {} {upvar 1 nope v; expr $v}; f")?;
+  let mut ctx = EvalContext::new();
+  let result = eval(&ast, &mut ctx);
+  assert_matches!(result, Err(EvalError::UndefinedVariable(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_even_argcount_omits_level() -> Result<(), Box<dyn std::error::Error>> {
+  // With an even number of args the level is omitted (defaults to 1), so "1" is
+  // the name of the caller's variable and "a" is the local alias. This matches
+  // Tcl's argument-count parity rule.
+  let ast = parser::parse("proc f {} {upvar 1 a; set a NEW}; f; set 1")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "NEW");
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_odd_argcount_requires_valid_level() -> Result<(), Box<dyn std::error::Error>> {
+  // With an odd number of args the first arg must be a level; a non-level value
+  // is an error rather than being reinterpreted as a variable name.
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("proc f {} {upvar foo x v}; f")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_level_without_pairs() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("proc f {} {upvar 1}; f")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_no_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("upvar")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_upvar_invalid_level() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("proc f {} {upvar 5 x v; set v 1}; f")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
 fn eval_proc_args_rest_invoke() -> Result<(), Box<dyn std::error::Error>> {
   let ast =
     parser::parse("proc drop_first_two {x y args} {return \"$args\"}; drop_first_two a b c d e")?;
