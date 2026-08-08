@@ -1,0 +1,15 @@
+[package]
+name = "tanaid-wasm"
+edition.workspace = true
+version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tanaid = { path = "../tanaid", default-features = false }
+wasm-bindgen = "0.2"
+
+[lints]
+workspace = true

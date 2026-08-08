@@ -20,6 +20,7 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub struct EvalFrame {
+  #[expect(dead_code, reason = "populated by push_frame; not read back yet")]
   caller: Option<FrameId>,
   variables: HashMap<String, Binding>,
 }

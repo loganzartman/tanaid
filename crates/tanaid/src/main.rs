@@ -77,7 +77,9 @@ mod tests {
     let mut context = eval::EvalContext::new();
     let opts = RunOpts { debug: true };
     run_source(
-      fs::read_to_string("./sample/fib.tcl")?.as_str(),
+      // Relative to the manifest, not the cwd: `cargo test` runs from the
+      // package root, but sample/ lives at the workspace root.
+      fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../sample/fib.tcl"))?.as_str(),
       &mut context,
       &opts,
     )
