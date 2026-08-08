@@ -5,9 +5,9 @@
   "editor.defaultFormatter": "rust-lang.rust-analyzer",
   "rust-analyzer.server.path": "rust-analyzer",
   "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
   },
   "[typescript]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.defaultFormatter": "oxc.oxc-vscode"
   }
 }
