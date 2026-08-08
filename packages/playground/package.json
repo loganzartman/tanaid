@@ -9,9 +9,15 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "typescript": "^7.0.2",
     "vite": "^8.2.1"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.8",
+    "@sourcebot/codemirror-lang-tcl": "^1.0.13",
     "tanaid": "workspace:^"
   }
 }
