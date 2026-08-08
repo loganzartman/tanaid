@@ -6,5 +6,8 @@ resolver = "3"
 edition = "2024"
 version = "0.1.0"
 
+[workspace.lints.rust]
+warnings = "deny"
+
 [profile.release]
 debug = true
