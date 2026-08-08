@@ -218,6 +218,10 @@ importers:
         version: 0.15.0
 
   packages/playground:
+    dependencies:
+      tanaid:
+        specifier: workspace:^
+        version: link:../tanaid
     devDependencies:
       vite:
         specifier: ^8.2.1
