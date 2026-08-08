@@ -4,5 +4,5 @@ import { wasm } from "rolldown-plugin-wasm";
 export default defineConfig({
   dts: true,
   entry: ["./src/index.ts"],
-  plugins: [wasm()],
+  plugins: [wasm({ targetEnv: "auto" })],
 });
