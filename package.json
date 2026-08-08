@@ -1,14 +1,18 @@
 {
   "name": "tanaid-workspace",
   "version": "0.0.0",
+  "packageManager": "pnpm@11.20.0",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^11.13.0",
+      "version": "11.20.0",
       "onFail": "download"
     }
   },
   "type": "module",
+  "devDependencies": {
+    "wasm-pack": "0.15.0"
+  },
   "scripts": {
     "build": "pnpm run --recursive build",
     "clean": "pnpm run --recursive clean",
