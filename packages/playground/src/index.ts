@@ -69,7 +69,7 @@ function runTcl(
 }
 
 const inputContainerEl = document.getElementById("input")! as HTMLDivElement;
-const outputEl = document.getElementById("output")! as HTMLPreElement;
+const outputEl = document.getElementById("output")! as HTMLDivElement;
 
 const initialDoc = `proc fib {x} {
   if {$x <= 0} {
@@ -85,6 +85,7 @@ fib 8`;
 
 let cancel: (() => void) | null = null;
 const evaluate = async (code: string) => {
+  outputEl.innerText = "...";
   try {
     cancel?.();
     let result;
