@@ -231,6 +231,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.8
         version: 6.43.8
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@sourcebot/codemirror-lang-tcl':
         specifier: ^1.0.13
         version: 1.0.13

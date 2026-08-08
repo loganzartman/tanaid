@@ -1,8 +1,8 @@
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
+import { vscodeTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
 
 function runTcl(
@@ -111,7 +111,7 @@ const view = new EditorView({
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      vscodeTheme(),
       tcl(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
