@@ -49,6 +49,12 @@ const c = {
   activeLineNumber: ld("#0B216F", "#C6C6C6"),
   /** editorIndentGuide.background1 */
   indentGuide: ld("#D3D3D3", "#404040"),
+  /**
+   * editor.lineHighlightBorder. VS Code leaves editor.lineHighlightBackground
+   * unset (registry default is null), so the cursor's line gets a border rather
+   * than a fill.
+   */
+  lineHighlightBorder: ld("#eeeeee", "#282828"),
   /** editorBracketMatch.background / .border */
   matchingBracket: ld("#0064001a", "#0064001a"),
   matchingBracketBorder: ld("#B9B9B9", "#888888"),
@@ -105,6 +111,7 @@ const vscodeEditorTheme = EditorView.theme({
   },
   ".cm-content": {
     caretColor: c.cursor,
+    fontFamily: "Monaspace Neon",
   },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: c.cursor,
@@ -120,13 +127,18 @@ const vscodeEditorTheme = EditorView.theme({
     backgroundColor: c.background,
     color: c.lineNumber,
     border: "none",
+    fontFamily: "Monaspace Neon",
   },
   ".cm-activeLineGutter": {
     backgroundColor: "transparent",
     color: c.activeLineNumber,
   },
+  // `backgroundColor` overrides the base theme's own active-line fill; the
+  // inset outline draws VS Code's border box without shifting the text.
   ".cm-activeLine": {
     backgroundColor: "transparent",
+    outline: `1px solid ${c.lineHighlightBorder}`,
+    outlineOffset: "-1px",
   },
   "&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket": {
     backgroundColor: c.matchingBracket,

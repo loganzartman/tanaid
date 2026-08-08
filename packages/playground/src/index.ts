@@ -1,5 +1,11 @@
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import {
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
 import { vscodeTheme } from "./theme.ts";
@@ -111,6 +117,9 @@ const view = new EditorView({
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
+      lineNumbers(),
+      highlightActiveLine(),
+      highlightActiveLineGutter(),
       vscodeTheme(),
       tcl(),
       EditorView.updateListener.of((update) => {
