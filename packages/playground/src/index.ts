@@ -1,8 +1,14 @@
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import {
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
+import { vscodeTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
 
 function runTcl(
@@ -63,7 +69,7 @@ function runTcl(
 }
 
 const inputContainerEl = document.getElementById("input")! as HTMLDivElement;
-const outputEl = document.getElementById("output")! as HTMLPreElement;
+const outputEl = document.getElementById("output")! as HTMLDivElement;
 
 const initialDoc = `proc fib {x} {
   if {$x <= 0} {
@@ -79,6 +85,7 @@ fib 8`;
 
 let cancel: (() => void) | null = null;
 const evaluate = async (code: string) => {
+  outputEl.innerText = "...";
   try {
     cancel?.();
     let result;
@@ -111,7 +118,10 @@ const view = new EditorView({
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      lineNumbers(),
+      highlightActiveLine(),
+      highlightActiveLineGutter(),
+      vscodeTheme(),
       tcl(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
