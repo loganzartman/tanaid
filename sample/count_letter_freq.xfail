@@ -1,0 +1,1 @@
+tanaid's Dict is a HashMap (crates/tanaid/src/value.rs), so dict key order is the hash order rather than Tcl's insertion order.

@@ -58,30 +58,13 @@ fn run_source(
     println!("{:#?}", parsed)
   }
 
-  let mut result = eval::eval(&parsed, context)?;
+  // The script's own `puts` calls are the only output: like tclsh, we do not
+  // print the value the script evaluated to.
+  let result = eval::eval(&parsed, context)?;
   if opts.debug {
     println!("=== result ===");
     println!("{:#?}", result);
   }
 
-  println!("{}", result.repr_str()?);
   Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test() -> Result<(), Box<dyn std::error::Error>> {
-    let mut context = eval::EvalContext::new();
-    let opts = RunOpts { debug: true };
-    run_source(
-      // Relative to the manifest, not the cwd: `cargo test` runs from the
-      // package root, but sample/ lives at the workspace root.
-      fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../sample/fib.tcl"))?.as_str(),
-      &mut context,
-      &opts,
-    )
-  }
 }

@@ -21,5 +21,14 @@ reedline = { version = "0.48.0", optional = true }
 lru = "0.18.0"
 regex = "1.12.4"
 
+[dev-dependencies]
+libtest-mimic = "0.8.2"
+
+# The sample suite builds its own list of test cases at runtime, so it replaces
+# libtest rather than being driven by it.
+[[test]]
+name = "samples"
+harness = false
+
 [lints]
 workspace = true
