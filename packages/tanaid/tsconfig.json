@@ -1,5 +1,5 @@
 {
   "compilerOptions": {
-    "types": ["rolldown-plugin-wasm/types"],
-  },
+    "types": ["rolldown-plugin-wasm/types"]
+  }
 }
