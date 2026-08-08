@@ -1,7 +1,19 @@
 {
   "name": "tanaid-workspace",
   "version": "0.0.0",
-  "packageManager": "pnpm@11.20.0",
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint && oxfmt --check",
+    "lint:fix": "oxlint --fix && oxfmt",
+    "build": "pnpm run --recursive build",
+    "clean": "pnpm run --recursive clean",
+    "test": "pnpm run --recursive test"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0",
+    "wasm-pack": "0.15.0"
+  },
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
@@ -9,13 +21,5 @@
       "onFail": "download"
     }
   },
-  "type": "module",
-  "devDependencies": {
-    "wasm-pack": "0.15.0"
-  },
-  "scripts": {
-    "build": "pnpm run --recursive build",
-    "clean": "pnpm run --recursive clean",
-    "test": "pnpm run --recursive test"
-  }
+  "packageManager": "pnpm@11.20.0"
 }
