@@ -89,9 +89,25 @@ const evaluate = async (code: string) => {
   }
 };
 
+const loadSrc = () => {
+  const hash = window.location.hash.substring(1).trim();
+  if (!hash.length) {
+    return null;
+  }
+  try {
+    return atob(hash);
+  } catch {
+    return null;
+  }
+};
+
+const storeSrc = (src: string) => {
+  window.location.hash = btoa(src);
+};
+
 const view = new EditorView({
   state: EditorState.create({
-    doc: initialDoc,
+    doc: loadSrc() ?? initialDoc,
     extensions: [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -99,6 +115,7 @@ const view = new EditorView({
       tcl(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
+          storeSrc(update.state.doc.toString());
           evaluate(update.state.doc.toString()).catch((e) => console.error(e));
         }
       }),
