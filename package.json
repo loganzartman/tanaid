@@ -1,0 +1,12 @@
+{
+  "name": "tanaid-workspace",
+  "version": "0.0.0",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.13.0",
+      "onFail": "download"
+    }
+  },
+  "type": "module"
+}

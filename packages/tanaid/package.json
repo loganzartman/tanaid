@@ -1,0 +1,17 @@
+{
+  "name": "tanaid",
+  "version": "1.0.0",
+  "license": "ISC",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsdown"
+  },
+  "devDependencies": {
+    "rolldown-plugin-wasm": "^0.3.2",
+    "tsdown": "^0.22.14",
+    "typescript": "^7.0.2"
+  }
+}

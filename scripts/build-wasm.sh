@@ -1,12 +1,10 @@
-#!/usr/bin/bash
+#!/bin/bash
 set -euo pipefail
 
-wasm-pack build crates/tanaid-wasm \
-  --target nodejs \
-  --out-dir pkg/node \
-  --release
+rm -rf crates/tanaid-wasm/pkg
 
 wasm-pack build crates/tanaid-wasm \
-  --target web \
-  --out-dir pkg/web \
+  --target bundler \
+  --out-dir pkg/bundler \
+  --no-pack \
   --release
