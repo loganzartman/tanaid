@@ -1,10 +1,5 @@
 @import url("./fonts.css");
 
-:root {
-  --us: 1;
-  --gs: 1;
-}
-
 html,
 body {
   padding: 0;
@@ -18,14 +13,11 @@ body {
   text-decoration-skip-ink: none;
 }
 
-.px-container {
-  transform-origin: 0 0;
-  transform: scale(var(--gs));
-  width: calc(100% / var(--gs));
-  height: calc(100% / var(--gs));
-  zoom: var(--us);
+pixel-perfect:not(:defined) {
+  visibility: hidden;
+}
 
-  box-sizing: border-box;
+.page {
   padding: 8px;
 }
 
@@ -47,7 +39,7 @@ a {
   font-size: 13px;
 }
 
-.px-container,
+body,
 .font-sans,
 .font-sans-16 {
   font-family: "sans-16";

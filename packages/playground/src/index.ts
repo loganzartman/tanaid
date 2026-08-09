@@ -11,6 +11,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
 import { emacsTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
+import "./pixel-perfect.ts";
 
 function runTcl(
   source: string,
