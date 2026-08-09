@@ -9,12 +9,8 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
-import { vscodeTheme } from "./theme.ts";
+import { emacsTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
-
-// crisp-ass pixels
-const scale = (1 / window.devicePixelRatio) * Math.ceil(window.devicePixelRatio);
-document.body.style.setProperty("--px", scale.toFixed(6));
 
 function runTcl(
   source: string,
@@ -137,7 +133,7 @@ const view = new EditorView({
       highlightActiveLine(),
       highlightActiveLineGutter(),
       drawSelection(),
-      vscodeTheme(),
+      emacsTheme(),
       tcl(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
