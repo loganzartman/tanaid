@@ -6,14 +6,14 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
 import { vscodeTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
 
 function runTcl(
   source: string,
-  { timeoutMs }: { timeoutMs?: number } = {},
+  { handleStdout, timeoutMs }: { handleStdout: (value: string) => void; timeoutMs?: number },
 ): [() => void, Promise<string>] {
   const worker = new TclWorker();
   const cancelPromise = Promise.withResolvers<string>();
@@ -39,6 +39,9 @@ function runTcl(
               break;
             case "error":
               rej(String(data.error));
+              break;
+            case "stdout":
+              handleStdout(data.value);
               break;
             default:
               throw new Error(`unknown event type: ${data.type}`);
@@ -69,7 +72,8 @@ function runTcl(
 }
 
 const inputContainerEl = document.getElementById("input")! as HTMLDivElement;
-const outputEl = document.getElementById("output")! as HTMLDivElement;
+const resultEl = document.getElementById("result")! as HTMLDivElement;
+const stdoutEl = document.getElementById("stdout")! as HTMLDivElement;
 
 const initialDoc = `proc fib {x} {
   if {$x <= 0} {
@@ -85,14 +89,20 @@ fib 8`;
 
 let cancel: (() => void) | null = null;
 const evaluate = async (code: string) => {
-  outputEl.innerText = "...";
+  resultEl.innerText = "...";
+  stdoutEl.innerText = "";
   try {
     cancel?.();
     let result;
-    [cancel, result] = runTcl(code, { timeoutMs: 2000 });
-    outputEl.innerText = await result;
+    [cancel, result] = runTcl(code, {
+      handleStdout(value) {
+        stdoutEl.textContent += value;
+      },
+      timeoutMs: 2000,
+    });
+    resultEl.innerText = await result;
   } catch (e) {
-    outputEl.innerText = String(e);
+    resultEl.innerText = String(e);
   }
 };
 
@@ -117,7 +127,7 @@ const view = new EditorView({
     doc: loadSrc() ?? initialDoc,
     extensions: [
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
+      keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
       lineNumbers(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
