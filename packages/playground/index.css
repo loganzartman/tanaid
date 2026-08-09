@@ -1,23 +1,49 @@
-@font-face {
-  font-family: "Monaspace Neon";
-  src: url("./Monaspace Neon Var.woff2") format("woff2");
-  font-weight: 200 800;
-  font-style: normal;
+@import url("./fonts.css");
+
+:root {
+  --px: 1; /* overridden by JS */
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  font-family: system-ui;
+  padding: calc(var(--px) * 8px);
+}
+
+@media (min-width: 480px) {
+  body {
+    padding: calc(var(--px) * 16px);
+  }
 }
 
 .mb-1 {
-  margin-bottom: 8px;
+  margin-bottom: calc(var(--px) * 8px);
 }
 
 .mt-4 {
-  margin-top: 16px;
+  margin-top: calc(var(--px) * 16px);
 }
 
-.font-mono {
-  font-family: "Monaspace Neon", monospace;
+.font-sans-13 {
+  font-family: "sans-13";
+  font-size: calc(var(--px)*13px);
+}
+
+body,
+.font-sans,
+.font-sans-16 {
+  font-family: "sans-16";
+  font-size: calc(var(--px)*16px);
+}
+
+.font-sans-20 {
+  font-family: "sans-20";
+  font-size: calc(var(--px)*20px);
+}
+
+.font-mono,
+.font-mono-16 {
+  font-family: "cour-16";
+  font-size: calc(var(--px)*16px);
   white-space: pre-wrap;
 }

@@ -1,14 +1,23 @@
 <html style="color-scheme: light dark">
   <head>
     <link rel="stylesheet" href="./index.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
   <body>
     <p>
       <a target="_blank" href="https://github.com/loganzartman/tanaid"
-        ><img alt="powered by tanaid" src="./powered-by.png" style="float: right"
+        ><img
+          alt="powered by tanaid"
+          src="./powered-by.png"
+          style="
+            float: right;
+            image-rendering: pixelated;
+            width: calc(var(--pixel-scale) * 88px);
+          "
       /></a>
-      this box runs <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a><br />
-      <sup>(a little bit of it)</sup>
+      this box runs <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a
+      ><br />
+      <span class="font-sans-13">(a little bit of it)</span>
     </p>
     <div id="input"></div>
     <div class="mt-4">

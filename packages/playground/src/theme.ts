@@ -111,7 +111,8 @@ const vscodeEditorTheme = EditorView.theme({
   },
   ".cm-content": {
     caretColor: c.cursor,
-    fontFamily: "Monaspace Neon",
+    fontFamily: "cour-16",
+    fontSize: "calc(var(--px)*16px)",
   },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: c.cursor,
@@ -127,7 +128,12 @@ const vscodeEditorTheme = EditorView.theme({
     backgroundColor: c.background,
     color: c.lineNumber,
     border: "none",
-    fontFamily: "Monaspace Neon",
+    fontFamily: "cour-16",
+    fontSize: "calc(var(--px)*16px)",
+  },
+  ".cm-lineNumbers .cm-gutterElement": {
+    paddingLeft: "calc(var(--px)*5px)",
+    paddingRight: "calc(var(--px)*3px)",
   },
   ".cm-activeLineGutter": {
     backgroundColor: "transparent",
@@ -137,8 +143,6 @@ const vscodeEditorTheme = EditorView.theme({
   // inset outline draws VS Code's border box without shifting the text.
   ".cm-activeLine": {
     backgroundColor: "transparent",
-    outline: `1px solid ${c.lineHighlightBorder}`,
-    outlineOffset: "-1px",
   },
   "&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket": {
     backgroundColor: c.matchingBracket,
