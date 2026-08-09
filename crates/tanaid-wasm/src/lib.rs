@@ -34,12 +34,7 @@ impl Interpreter {
     let stdout = Rc::new(move |value: &str| {
       handle_stdout
         .call(&JsValue::NULL, (&JsValue::from(value),))
-        .map_err(|e| {
-          EvalError::Generic(
-            e.as_string()
-              .unwrap_or("unknown JS error while writing stdout".to_string()),
-          )
-        })?;
+        .map_err(|e| EvalError::Generic(js_sys::Error::from(e).message().into()))?;
       Ok(())
     });
     let context = EvalContext::new().with_stdout(stdout);
