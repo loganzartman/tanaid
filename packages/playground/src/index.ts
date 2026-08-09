@@ -42,6 +42,7 @@ function runTcl(
               break;
             case "stdout":
               handleStdout(data.value);
+              break;
             default:
               throw new Error(`unknown event type: ${data.type}`);
           }
