@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use tanaid::{
   eval::{EvalContext, eval},
+  eval_error::EvalError,
   parser::parse,
 };
 use tsify::Ts;
@@ -31,7 +32,14 @@ impl Interpreter {
     let handle_stdout = opts.handle_stdout;
 
     let stdout = Rc::new(move |value: &str| {
-      let _ = handle_stdout.call(&JsValue::NULL, (&JsValue::from(value),));
+      handle_stdout
+        .call(&JsValue::NULL, (&JsValue::from(value),))
+        .map_err(|e| {
+          EvalError::Generic(
+            e.as_string()
+              .unwrap_or("unknown JS error while writing stdout".to_string()),
+          )
+        })?;
       Ok(())
     });
     let context = EvalContext::new().with_stdout(stdout);

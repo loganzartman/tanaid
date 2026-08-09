@@ -1,13 +1,13 @@
 import { Interpreter } from "tanaid";
 
 self.onmessage = ({ data: { source } }) => {
-  try {
-    const interp = Interpreter.create({
-      handleStdout(value) {
-        self.postMessage({ type: "stdout", value });
-      },
-    });
+  const interp = Interpreter.create({
+    handleStdout(value) {
+      self.postMessage({ type: "stdout", value });
+    },
+  });
 
+  try {
     self.postMessage({
       type: "result",
       value: interp.run(source),
@@ -17,6 +17,8 @@ self.onmessage = ({ data: { source } }) => {
       type: "error",
       error: String(error),
     });
+  } finally {
+    interp.free();
   }
 };
 

@@ -61,10 +61,9 @@ impl EvalContext {
     }
   }
 
-  pub fn with_stdout(&self, stdout: OutputSink) -> EvalContext {
-    let mut new = self.clone();
-    new.stdout = stdout;
-    new
+  pub fn with_stdout(mut self, stdout: OutputSink) -> Self {
+    self.stdout = stdout;
+    self
   }
 
   pub fn frame(&self, id: FrameId) -> &EvalFrame {
