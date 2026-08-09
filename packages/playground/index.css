@@ -13,6 +13,9 @@ body {
 
 * {
   font-synthesis: none;
+  text-decoration-thickness: from-font;
+  text-underline-position: from-font;
+  text-decoration-skip-ink: none;
 }
 
 .px-container {
@@ -20,44 +23,45 @@ body {
   transform: scale(var(--gs));
   width: calc(100% / var(--gs));
   height: calc(100% / var(--gs));
+  zoom: var(--us);
 
   box-sizing: border-box;
-  padding: calc(var(--us) * 8px);
+  padding: 8px;
 }
 
 a {
-  text-decoration-thickness: calc(var(--us) * 1px);
+  text-decoration-thickness: 1px;
   text-decoration-skip-ink: none;
 }
 
 .mb-1 {
-  margin-bottom: calc(var(--us) * 8px);
+  margin-bottom: 8px;
 }
 
 .mt-4 {
-  margin-top: calc(var(--us) * 16px);
+  margin-top: 16px;
 }
 
 .font-sans-13 {
   font-family: "sans-13";
-  font-size: calc(var(--us) * 13px);
+  font-size: 13px;
 }
 
 .px-container,
 .font-sans,
 .font-sans-16 {
   font-family: "sans-16";
-  font-size: calc(var(--us) * 16px);
+  font-size: 16px;
 }
 
 .font-sans-20 {
   font-family: "sans-20";
-  font-size: calc(var(--us) * 20px);
+  font-size: 20px;
 }
 
 .font-mono,
 .font-mono-16 {
   font-family: "cour-16";
-  font-size: calc(var(--us) * 16px);
+  font-size: 16px;
   white-space: pre-wrap;
 }

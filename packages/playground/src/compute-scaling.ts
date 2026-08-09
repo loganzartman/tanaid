@@ -1,6 +1,6 @@
 const dpr = window.devicePixelRatio;
 
-const unitScale = computeScaleDprToInteger();
+const unitScale = CSS.supports("zoom", "2") ? computeScaleDprToInteger() : 1;
 const globalScale = Math.ceil(dpr) / (dpr * unitScale);
 document.body.style.setProperty("--us", String(unitScale));
 document.body.style.setProperty("--gs", String(globalScale));

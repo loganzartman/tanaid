@@ -117,21 +117,19 @@ const emacsEditorTheme = EditorView.theme({
     backgroundColor: c.background,
     color: c.foreground,
   },
+  // `line-height: 1.4` from the base theme is 22.4px; whole pixels only.
   ".cm-scroller": {
-    lineHeight: "calc(var(--us) * 22px)",
+    lineHeight: "22px",
   },
   ".cm-content": {
     caretColor: c.cursor,
     fontFamily: "cour-16",
-    fontSize: "calc(var(--us) * 16px)",
-    padding: "calc(var(--us) * 4px) 0",
+    fontSize: "16px",
   },
-  ".cm-line": {
-    padding: "0 calc(var(--us) * 2px) 0 calc(var(--us) * 6px)",
-  },
+  // The base theme deliberately draws a sub-pixel caret (1.2px, -0.6px).
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: c.cursor,
-    borderLeftWidth: "calc(var(--us) * 1px)",
+    borderLeftWidth: "1px",
     marginLeft: "0",
   },
   // Emacs keeps the region the same color when the frame loses focus, so the
@@ -148,12 +146,11 @@ const emacsEditorTheme = EditorView.theme({
     color: c.lineNumber,
     border: "none",
     fontFamily: "cour-16",
-    fontSize: "calc(var(--us) * 16px)",
+    fontSize: "16px",
   },
   ".cm-lineNumbers .cm-gutterElement": {
-    paddingLeft: "calc(var(--us) * 5px)",
-    paddingRight: "calc(var(--us) * 3px)",
-    minWidth: "calc(var(--us) * 20px)",
+    paddingLeft: "5px",
+    paddingRight: "3px",
   },
   ".cm-activeLineGutter": {
     backgroundColor: "transparent",
@@ -167,7 +164,7 @@ const emacsEditorTheme = EditorView.theme({
     color: "#000000",
   },
   ".cm-indentGuide": {
-    borderLeft: `calc(var(--us) * 1px) solid ${c.indentGuide}`,
+    borderLeft: `1px solid ${c.indentGuide}`,
   },
 });
 
