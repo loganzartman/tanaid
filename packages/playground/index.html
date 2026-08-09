@@ -3,11 +3,20 @@
     <link rel="stylesheet" href="./index.css" />
   </head>
   <body>
-    <p>write tcl below and the output shows up</p>
-    <div id="input" style="margin-bottom: 32px"></div>
-    <div>
-      <div>value:</div>
-      <div id="output"></div>
+    <p>
+      <a target="_blank" href="https://github.com/loganzartman/tanaid"
+        ><img src="./powered-by.png" style="float: right"
+      /></a>
+      this box runs <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a
+      ><br />
+      <sup>(a little bit of it)</sup>
+    </p>
+    <div id="input"></div>
+    <div class="mt-4">
+      <div>result:</div>
+      <div id="result" class="font-mono mb-1"></div>
+      <div>stdout:</div>
+      <div id="stdout" class="font-mono mb-1"></div>
     </div>
     <script type="module" src="./src/index.ts"></script>
   </body>

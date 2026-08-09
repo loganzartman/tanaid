@@ -4,7 +4,7 @@ use crate::value::Value;
 
 pub(super) fn eval(
   args: &mut [Value],
-  _context: &mut EvalContext,
+  context: &mut EvalContext,
   _frame: FrameId,
 ) -> EvalCmdResult {
   let string = match args {
@@ -18,6 +18,5 @@ pub(super) fn eval(
     }
   };
 
-  println!("{}", string.repr_str()?);
-  Ok(Value::none())
+  context.stdout.as_ref()(format!("{}\n", string.repr_str()?).as_str()).map(|_| Value::none())
 }

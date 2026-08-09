@@ -1,4 +1,5 @@
 use super::Proc;
+use crate::eval_error::EvalError;
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
@@ -10,12 +11,15 @@ use std::rc::Rc;
 pub type FrameId = usize;
 pub(crate) const GLOBAL_FRAME: FrameId = 0;
 
-#[derive(Clone, Debug)]
+pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
+
+#[derive(Clone)]
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
   frames: Vec<EvalFrame>,
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
+  pub(crate) stdout: OutputSink,
 }
 
 #[derive(Clone, Debug)]
@@ -31,6 +35,18 @@ pub enum Binding {
   Ref(FrameId, String),
 }
 
+impl std::fmt::Debug for EvalContext {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("EvalContext")
+      .field("procs", &self.procs)
+      .field("frames", &self.frames)
+      .field("parse_cache_script", &self.parse_cache_script)
+      .field("parse_cache_expr", &self.parse_cache_expr)
+      .field("stdout", &"<output sink>")
+      .finish()
+  }
+}
+
 impl EvalContext {
   pub fn new() -> EvalContext {
     EvalContext {
@@ -38,7 +54,17 @@ impl EvalContext {
       frames: vec![EvalFrame::new()],
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
+      stdout: Rc::new(|output: &str| {
+        print!("{}", output);
+        Ok(())
+      }),
     }
+  }
+
+  pub fn with_stdout(&self, stdout: OutputSink) -> EvalContext {
+    let mut new = self.clone();
+    new.stdout = stdout;
+    new
   }
 
   pub fn frame(&self, id: FrameId) -> &EvalFrame {

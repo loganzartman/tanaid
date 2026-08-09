@@ -1,10 +1,16 @@
-import { run_tcl } from "tanaid";
+import { Interpreter } from "tanaid";
 
 self.onmessage = ({ data: { source } }) => {
   try {
+    const interp = Interpreter.create({
+      handleStdout(value) {
+        self.postMessage({ type: "stdout", value });
+      },
+    });
+
     self.postMessage({
       type: "result",
-      value: run_tcl(source),
+      value: interp.run(source),
     });
   } catch (error) {
     self.postMessage({

@@ -6,5 +6,19 @@
 }
 
 body {
+  font-smooth: never;
+  font-family: system-ui;
+}
+
+.mb-1 {
+  margin-bottom: 8px;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+.font-mono {
   font-family: "Monaspace Neon", monospace;
+  white-space: pre-wrap;
 }
