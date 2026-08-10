@@ -31,8 +31,8 @@ export class PixelPerfect extends HTMLElement {
     // leave the scaled result filling the parent.
     this.style.cssText = `
       display: block;
-      width: calc(100% / var(--gs));
-      height: calc(100% / var(--gs));
+      width: calc(round(100% / var(--gs), 1px));
+      height: calc(round(100% / var(--gs), 1px));
       transform-origin: 0 0;
       transform: scale(var(--gs));
       zoom: var(--us);
