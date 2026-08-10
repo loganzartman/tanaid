@@ -789,12 +789,19 @@ input[type="range"]::-moz-range-track {
 }
 
 select:focus {
-  color: var(--button-highlight);
+  color: #fff;
   background-color: var(--dialog-blue);
 }
-select:focus option {
-  color: #000;
-  background-color: #fff;
+
+select option {
+  background: var(--button-highlight);
+  font-size: calc(13px * var(--gs));
+  color: var(--text-color);
+}
+
+select option:hover {
+  background: var(--dialog-blue);
+  color: #fff;
 }
 
 select:active {

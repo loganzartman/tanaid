@@ -38,6 +38,10 @@ a {
   text-decoration-skip-ink: none;
 }
 
+.error {
+  color: light-dark(#a00, #f66);
+}
+
 .mb-1 {
   margin-bottom: 8px;
 }

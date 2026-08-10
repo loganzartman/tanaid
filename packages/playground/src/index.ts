@@ -92,6 +92,7 @@ fib 8`;
 
 let cancel: (() => void) | null = null;
 const evaluate = async (code: string) => {
+  resultEl.classList.remove("error");
   resultEl.innerText = "...";
   stdoutEl.innerText = "";
   try {
@@ -103,8 +104,10 @@ const evaluate = async (code: string) => {
       },
       timeoutMs: 2000,
     });
-    resultEl.innerText = await result;
+    const resultVal = await result;
+    resultEl.innerText = resultVal.length ? resultVal : " ";
   } catch (e) {
+    resultEl.classList.add("error");
     resultEl.innerText = String(e);
   }
 };
