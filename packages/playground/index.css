@@ -75,3 +75,13 @@ pre,
   font-size: 16px;
   white-space: pre-wrap;
 }
+
+.input {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: var(--element-spacing);
+  overflow: hidden;
+}
+.input .cm-editor {
+  height: 100%;
+}

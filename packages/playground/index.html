@@ -6,11 +6,22 @@
   </head>
   <body>
     <pixel-perfect>
-      <div class="window" style="height: 100%; box-sizing: border-box;">
+      <div
+        class="window"
+        style="
+          height: 100%;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+        "
+      >
         <div class="title-bar">
           <div class="title-bar-text">tanaid Tcl</div>
         </div>
-        <div class="window-body">
+        <div
+          class="window-body"
+          style="flex: 1; min-height: 0; display: flex; flex-direction: column"
+        >
           <p>
             <a target="_blank" href="https://github.com/loganzartman/tanaid"
               ><img
@@ -24,9 +35,7 @@
             <br />
             <span class="font-sans-13">(a little bit of it)</span>
           </p>
-          <p>
-          <div id="input" class="sunken-panel"></div>
-          </p>
+          <div id="input" class="input sunken-panel"></div>
           <div>
             <div class="field-row-stacked">
               <label for="result">result:</label>
@@ -34,7 +43,16 @@
             </div>
             <div class="field-row-stacked">
               <label for="stdout">stdout:</label>
-                <textarea id="stdout" class="font-mono-13" style="height: 196px; min-height: 64px; resize: vertical; padding: 10px 6px"></textarea>
+              <textarea
+                id="stdout"
+                class="font-mono-13"
+                style="
+                  height: 196px;
+                  min-height: 64px;
+                  resize: vertical;
+                  padding: 10px 6px;
+                "
+              ></textarea>
             </div>
           </div>
         </div>
