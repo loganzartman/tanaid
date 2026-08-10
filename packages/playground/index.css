@@ -21,6 +21,12 @@ pixel-perfect:not(:defined) {
   padding: 8px;
 }
 
+@media (min-width: 480px) {
+  .page {
+    padding: 16px;
+  }
+}
+
 a {
   text-decoration-thickness: 1px;
   text-decoration-skip-ink: none;
