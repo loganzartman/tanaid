@@ -74,13 +74,12 @@ a {
   margin-top: 16px;
 }
 
+.font-sans,
 .font-sans-13 {
   font-family: "sans-13";
   font-size: 13px;
 }
 
-body,
-.font-sans,
 .font-sans-16 {
   font-family: "sans-16";
   font-size: 16px;
