@@ -6,26 +6,37 @@
   </head>
   <body>
     <pixel-perfect>
-      <div class="page">
-        <p>
-          <a target="_blank" href="https://github.com/loganzartman/tanaid"
-            ><img
-              alt="powered by tanaid"
-              src="./powered-by.png"
-              style="float: right; image-rendering: pixelated; width: 88px"
-          /></a>
-          run&nbsp;
-          <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a>
-          &nbsp;in your browser
-          <br />
-          <span class="font-sans-13">(a little bit of it)</span>
-        </p>
-        <div id="input"></div>
-        <div class="mt-4">
-          <div>result:</div>
-          <div id="result" class="font-mono mb-1"></div>
-          <div>stdout:</div>
-          <div id="stdout" class="font-mono mb-1"></div>
+      <div class="window" style="height: 100%; box-sizing: border-box;">
+        <div class="title-bar">
+          <div class="title-bar-text">tanaid Tcl</div>
+        </div>
+        <div class="window-body">
+          <p>
+            <a target="_blank" href="https://github.com/loganzartman/tanaid"
+              ><img
+                alt="powered by tanaid"
+                src="./powered-by.png"
+                style="float: right; image-rendering: pixelated; width: 88px"
+            /></a>
+            run&nbsp;
+            <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a>
+            &nbsp;in your browser
+            <br />
+            <span class="font-sans-13">(a little bit of it)</span>
+          </p>
+          <p>
+          <div id="input" class="sunken-panel"></div>
+          </p>
+          <div>
+            <div class="field-row-stacked">
+              <label for="result">result:</label>
+              <pre id="result"></pre>
+            </div>
+            <div class="field-row-stacked">
+              <label for="stdout">stdout:</label>
+                <textarea id="stdout" class="font-mono-13" style="height: 196px; min-height: 64px; resize: vertical; padding: 10px 6px"></textarea>
+            </div>
+          </div>
         </div>
       </div>
     </pixel-perfect>

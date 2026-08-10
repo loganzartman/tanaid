@@ -119,12 +119,12 @@ const emacsEditorTheme = EditorView.theme({
   },
   // `line-height: 1.4` from the base theme is 22.4px; whole pixels only.
   ".cm-scroller": {
-    lineHeight: "22px",
+    lineHeight: "16px",
   },
   ".cm-content": {
     caretColor: c.cursor,
-    fontFamily: "cour-16",
-    fontSize: "16px",
+    fontFamily: "cour-13",
+    fontSize: "13px",
   },
   // The base theme deliberately draws a sub-pixel caret (1.2px, -0.6px).
   ".cm-cursor, .cm-dropCursor": {
@@ -145,8 +145,8 @@ const emacsEditorTheme = EditorView.theme({
     backgroundColor: c.gutterBackground,
     color: c.lineNumber,
     border: "none",
-    fontFamily: "cour-16",
-    fontSize: "16px",
+    fontFamily: "cour-13",
+    fontSize: "13px",
   },
   ".cm-lineNumbers .cm-gutterElement": {
     paddingLeft: "5px",

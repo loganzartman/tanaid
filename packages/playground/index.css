@@ -1,9 +1,13 @@
 @import url("./fonts.css");
+@import url("./98.css");
 
 html,
 body {
   padding: 0;
   margin: 0;
+  height: 100%;
+  font-family: "sans-13";
+  font-size: 13px;
 }
 
 * {
@@ -11,6 +15,7 @@ body {
   text-decoration-thickness: from-font;
   text-underline-position: from-font;
   text-decoration-skip-ink: none;
+  text-underline-offset: 1px;
 }
 
 pixel-perfect:not(:defined) {
@@ -57,7 +62,14 @@ body,
   font-size: 20px;
 }
 
+pre,
 .font-mono,
+.font-mono-13 {
+  font-family: "cour-13";
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
 .font-mono-16 {
   font-family: "cour-16";
   font-size: 16px;

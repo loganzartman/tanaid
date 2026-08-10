@@ -32,9 +32,11 @@ export class PixelPerfect extends HTMLElement {
     this.style.cssText = `
       display: block;
       width: calc(100% / var(--gs));
+      height: calc(100% / var(--gs));
       transform-origin: 0 0;
       transform: scale(var(--gs));
       zoom: var(--us);
+      box-sizing: border-box;
     `;
     this.refresh();
   }
