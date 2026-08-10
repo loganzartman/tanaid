@@ -93,7 +93,7 @@ pre,
 
 .input.sunken-panel {
   flex: 1;
-  min-height: 0;
+  min-height: 192px;
   margin-bottom: var(--element-spacing);
   overflow: hidden;
 }

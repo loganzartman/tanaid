@@ -22,19 +22,34 @@
           class="window-body"
           style="flex: 1; min-height: 0; display: flex; flex-direction: column"
         >
-          <p>
-            <a target="_blank" href="https://github.com/loganzartman/tanaid"
-              ><img
+          <div
+            style="
+              display: flex;
+              gap: var(--element-spacing);
+              margin-bottom: var(--element-spacing);
+            "
+          >
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div>
+                run
+                <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a>
+                in your browser
+              </div>
+              <div>
+                <select id="example">
+                  <option value="" selected disabled>load an example...</option>
+                </select>
+              </div>
+            </div>
+            <div style="flex: 1"></div>
+            <a target="_blank" href="https://github.com/loganzartman/tanaid">
+              <img
                 alt="powered by tanaid"
                 src="./powered-by.png"
                 style="float: right; image-rendering: pixelated; width: 88px"
-            /></a>
-            run&nbsp;
-            <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a>
-            &nbsp;in your browser
-            <br />
-            <span class="font-sans-13">(a little bit of it)</span>
-          </p>
+              />
+            </a>
+          </div>
           <div id="input" class="input sunken-panel"></div>
           <div>
             <div class="field-row-stacked">
@@ -47,7 +62,7 @@
                 id="stdout"
                 class="font-mono-13"
                 style="
-                  height: 196px;
+                  height: 192px;
                   min-height: 64px;
                   resize: vertical;
                   padding: 10px 6px;
