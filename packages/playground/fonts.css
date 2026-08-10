@@ -1,0 +1,34 @@
+@font-face {
+  font-family: "sans-13";
+  src: url("./font/sans-13.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "sans-16";
+  src: url("./font/sans-16.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "sans-20";
+  src: url("./font/sans-20.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "sans-24";
+  src: url("./font/sans-24.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "term-12";
+  src: url("./font/term-12.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "cour-13";
+  src: url("./font/cour-13.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "cour-16";
+  src: url("./font/cour-16.woff2") format("woff2");
+}

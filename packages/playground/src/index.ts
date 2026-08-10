@@ -1,5 +1,6 @@
 import { EditorState } from "@codemirror/state";
 import {
+  drawSelection,
   EditorView,
   highlightActiveLine,
   highlightActiveLineGutter,
@@ -8,8 +9,46 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { tcl } from "@sourcebot/codemirror-lang-tcl";
-import { vscodeTheme } from "./theme.ts";
+import { emacsTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
+import "./pixel-perfect.ts";
+
+const exampleSelectEl = document.getElementById("example")! as HTMLSelectElement;
+const inputContainerEl = document.getElementById("input")! as HTMLElement;
+const resultEl = document.getElementById("result")! as HTMLElement;
+const stdoutContainerEl = document.getElementById("stdout")! as HTMLElement;
+
+const stdoutView = new EditorView({
+  state: EditorState.create({
+    doc: "",
+    extensions: [EditorState.readOnly.of(true), drawSelection(), emacsTheme()],
+  }),
+  parent: stdoutContainerEl,
+});
+
+const clearStdout = () => {
+  stdoutView.dispatch({
+    changes: { from: 0, to: stdoutView.state.doc.length, insert: "" },
+  });
+};
+
+let stdoutScrollRaf = 0;
+const scrollStdoutToEnd = () => {
+  stdoutView.scrollDOM.scrollTop = stdoutView.scrollDOM.scrollHeight;
+};
+
+const appendStdout = (value: string) => {
+  if (!value.length) return;
+  stdoutView.dispatch({
+    changes: { from: stdoutView.state.doc.length, insert: value },
+  });
+  if (!stdoutScrollRaf) {
+    stdoutScrollRaf = requestAnimationFrame(() => {
+      stdoutScrollRaf = 0;
+      scrollStdoutToEnd();
+    });
+  }
+};
 
 function runTcl(
   source: string,
@@ -71,10 +110,6 @@ function runTcl(
   ];
 }
 
-const inputContainerEl = document.getElementById("input")! as HTMLDivElement;
-const resultEl = document.getElementById("result")! as HTMLDivElement;
-const stdoutEl = document.getElementById("stdout")! as HTMLDivElement;
-
 const initialDoc = `proc fib {x} {
   if {$x <= 0} {
     return 0
@@ -89,20 +124,25 @@ fib 8`;
 
 let cancel: (() => void) | null = null;
 const evaluate = async (code: string) => {
+  resultEl.classList.remove("error");
   resultEl.innerText = "...";
-  stdoutEl.innerText = "";
+  clearStdout();
   try {
     cancel?.();
     let result;
     [cancel, result] = runTcl(code, {
       handleStdout(value) {
-        stdoutEl.textContent += value;
+        appendStdout(value);
       },
       timeoutMs: 2000,
     });
-    resultEl.innerText = await result;
+    const resultVal = await result;
+    resultEl.innerText = resultVal.length ? resultVal : " ";
   } catch (e) {
+    resultEl.classList.add("error");
     resultEl.innerText = String(e);
+  } finally {
+    scrollStdoutToEnd();
   }
 };
 
@@ -131,7 +171,8 @@ const view = new EditorView({
       lineNumbers(),
       highlightActiveLine(),
       highlightActiveLineGutter(),
-      vscodeTheme(),
+      drawSelection(),
+      emacsTheme(),
       tcl(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
@@ -145,3 +186,59 @@ const view = new EditorView({
 });
 
 evaluate(view.state.doc.toString()).catch((e) => console.error(e));
+
+const examples = {
+  "hello world": `puts "Hello, World!"`,
+
+  fibonacci: `proc fib {x} {
+  if {$x <= 0} {
+    return 0
+  }
+  if {$x == 1} {
+    return 1
+  }
+  return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
+}
+
+fib 8`,
+
+  uplevel: `proc do {body while condition} {
+  if {$while != "while"} {
+    error "required word missing"
+  }
+  set conditionCmd [list expr $condition]
+  while {1} {
+    uplevel 1 $body
+    if {[uplevel 1 $conditionCmd]} then {
+    } else {
+      break
+    }
+  }
+}
+
+set i 0
+do {
+  puts $i
+  incr i
+} while {$i < 5}`,
+};
+
+for (const [name, src] of Object.entries(examples)) {
+  const option = document.createElement("option");
+  option.value = src;
+  option.textContent = name;
+  exampleSelectEl.appendChild(option);
+}
+
+exampleSelectEl.addEventListener("change", (event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  view.dispatch({
+    changes: {
+      from: 0,
+      to: view.state.doc.length,
+      insert: value,
+    },
+  });
+  exampleSelectEl.selectedIndex = 0;
+  exampleSelectEl.blur();
+});

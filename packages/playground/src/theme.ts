@@ -4,84 +4,85 @@ import { tags as t } from "@lezer/highlight";
 import type { Extension } from "@codemirror/state";
 
 /**
- * A CodeMirror theme that renders VS Code's Light+ and Dark+ palettes at the
- * same time, letting the browser pick between them with `light-dark()`.
+ * A CodeMirror theme that renders GNU Emacs 21.3's `font-lock` palette in both
+ * light and dark at once, letting the browser pick with `light-dark()`.
  *
- * Colors are lifted from vscode/extensions/theme-defaults/themes:
- * light_vs.json + light_plus.json and dark_vs.json + dark_plus.json.
- * Only the TextMate scopes that the Tcl grammar's tags map onto are covered.
+ * Colors are the `defface` specs from emacs-21.3 lisp/font-lock.el (syntax),
+ * lisp/faces.el (region, fringe) and lisp/paren.el (paren match), taking the
+ * `((class color) (background light))` and `(background dark)` branches.
+ * Emacs names X11 colors, so each is resolved to its hex from X11 rgb.txt and
+ * the original name is kept in the comment.
+ *
+ * This palette is remarkably stable across the era: between Emacs 19.34 (1996)
+ * and 21.3 (2003) only three colors moved, so it is representative of the whole
+ * period rather than of one release.
  */
 const ld = (light: string, dark: string) => `light-dark(${light}, ${dark})`;
 
 const c = {
-  /** editor.background */
-  background: ld("#FFFFFF", "#1E1E1E"),
-  /** editor.foreground — also `keyword.operator` and unstyled punctuation */
-  foreground: ld("#000000", "#D4D4D4"),
-  /** comment */
-  comment: ld("#008000", "#6A9955"),
-  /** string */
-  string: ld("#a31515", "#ce9178"),
-  /** constant.numeric */
-  number: ld("#098658", "#b5cea8"),
-  /** keyword, storage, storage.modifier, keyword.operator.wordlike */
-  keyword: ld("#0000ff", "#569cd6"),
-  /** keyword.control */
-  controlKeyword: ld("#AF00DB", "#C586C0"),
-  /** variable, meta.definition.variable.name */
-  variable: ld("#001080", "#9CDCFE"),
-  /** entity.name.function */
-  function: ld("#795E26", "#DCDCAA"),
-  /** punctuation.section.embedded — i.e. interpolation delimiters */
-  embedded: ld("#0000ff", "#569cd6"),
+  /** default face — Emacs frames default to white-on-black / black-on-white */
+  background: ld("#FFFFFF", "#000000"),
+  foreground: ld("#000000", "#FFFFFF"),
 
-  // Chrome colors. The +/vs themes don't override VS Code's built-in defaults
-  // for these, so these are the registry defaults.
-  /** editor.selectionBackground */
-  selection: ld("#ADD6FF", "#264F78"),
-  /** editor.inactiveSelectionBackground */
-  inactiveSelection: ld("#E5EBF1", "#3A3D41"),
-  /** editorCursor.foreground */
-  cursor: ld("#000000", "#AEAFAD"),
-  /** editorLineNumber.foreground */
-  lineNumber: ld("#237893", "#858585"),
-  /** editorLineNumber.activeForeground */
-  activeLineNumber: ld("#0B216F", "#C6C6C6"),
-  /** editorIndentGuide.background1 */
-  indentGuide: ld("#D3D3D3", "#404040"),
+  /** font-lock-comment-face — Firebrick / chocolate1 */
+  comment: ld("#B22222", "#FF7F24"),
+  /** font-lock-string-face — RosyBrown / LightSalmon */
+  string: ld("#BC8F8F", "#FFA07A"),
+  /** font-lock-constant-face — CadetBlue / Aquamarine */
+  constant: ld("#5F9EA0", "#7FFFD4"),
+  /** font-lock-keyword-face — Purple / Cyan */
+  keyword: ld("#A020F0", "#00FFFF"),
+  /** font-lock-builtin-face — Orchid / LightSteelBlue */
+  builtin: ld("#DA70D6", "#B0C4DE"),
+  /** font-lock-variable-name-face — DarkGoldenrod / LightGoldenrod */
+  variable: ld("#B8860B", "#EEDD82"),
+  /** font-lock-function-name-face — Blue / LightSkyBlue */
+  function: ld("#0000FF", "#87CEFA"),
+  /** font-lock-type-face — ForestGreen / PaleGreen */
+  type: ld("#228B22", "#98FB98"),
+
+  // Chrome colors.
+  /** region — LightGoldenrod2 / blue3 */
+  selection: ld("#EEDC82", "#0000CD"),
   /**
-   * editor.lineHighlightBorder. VS Code leaves editor.lineHighlightBackground
-   * unset (registry default is null), so the cursor's line gets a border rather
-   * than a fill.
+   * `cursor` is an empty defface; the caret takes the frame's foreground.
    */
-  lineHighlightBorder: ld("#eeeeee", "#282828"),
-  /** editorBracketMatch.background / .border */
-  matchingBracket: ld("#0064001a", "#0064001a"),
-  matchingBracketBorder: ld("#B9B9B9", "#888888"),
+  cursor: ld("#000000", "#FFFFFF"),
+  /** fringe — grey95 / grey10 */
+  gutterBackground: ld("#F2F2F2", "#1A1A1A"),
+  /**
+   * Emacs 21 has no line-number margin at all — linum.el arrives in 22 — so
+   * there is no period source for these. Borrowed from the `shadow` face that
+   * Emacs 22 introduced alongside it: grey50 / grey70.
+   */
+  lineNumber: ld("#7F7F7F", "#B3B3B3"),
+  /** Likewise invented; linum-mode drew every number identically. */
+  indentGuide: ld("#D9D9D9", "#333333"),
+  /**
+   * show-paren-match-face. The defface matches on `(class color)` alone, so
+   * turquoise is used on both backgrounds.
+   */
+  matchingBracket: "#40E0D0",
 };
 
-const vscodeHighlightStyle = HighlightStyle.define([
+const emacsHighlightStyle = HighlightStyle.define([
   // LineComment
   { tag: t.lineComment, color: c.comment },
 
   // QuotedString, Block, SetValue
   { tag: t.string, color: c.string },
-  // CommandSub `[...]`, PackageName
-  { tag: t.special(t.string), color: c.embedded },
+  // CommandSub `[...]`, PackageName. Emacs has no interpolation face; type is
+  // the closest unused slot and reads as "a value spliced in here".
+  { tag: t.special(t.string), color: c.type },
 
   // Number, PackageVersion
-  { tag: t.number, color: c.number },
+  { tag: t.number, color: c.constant },
 
-  // TclKeyword and the per-command keywords (list/string/dict/io/...)
-  { tag: t.keyword, color: c.keyword },
-  // proc, set, package
-  { tag: t.definitionKeyword, color: c.keyword },
-  // global, variable
-  { tag: t.modifier, color: c.keyword },
-  // expr
-  { tag: t.operatorKeyword, color: c.keyword },
-  // if/else/while/for/foreach/switch/return/break/continue/catch/try/throw
-  { tag: t.controlKeyword, color: c.controlKeyword },
+  // All words in command position use the same face.
+  {
+    tag: [t.controlKeyword, t.definitionKeyword, t.modifier, t.keyword, t.operatorKeyword],
+    color: c.keyword,
+  },
   // eq/ne/lt/gt/le/ge
   { tag: t.operator, color: c.foreground },
 
@@ -102,54 +103,65 @@ const vscodeHighlightStyle = HighlightStyle.define([
   { tag: [t.brace, t.squareBracket], color: c.foreground },
 ]);
 
-const vscodeEditorTheme = EditorView.theme({
+const emacsEditorTheme = EditorView.theme({
   // Required: `light-dark()` resolves against the element's used color scheme.
   "&": {
     colorScheme: "light dark",
     backgroundColor: c.background,
     color: c.foreground,
   },
+  // `line-height: 1.4` from the base theme is 22.4px; whole pixels only.
+  ".cm-scroller": {
+    lineHeight: "16px",
+  },
   ".cm-content": {
     caretColor: c.cursor,
-    fontFamily: "Monaspace Neon",
+    fontFamily: "cour-13",
+    fontSize: "13px",
   },
+  // The base theme deliberately draws a sub-pixel caret (1.2px, -0.6px).
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: c.cursor,
+    borderLeftWidth: "1px",
+    marginLeft: "0",
   },
+  // Emacs keeps the region the same color when the frame loses focus, so the
+  // unfocused selection deliberately matches the focused one.
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
     {
       backgroundColor: c.selection,
     },
   ".cm-selectionLayer .cm-selectionBackground": {
-    backgroundColor: c.inactiveSelection,
+    backgroundColor: c.selection,
   },
   ".cm-gutters": {
-    backgroundColor: c.background,
+    backgroundColor: c.gutterBackground,
     color: c.lineNumber,
     border: "none",
-    fontFamily: "Monaspace Neon",
+    fontFamily: "cour-13",
+    fontSize: "13px",
+  },
+  ".cm-lineNumbers .cm-gutterElement": {
+    paddingLeft: "5px",
+    paddingRight: "3px",
   },
   ".cm-activeLineGutter": {
     backgroundColor: "transparent",
-    color: c.activeLineNumber,
+    color: c.lineNumber,
   },
-  // `backgroundColor` overrides the base theme's own active-line fill; the
-  // inset outline draws VS Code's border box without shifting the text.
   ".cm-activeLine": {
     backgroundColor: "transparent",
-    outline: `1px solid ${c.lineHighlightBorder}`,
-    outlineOffset: "-1px",
   },
   "&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket": {
     backgroundColor: c.matchingBracket,
-    outline: `1px solid ${c.matchingBracketBorder}`,
+    color: "#000000",
   },
   ".cm-indentGuide": {
     borderLeft: `1px solid ${c.indentGuide}`,
   },
 });
 
-export const vscodeTheme = (): Extension => [
-  vscodeEditorTheme,
-  syntaxHighlighting(vscodeHighlightStyle),
+export const emacsTheme = (): Extension => [
+  emacsEditorTheme,
+  syntaxHighlighting(emacsHighlightStyle),
 ];

@@ -1,12 +1,69 @@
-@font-face {
-  font-family: "Monaspace Neon";
-  src: url("./Monaspace Neon Var.woff2") format("woff2");
-  font-weight: 200 800;
-  font-style: normal;
+@import url("./fonts.css");
+@import url("./98.css");
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: "sans-13";
+  font-size: 13px;
+
+  background: light-dark(rgb(87 168 168), rgb(16 42 42));
 }
 
-body {
-  font-family: system-ui;
+* {
+  font-synthesis: none;
+  text-decoration-thickness: from-font;
+  text-underline-position: from-font;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 1px;
+}
+
+pixel-perfect:not(:defined) {
+  visibility: hidden;
+}
+
+.main-window-container {
+  box-sizing: border-box;
+  width: calc(round(100%, 2px));
+  height: calc(round(100%, 2px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.main-window {
+  width: 100%;
+  height: 100%;
+  max-width: 1200px;
+}
+
+@media (min-width: 1200px) {
+  .main-window-container {
+    padding: 24px;
+  }
+}
+
+.page {
+  padding: 8px;
+}
+
+@media (min-width: 480px) {
+  .page {
+    padding: 16px;
+  }
+}
+
+a {
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
+}
+
+.error {
+  color: light-dark(#a00, #f66);
 }
 
 .mb-1 {
@@ -17,7 +74,65 @@ body {
   margin-top: 16px;
 }
 
-.font-mono {
-  font-family: "Monaspace Neon", monospace;
+.font-sans,
+.font-sans-13 {
+  font-family: "sans-13";
+  font-size: 13px;
+}
+
+.font-sans-16 {
+  font-family: "sans-16";
+  font-size: 16px;
+}
+
+.font-sans-20 {
+  font-family: "sans-20";
+  font-size: 20px;
+}
+
+pre,
+.font-mono,
+.font-mono-13 {
+  font-family: "cour-13";
+  font-size: 13px;
   white-space: pre-wrap;
+}
+
+.font-mono-16 {
+  font-family: "cour-16";
+  font-size: 16px;
+  white-space: pre-wrap;
+}
+
+/*
+ * 98.css displays only the outer button of each pair, and paints its arrows by
+ * button position (`:start` up, `:end` down) rather than by function. It leaves
+ * the inner pair at the UA default `display: none` — which doesn't hold
+ * everywhere, and where they render they get a second up/down arrow from those
+ * position rules. Hide them explicitly.
+ */
+::-webkit-scrollbar-button:vertical:start:increment,
+::-webkit-scrollbar-button:vertical:end:decrement,
+::-webkit-scrollbar-button:horizontal:start:increment,
+::-webkit-scrollbar-button:horizontal:end:decrement {
+  display: none;
+}
+
+.input.sunken-panel {
+  flex: 1;
+  min-height: 192px;
+  margin-bottom: var(--element-spacing);
+  overflow: hidden;
+}
+.input .cm-editor {
+  height: 100%;
+}
+
+.stdout.sunken-panel {
+  height: 192px;
+  min-height: 64px;
+  overflow: hidden;
+}
+.stdout .cm-editor {
+  height: 100%;
 }
