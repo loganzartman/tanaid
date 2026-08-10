@@ -9,6 +9,8 @@ body {
   overflow: hidden;
   font-family: "sans-13";
   font-size: 13px;
+
+  background: light-dark(rgb(87 168 168), rgb(16 42 42));
 }
 
 * {
@@ -21,6 +23,28 @@ body {
 
 pixel-perfect:not(:defined) {
   visibility: hidden;
+}
+
+.main-window-container {
+  box-sizing: border-box;
+  width: calc(round(100%, 2px));
+  height: calc(round(100%, 2px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.main-window {
+  width: 100%;
+  height: 100%;
+  max-width: 1200px;
+}
+
+@media (min-width: 1200px) {
+  .main-window-container {
+    padding: 24px;
+  }
 }
 
 .page {

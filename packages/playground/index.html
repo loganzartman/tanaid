@@ -6,68 +6,77 @@
   </head>
   <body>
     <pixel-perfect>
-      <div
-        class="window"
-        style="
-          height: 100%;
-          box-sizing: border-box;
-          display: flex;
-          flex-direction: column;
-        "
-      >
-        <div class="title-bar">
-          <div class="title-bar-text">tanaid Tcl</div>
-        </div>
+      <div class="main-window-container">
         <div
-          class="window-body"
-          style="flex: 1; min-height: 0; display: flex; flex-direction: column"
+          class="window main-window"
+          style="
+            height: 100%;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+          "
         >
+          <div class="title-bar">
+            <div class="title-bar-text">tanaid Tcl</div>
+          </div>
           <div
+            class="window-body"
             style="
+              flex: 1;
+              min-height: 0;
               display: flex;
-              gap: var(--element-spacing);
-              margin-bottom: var(--element-spacing);
+              flex-direction: column;
             "
           >
-            <div style="display: flex; flex-direction: column; gap: 4px">
-              <div>
-                run a tiny subset of
-                <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a>
-                in your browser
+            <div
+              style="
+                display: flex;
+                gap: var(--element-spacing);
+                margin-bottom: var(--element-spacing);
+              "
+            >
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div>
+                  run a tiny subset of
+                  <a target="_blank" href="https://www.tcl-lang.org/">Tcl</a>
+                  in your browser
+                </div>
+                <div>
+                  <select id="example">
+                    <option value="" selected disabled>
+                      load an example...
+                    </option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <select id="example">
-                  <option value="" selected disabled>load an example...</option>
-                </select>
+              <div style="flex: 1"></div>
+              <a target="_blank" href="https://github.com/loganzartman/tanaid">
+                <img
+                  alt="powered by tanaid"
+                  src="./powered-by.png"
+                  style="float: right; image-rendering: pixelated; width: 88px"
+                />
+              </a>
+            </div>
+            <div id="input" class="input sunken-panel"></div>
+            <div>
+              <div class="field-row-stacked">
+                <label for="result">result:</label>
+                <pre id="result"></pre>
               </div>
-            </div>
-            <div style="flex: 1"></div>
-            <a target="_blank" href="https://github.com/loganzartman/tanaid">
-              <img
-                alt="powered by tanaid"
-                src="./powered-by.png"
-                style="float: right; image-rendering: pixelated; width: 88px"
-              />
-            </a>
-          </div>
-          <div id="input" class="input sunken-panel"></div>
-          <div>
-            <div class="field-row-stacked">
-              <label for="result">result:</label>
-              <pre id="result"></pre>
-            </div>
-            <div class="field-row-stacked">
-              <label for="stdout">stdout:</label>
-              <textarea
-                id="stdout"
-                class="font-mono-13"
-                style="
-                  height: 192px;
-                  min-height: 64px;
-                  resize: vertical;
-                  padding: 10px 6px;
-                "
-              ></textarea>
+              <div class="field-row-stacked">
+                <label for="stdout">stdout:</label>
+                <textarea
+                  id="stdout"
+                  class="font-mono-13"
+                  style="
+                    height: 192px;
+                    min-height: 64px;
+                    resize: vertical;
+                    padding: 10px 6px;
+                  "
+                ></textarea>
+              </div>
             </div>
           </div>
         </div>
