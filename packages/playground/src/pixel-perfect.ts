@@ -29,6 +29,9 @@ export class PixelPerfect extends HTMLElement {
   connectedCallback() {
     // `transform` does not change the layout box, so divide the box by `gs` to
     // leave the scaled result filling the parent.
+
+    // font-smoothing is required for macOS to avoid subpixel antialiasing.
+
     this.style.cssText = `
       display: block;
       width: calc(round(100% / var(--gs), 1px));
@@ -37,6 +40,8 @@ export class PixelPerfect extends HTMLElement {
       transform: scale(var(--gs));
       zoom: var(--us);
       box-sizing: border-box;
+      -webkit-font-smoothing: none;
+      -moz-osx-font-smoothing: grayscale;
     `;
     this.refresh();
   }
