@@ -78,18 +78,11 @@ const emacsHighlightStyle = HighlightStyle.define([
   // Number, PackageVersion
   { tag: t.number, color: c.constant },
 
-  // Tcl's structural words get keyword-face; its builtin command library gets
-  // builtin-face. That split mirrors how Emacs' own tcl.el assigns the two.
-  // if/else/while/for/foreach/switch/return/break/continue/catch/try/throw
-  { tag: t.controlKeyword, color: c.keyword },
-  // proc, set, package
-  { tag: t.definitionKeyword, color: c.keyword },
-  // global, variable
-  { tag: t.modifier, color: c.keyword },
-  // the per-command keywords (list/string/dict/io/...)
-  { tag: t.keyword, color: c.builtin },
-  // expr
-  { tag: t.operatorKeyword, color: c.builtin },
+  // All words in command position use the same face.
+  {
+    tag: [t.controlKeyword, t.definitionKeyword, t.modifier, t.keyword, t.operatorKeyword],
+    color: c.keyword,
+  },
   // eq/ne/lt/gt/le/ge
   { tag: t.operator, color: c.foreground },
 
