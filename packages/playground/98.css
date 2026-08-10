@@ -429,7 +429,7 @@ legend {
   flex-direction: column;
 }
 
-.field-row-stacked * + * {
+.field-row-stacked > * + * {
   margin-top: var(--grouped-element-spacing);
 }
 
