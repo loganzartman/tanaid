@@ -16,7 +16,39 @@ import "./pixel-perfect.ts";
 const exampleSelectEl = document.getElementById("example")! as HTMLSelectElement;
 const inputContainerEl = document.getElementById("input")! as HTMLElement;
 const resultEl = document.getElementById("result")! as HTMLElement;
-const stdoutEl = document.getElementById("stdout")! as HTMLElement;
+const stdoutContainerEl = document.getElementById("stdout")! as HTMLElement;
+
+const stdoutView = new EditorView({
+  state: EditorState.create({
+    doc: "",
+    extensions: [EditorState.readOnly.of(true), drawSelection(), emacsTheme()],
+  }),
+  parent: stdoutContainerEl,
+});
+
+const clearStdout = () => {
+  stdoutView.dispatch({
+    changes: { from: 0, to: stdoutView.state.doc.length, insert: "" },
+  });
+};
+
+let stdoutScrollRaf = 0;
+const scrollStdoutToEnd = () => {
+  stdoutView.scrollDOM.scrollTop = stdoutView.scrollDOM.scrollHeight;
+};
+
+const appendStdout = (value: string) => {
+  if (!value.length) return;
+  stdoutView.dispatch({
+    changes: { from: stdoutView.state.doc.length, insert: value },
+  });
+  if (!stdoutScrollRaf) {
+    stdoutScrollRaf = requestAnimationFrame(() => {
+      stdoutScrollRaf = 0;
+      scrollStdoutToEnd();
+    });
+  }
+};
 
 function runTcl(
   source: string,
@@ -94,13 +126,13 @@ let cancel: (() => void) | null = null;
 const evaluate = async (code: string) => {
   resultEl.classList.remove("error");
   resultEl.innerText = "...";
-  stdoutEl.innerText = "";
+  clearStdout();
   try {
     cancel?.();
     let result;
     [cancel, result] = runTcl(code, {
       handleStdout(value) {
-        stdoutEl.textContent += value;
+        appendStdout(value);
       },
       timeoutMs: 2000,
     });
@@ -109,6 +141,8 @@ const evaluate = async (code: string) => {
   } catch (e) {
     resultEl.classList.add("error");
     resultEl.innerText = String(e);
+  } finally {
+    scrollStdoutToEnd();
   }
 };
 

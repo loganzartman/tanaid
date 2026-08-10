@@ -128,3 +128,12 @@ pre,
 .input .cm-editor {
   height: 100%;
 }
+
+.stdout.sunken-panel {
+  height: 192px;
+  min-height: 64px;
+  overflow: hidden;
+}
+.stdout .cm-editor {
+  height: 100%;
+}
