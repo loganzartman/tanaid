@@ -18,6 +18,8 @@ pub enum ExprNode {
 pub enum UnaryOp {
   Plus,
   Minus,
+  BitwiseNot,
+  LogicalNot,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -114,7 +116,31 @@ pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &st
   Ok((op, &src[m.len()..]))
 }
 
-pub fn parse_expr_unary(src: &str) -> Result<(ExprNode, &str), ParseError> {
+pub fn parse_expr_unary(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
+  static RE_UNARY: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[+~!-]").unwrap());
+
+  if let Ok((_, rest)) = parser::parse_ws(src) {
+    src = rest;
+  }
+
+  if let Some(captures) = RE_UNARY.captures(src) {
+    let m = captures.get_match().as_str();
+    let op = match m {
+      "+" => UnaryOp::Plus,
+      "-" => UnaryOp::Minus,
+      "~" => UnaryOp::BitwiseNot,
+      "!" => UnaryOp::LogicalNot,
+      _ => {
+        return Err(ParseError::Internal(
+          "regex did not match an operator".to_string(),
+        ));
+      }
+    };
+    src = &src[m.len()..];
+    let (operand, rest) = parse_expr_unary(src)?;
+    return Ok((ExprNode::UnaryOp(op, Box::new(operand)), rest));
+  }
+
   parse_expr_atom(src)
 }
 
@@ -249,6 +275,12 @@ mod tests {
     };
   }
 
+  macro_rules! unop {
+    ($op: ident, $operand: expr) => {
+      ExprNode::UnaryOp(UnaryOp::$op, Box::new($operand))
+    };
+  }
+
   #[test]
   fn parses_binary_op() -> Result<(), ParseError> {
     let (node, _) = parse_expr("1 + 2")?;
@@ -287,6 +319,44 @@ mod tests {
         Add,
         binop!(Add, lit!("2"), binop!(Mul, lit!("3"), lit!("2"))),
         binop!(Mul, binop!(Mul, lit!("2"), lit!("3")), lit!("5"))
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_unary_ops() -> Result<(), ParseError> {
+    for (src, expected) in [
+      ("+1", unop!(Plus, lit!("1"))),
+      ("-1", unop!(Minus, lit!("1"))),
+      ("~1", unop!(BitwiseNot, lit!("1"))),
+      ("!1", unop!(LogicalNot, lit!("1"))),
+    ] {
+      assert_eq!(parse_expr(src)?, (expected, ""));
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn parses_successive_unary_ops() -> Result<(), ParseError> {
+    assert_eq!(
+      parse_expr("! ~ -1")?,
+      (
+        unop!(LogicalNot, unop!(BitwiseNot, unop!(Minus, lit!("1")))),
+        ""
+      )
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_unary_ops_precedence() -> Result<(), ParseError> {
+    assert_eq!(
+      parse_expr("-1 * 2 + 3")?.0,
+      binop!(
+        Add,
+        binop!(Mul, unop!(Minus, lit!("1")), lit!("2")),
+        lit!("3")
       )
     );
     Ok(())

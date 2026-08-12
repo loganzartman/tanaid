@@ -101,6 +101,35 @@ impl Value {
     Ok(self.string.as_deref().unwrap())
   }
 
+  pub fn repr_bool(&mut self) -> Result<bool, EvalError> {
+    if let Ok(x) = self.repr_int() {
+      return Ok(x != 0);
+    }
+
+    if let Ok(x) = self.repr_float() {
+      return Ok(x != 0.);
+    }
+
+    let s = self.repr_str()?;
+
+    static RE_TRUTHY: LazyLock<Regex> =
+      LazyLock::new(|| Regex::new("(?i)^(tr?u?e?|ye?s?|on)$").unwrap());
+    if RE_TRUTHY.is_match(s) {
+      return Ok(true);
+    }
+
+    static RE_FALSY: LazyLock<Regex> =
+      LazyLock::new(|| Regex::new("(?i)^(fa?l?s?e?|no?|off?)$").unwrap());
+    if RE_FALSY.is_match(s) {
+      return Ok(false);
+    }
+
+    Err(EvalError::ArgumentError(format!(
+      "expected boolean value but got \"{}\"",
+      s
+    )))
+  }
+
   pub fn repr_int(&mut self) -> Result<i64, EvalError> {
     if let Repr::Int(x) = self.repr {
       return Ok(x);
@@ -188,6 +217,30 @@ impl Value {
       unreachable!()
     };
     Ok(list.clone())
+  }
+
+  pub fn unary_plus(&mut self) -> Result<Value, EvalError> {
+    if let Ok(x) = self.repr_int() {
+      return Ok(Value::from(x));
+    }
+
+    if let Ok(x) = self.repr_float() {
+      return Ok(Value::from(x));
+    }
+
+    Err(EvalError::ArgumentError(
+      "can't use non-numeric string as operand of +".to_string(),
+    ))
+  }
+
+  pub fn bit_not(&mut self) -> Result<Value, EvalError> {
+    if let Ok(x) = self.repr_int() {
+      return Ok(Value::from(!x));
+    }
+
+    Err(EvalError::ArgumentError(
+      "operator ~ expects integer operand".to_string(),
+    ))
   }
 
   pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
@@ -283,6 +336,15 @@ impl From<&str> for Value {
   }
 }
 
+impl From<bool> for Value {
+  fn from(value: bool) -> Self {
+    Value {
+      string: None,
+      repr: Repr::Int(if value { 1 } else { 0 }),
+    }
+  }
+}
+
 impl From<i64> for Value {
   fn from(value: i64) -> Self {
     Value {
@@ -353,5 +415,34 @@ impl ops::Rem for Value {
     let a = self.repr_int()?;
     let b = rhs.repr_int()?;
     return Ok(Value::from(a % b));
+  }
+}
+
+impl ops::Neg for Value {
+  type Output = Result<Value, EvalError>;
+
+  fn neg(mut self) -> Self::Output {
+    if let Ok(x) = self.repr_int() {
+      return Ok(Value::from(-x));
+    }
+    if let Ok(x) = self.repr_float() {
+      return Ok(Value::from(-x));
+    }
+    return Err(EvalError::ArgumentError(format!(
+      "can't use non-numeric string as operand of -"
+    )));
+  }
+}
+
+impl ops::Not for Value {
+  type Output = Result<Value, EvalError>;
+
+  fn not(mut self) -> Self::Output {
+    if let Ok(b) = self.repr_bool() {
+      return Ok(Value::from(!b));
+    }
+    return Err(EvalError::ArgumentError(format!(
+      "can't use non-numeric string as operand of !"
+    )));
   }
 }

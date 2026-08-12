@@ -1,6 +1,6 @@
 use super::{EvalContext, FrameId, eval_word};
 use crate::eval_error::EvalError;
-use crate::parser_expr::{BinaryOp, ExprNode};
+use crate::parser_expr::{BinaryOp, ExprNode, UnaryOp};
 use crate::value::Value;
 
 pub fn eval_expr(
@@ -11,9 +11,25 @@ pub fn eval_expr(
   use ExprNode::*;
   match node {
     Word(w) => eval_word(w, context, frame),
-    UnaryOp(_o, _x) => todo!(),
+    UnaryOp(o, x) => eval_expr_unary_op(o, x.as_ref(), context, frame),
     BinaryOp(o, a, b) => eval_expr_binary_op(o, a.as_ref(), b.as_ref(), context, frame),
     Ternary(_c, _i, _e) => todo!(),
+  }
+}
+
+pub fn eval_expr_unary_op(
+  o: &UnaryOp,
+  x: &ExprNode,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
+  use UnaryOp::*;
+  let mut x = eval_expr(x, context, frame)?;
+  match o {
+    Plus => x.unary_plus(),
+    Minus => -x,
+    BitwiseNot => x.bit_not(),
+    LogicalNot => !x,
   }
 }
 
