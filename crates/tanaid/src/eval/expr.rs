@@ -41,6 +41,27 @@ pub fn eval_expr_binary_op(
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   use BinaryOp::*;
+
+  match o {
+    And => {
+      let mut a = eval_expr(a, context, frame)?;
+      if !a.repr_bool()? {
+        return Ok(Value::from(false));
+      }
+      let mut b = eval_expr(b, context, frame)?;
+      return Ok(Value::from(b.repr_bool()?));
+    }
+    Or => {
+      let mut a = eval_expr(a, context, frame)?;
+      if a.repr_bool()? {
+        return Ok(Value::from(true));
+      }
+      let mut b = eval_expr(b, context, frame)?;
+      return Ok(Value::from(b.repr_bool()?));
+    }
+    _ => {}
+  }
+
   let mut a = eval_expr(a, context, frame)?;
   let mut b = eval_expr(b, context, frame)?;
   match o {
@@ -55,5 +76,6 @@ pub fn eval_expr_binary_op(
     Mul => a * b,
     Div => a / b,
     Rem => a % b,
+    And | Or => unreachable!(),
   }
 }
