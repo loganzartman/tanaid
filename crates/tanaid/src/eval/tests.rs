@@ -35,10 +35,7 @@ fn eval_expr_remainder() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn eval_expr_unary_plus_minus() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  assert_eq!(
-    eval(&parser::parse("expr {+1}")?, &mut ctx)?.repr_int()?,
-    1
-  );
+  assert_eq!(eval(&parser::parse("expr {+1}")?, &mut ctx)?.repr_int()?, 1);
   assert_eq!(
     eval(&parser::parse("expr {-1}")?, &mut ctx)?.repr_int()?,
     -1
@@ -96,14 +93,8 @@ fn eval_expr_unary_bitwise_not() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn eval_expr_unary_logical_not() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  assert_eq!(
-    eval(&parser::parse("expr {!0}")?, &mut ctx)?.repr_int()?,
-    1
-  );
-  assert_eq!(
-    eval(&parser::parse("expr {!1}")?, &mut ctx)?.repr_int()?,
-    0
-  );
+  assert_eq!(eval(&parser::parse("expr {!0}")?, &mut ctx)?.repr_int()?, 1);
+  assert_eq!(eval(&parser::parse("expr {!1}")?, &mut ctx)?.repr_int()?, 0);
   assert_eq!(
     eval(&parser::parse("expr {!0.0}")?, &mut ctx)?.repr_int()?,
     1
@@ -201,6 +192,115 @@ fn eval_expr_unary_with_binary_precedence() -> Result<(), Box<dyn std::error::Er
     eval(&parser::parse("expr {! ~ -1}")?, &mut ctx)?.repr_int()?,
     1
   );
+  Ok(())
+}
+
+#[test]
+fn eval_expr_boolean_and_or() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  for (src, expected) in [
+    ("expr {1 && 1}", 1),
+    ("expr {1 && 0}", 0),
+    ("expr {0 && 1}", 0),
+    ("expr {0 && 0}", 0),
+    ("expr {0 || 0}", 0),
+    ("expr {0 || 1}", 1),
+    ("expr {1 || 0}", 1),
+    ("expr {1 || 1}", 1),
+    ("expr {1 && 0 || 1}", 1),
+    ("expr {0 || 1 && 0}", 0),
+    ("expr {1 == 1 && 2 < 3}", 1),
+    ("expr {1 == 2 || 3 < 4}", 1),
+    ("expr {!0 && 1}", 1),
+    ("expr {true && yes}", 1),
+    ("expr {false || no}", 0),
+    ("expr {on && off}", 0),
+    ("expr {0.0 || 0.1}", 1),
+  ] {
+    assert_eq!(
+      eval(&parser::parse(src)?, &mut ctx)?.repr_int()?,
+      expected,
+      "{src}"
+    );
+  }
+  Ok(())
+}
+
+#[test]
+fn eval_expr_boolean_short_circuit() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+
+  // right side must not run when && short-circuits on false left
+  eval(&parser::parse("set x 0")?, &mut ctx)?;
+  assert_eq!(
+    eval(&parser::parse("expr {0 && [set x 1]}")?, &mut ctx)?.repr_int()?,
+    0
+  );
+  assert_eq!(
+    ctx
+      .get_variable(GLOBAL_FRAME, "x")
+      .unwrap()
+      .clone()
+      .repr_int()?,
+    0
+  );
+
+  // right side must not run when || short-circuits on true left
+  eval(&parser::parse("set x 0")?, &mut ctx)?;
+  assert_eq!(
+    eval(&parser::parse("expr {1 || [set x 1]}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    ctx
+      .get_variable(GLOBAL_FRAME, "x")
+      .unwrap()
+      .clone()
+      .repr_int()?,
+    0
+  );
+
+  // non-short-circuit path still evaluates the right side
+  eval(&parser::parse("set x 0")?, &mut ctx)?;
+  assert_eq!(
+    eval(&parser::parse("expr {1 && [set x 1]}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    ctx
+      .get_variable(GLOBAL_FRAME, "x")
+      .unwrap()
+      .clone()
+      .repr_int()?,
+    1
+  );
+
+  eval(&parser::parse("set x 0")?, &mut ctx)?;
+  assert_eq!(
+    eval(&parser::parse("expr {0 || [set x 1]}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    ctx
+      .get_variable(GLOBAL_FRAME, "x")
+      .unwrap()
+      .clone()
+      .repr_int()?,
+    1
+  );
+  Ok(())
+}
+
+#[test]
+fn eval_expr_boolean_rejects_non_bool() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  for src in ["expr {foo && 1}", "expr {0 || bar}", "expr {1 && truex}"] {
+    assert_matches!(
+      eval(&parser::parse(src)?, &mut ctx),
+      Err(EvalError::ArgumentError(_)),
+      "{src}"
+    );
+  }
   Ok(())
 }
 
