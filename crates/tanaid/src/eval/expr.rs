@@ -42,7 +42,6 @@ pub fn eval_expr_binary_op(
 ) -> Result<Value, EvalError> {
   use BinaryOp::*;
 
-  // && and || short-circuit like Tcl/C: only evaluate the right operand when needed.
   match o {
     And => {
       let mut a = eval_expr(a, context, frame)?;
