@@ -33,6 +33,178 @@ fn eval_expr_remainder() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn eval_expr_unary_plus_minus() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  assert_eq!(
+    eval(&parser::parse("expr {+1}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {-1}")?, &mut ctx)?.repr_int()?,
+    -1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {+-1}")?, &mut ctx)?.repr_int()?,
+    -1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {-+1}")?, &mut ctx)?.repr_int()?,
+    -1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {--1}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {+ 1}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {- 1}")?, &mut ctx)?.repr_int()?,
+    -1
+  );
+
+  let mut result = eval(&parser::parse("expr {+1.5}")?, &mut ctx)?;
+  assert_eq!(result.repr_float()?, 1.5);
+  let mut result = eval(&parser::parse("expr {-1.5}")?, &mut ctx)?;
+  assert_eq!(result.repr_float()?, -1.5);
+  Ok(())
+}
+
+#[test]
+fn eval_expr_unary_bitwise_not() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  assert_eq!(
+    eval(&parser::parse("expr {~0}")?, &mut ctx)?.repr_int()?,
+    -1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {~1}")?, &mut ctx)?.repr_int()?,
+    -2
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {~-1}")?, &mut ctx)?.repr_int()?,
+    0
+  );
+  assert_matches!(
+    eval(&parser::parse("expr {~1.5}")?, &mut ctx),
+    Err(EvalError::ArgumentError(_))
+  );
+  Ok(())
+}
+
+#[test]
+fn eval_expr_unary_logical_not() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  assert_eq!(
+    eval(&parser::parse("expr {!0}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {!1}")?, &mut ctx)?.repr_int()?,
+    0
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {!0.0}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {!0.1}")?, &mut ctx)?.repr_int()?,
+    0
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {! 0}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {!!1}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {!0 + 1}")?, &mut ctx)?.repr_int()?,
+    2
+  );
+
+  for (src, expected) in [
+    ("expr {!true}", 0),
+    ("expr {!false}", 1),
+    ("expr {!yes}", 0),
+    ("expr {!no}", 1),
+    ("expr {!on}", 0),
+    ("expr {!off}", 1),
+    ("expr {!t}", 0),
+    ("expr {!f}", 1),
+    ("expr {!tru}", 0),
+    ("expr {!fa}", 1),
+    ("expr {!n}", 1),
+    ("expr {!of}", 1),
+  ] {
+    assert_eq!(
+      eval(&parser::parse(src)?, &mut ctx)?.repr_int()?,
+      expected,
+      "{src}"
+    );
+  }
+  Ok(())
+}
+
+#[test]
+fn eval_expr_unary_logical_not_rejects_bool_prefixes() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  for src in [
+    "expr {!truex}",
+    "expr {!yesterday}",
+    "expr {!offline}",
+    "expr {!falsex}",
+    "expr {!o}",
+    "expr {!foo}",
+  ] {
+    assert_matches!(
+      eval(&parser::parse(src)?, &mut ctx),
+      Err(EvalError::ArgumentError(_)),
+      "{src}"
+    );
+  }
+  Ok(())
+}
+
+#[test]
+fn eval_expr_unary_rejects_non_numeric() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  assert_matches!(
+    eval(&parser::parse("expr {+true}")?, &mut ctx),
+    Err(EvalError::ArgumentError(_))
+  );
+  assert_matches!(
+    eval(&parser::parse("expr {-true}")?, &mut ctx),
+    Err(EvalError::ArgumentError(_))
+  );
+  assert_matches!(
+    eval(&parser::parse("expr {~true}")?, &mut ctx),
+    Err(EvalError::ArgumentError(_))
+  );
+  Ok(())
+}
+
+#[test]
+fn eval_expr_unary_with_binary_precedence() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  assert_eq!(
+    eval(&parser::parse("expr {-1 * 2 + 3}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {!~-1}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  assert_eq!(
+    eval(&parser::parse("expr {! ~ -1}")?, &mut ctx)?.repr_int()?,
+    1
+  );
+  Ok(())
+}
+
+#[test]
 fn eval_if_simple() -> Result<(), Box<dyn std::error::Error>> {
   let ast = parser::parse("if {$x} {expr yes} {expr no}")?;
   {
