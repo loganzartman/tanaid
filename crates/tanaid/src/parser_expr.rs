@@ -35,6 +35,8 @@ pub enum BinaryOp {
   Gt,
   Le,
   Ge,
+  And,
+  Or,
 }
 
 pub fn parse_expr(src: &str) -> Result<(ExprNode, &str), ParseError> {
@@ -42,7 +44,7 @@ pub fn parse_expr(src: &str) -> Result<(ExprNode, &str), ParseError> {
 }
 
 pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &str), ParseError> {
-  if precedence >= 3 {
+  if precedence >= 5 {
     return parse_expr_unary(src);
   }
 
@@ -78,14 +80,18 @@ pub fn parse_expr_binary(mut src: &str, precedence: u8) -> Result<(ExprNode, &st
 }
 
 pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &str), ParseError> {
-  static RE_P0: LazyLock<Regex> = LazyLock::new(|| Regex::new("^(<=|==|!=|>=|<|>)").unwrap());
-  static RE_P1: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[+-]").unwrap());
-  static RE_P2: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[*/%]").unwrap());
+  static RE_P0: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\|\|").unwrap());
+  static RE_P1: LazyLock<Regex> = LazyLock::new(|| Regex::new("^&&").unwrap());
+  static RE_P2: LazyLock<Regex> = LazyLock::new(|| Regex::new("^(<=|==|!=|>=|<|>)").unwrap());
+  static RE_P3: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[+-]").unwrap());
+  static RE_P4: LazyLock<Regex> = LazyLock::new(|| Regex::new("^[*/%]").unwrap());
 
   let re = match precedence {
     0 => &RE_P0,
     1 => &RE_P1,
     2 => &RE_P2,
+    3 => &RE_P3,
+    4 => &RE_P4,
     _ => return Err(ParseError::Internal("invalid precedence".to_string())),
   };
 
@@ -95,6 +101,8 @@ pub fn parse_binary_operator(src: &str, precedence: u8) -> Result<(BinaryOp, &st
   let m = captures.get_match().as_str();
 
   let op = match m {
+    "||" => BinaryOp::Or,
+    "&&" => BinaryOp::And,
     "<" => BinaryOp::Lt,
     "<=" => BinaryOp::Le,
     "==" => BinaryOp::Eq,
@@ -405,6 +413,53 @@ mod tests {
   }
 
   #[test]
+  fn parses_boolean_ops() -> Result<(), ParseError> {
+    assert_eq!(parse_expr("0 && 1")?.0, binop!(And, lit!("0"), lit!("1")));
+    assert_eq!(parse_expr("0 || 1")?.0, binop!(Or, lit!("0"), lit!("1")));
+    assert_eq!(parse_expr("0&&1")?.0, binop!(And, lit!("0"), lit!("1")));
+    assert_eq!(parse_expr("0||1")?.0, binop!(Or, lit!("0"), lit!("1")));
+    Ok(())
+  }
+
+  #[test]
+  fn parses_boolean_ops_successive() -> Result<(), ParseError> {
+    assert_eq!(
+      parse_expr("1 && 0 && 1")?.0,
+      binop!(And, binop!(And, lit!("1"), lit!("0")), lit!("1"))
+    );
+    assert_eq!(
+      parse_expr("0 || 1 || 0")?.0,
+      binop!(Or, binop!(Or, lit!("0"), lit!("1")), lit!("0"))
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn parses_boolean_ops_precedence() -> Result<(), ParseError> {
+    assert_eq!(
+      parse_expr("1 || 0 && 0")?.0,
+      binop!(Or, lit!("1"), binop!(And, lit!("0"), lit!("0")))
+    );
+    assert_eq!(
+      parse_expr("1 == 2 || 3 < 4 && 5 != 6")?.0,
+      binop!(
+        Or,
+        binop!(Eq, lit!("1"), lit!("2")),
+        binop!(
+          And,
+          binop!(Lt, lit!("3"), lit!("4")),
+          binop!(Ne, lit!("5"), lit!("6"))
+        )
+      )
+    );
+    assert_eq!(
+      parse_expr("!0 && 1")?.0,
+      binop!(And, unop!(LogicalNot, lit!("0")), lit!("1"))
+    );
+    Ok(())
+  }
+
+  #[test]
   fn skips_leading_and_trailing_whitespace() -> Result<(), ParseError> {
     let (node, rest) = parse_expr("  1 + 2  ")?;
     assert_eq!(node, binop!(Add, lit!("1"), lit!("2")));
@@ -477,9 +532,9 @@ mod tests {
 
   #[test]
   fn leaves_unsupported_operators_unconsumed() -> Result<(), ParseError> {
-    let (node, rest) = parse_expr("0||1")?;
+    let (node, rest) = parse_expr("0&1")?;
     assert_eq!(node, lit!("0"));
-    assert_eq!(rest, "||1");
+    assert_eq!(rest, "&1");
     Ok(())
   }
 }
