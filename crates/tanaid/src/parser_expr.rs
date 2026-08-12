@@ -130,7 +130,11 @@ pub fn parse_expr_unary(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
       "-" => UnaryOp::Minus,
       "~" => UnaryOp::BitwiseNot,
       "!" => UnaryOp::LogicalNot,
-      _ => unreachable!("regex did not match operator"),
+      _ => {
+        return Err(ParseError::Internal(
+          "regex did not match an operator".to_string(),
+        ));
+      }
     };
     src = &src[m.len()..];
     let (operand, rest) = parse_expr_unary(src)?;
