@@ -139,6 +139,12 @@ pub(crate) fn parse_script(
       break;
     }
 
+    // comments
+    if let Ok((_, rest)) = parse_comment(src) {
+      src = rest;
+      continue;
+    }
+
     let (command, rest) = parse_command(src, mode)?;
     commands.push(command);
     src = rest;
@@ -214,6 +220,39 @@ fn parse_command(mut src: &str, mode: ParseMode) -> Result<(CommandNode, &str), 
   }
 
   Ok((CommandNode { words }, src))
+}
+
+fn parse_comment(mut src: &str) -> Result<((), &str), ParseError> {
+  src = src
+    .strip_prefix("#")
+    .ok_or_else(|| ParseError::Generic("expected comment starting with #".to_string()))?;
+
+  loop {
+    let ch = src.chars().next();
+    match ch {
+      None => {
+        return Ok(((), src));
+      }
+      Some('\\') => {
+        if let Ok((_, rest)) = parse_backslash_escape_newline(src) {
+          // escaped newline: continue comment
+          src = rest;
+        } else {
+          // something else: backslash and one more char (not actually parsed)
+          src = &src[1..];
+          if let Some(ch) = src.chars().next() {
+            src = &src[ch.len_utf8()..];
+          }
+        }
+      }
+      Some('\r' | '\n') => {
+        return Ok(((), src));
+      }
+      Some(ch) => {
+        src = &src[ch.len_utf8()..];
+      }
+    }
+  }
 }
 
 pub fn parse_list(mut src: &str) -> Result<(Vec<String>, &str), ParseError> {
@@ -1596,6 +1635,92 @@ mod tests {
           WordNode::only(WordPart::BareLiteral("hey".to_string())),
         ]
       },
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn comments_are_skipped() -> Result<(), ParseError> {
+    for (src, expected) in [
+      ("# hello\nputs hi", "puts hi"),
+      ("  # hello\nputs hi", "puts hi"),
+      ("puts a\n# skip\nputs b", "puts a\nputs b"),
+      ("puts a;# skip\nputs b", "puts a\nputs b"),
+    ] {
+      assert_eq!(parse(src)?, parse(expected)?, "failed for {src:?}");
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn comment_only_script_has_no_commands() -> Result<(), ParseError> {
+    for src in ["#", "# hello", "# hello\n", "# a\n# b\n"] {
+      let parsed = parse(src)?;
+      assert!(
+        parsed.commands.is_empty(),
+        "expected no commands for {src:?}, got {parsed:?}"
+      );
+    }
+    Ok(())
+  }
+
+  #[test]
+  fn hash_inside_command_is_not_a_comment() -> Result<(), ParseError> {
+    assert_eq!(
+      parse("puts hi # x")?,
+      bare_script(&["puts", "hi", "#", "x"])
+    );
+    assert_eq!(
+      parse("puts hi # x\nputs z")?,
+      ScriptNode {
+        commands: vec![
+          CommandNode {
+            words: vec![
+              WordNode::only(WordPart::BareLiteral("puts".to_string())),
+              WordNode::only(WordPart::BareLiteral("hi".to_string())),
+              WordNode::only(WordPart::BareLiteral("#".to_string())),
+              WordNode::only(WordPart::BareLiteral("x".to_string())),
+            ]
+          },
+          CommandNode {
+            words: vec![
+              WordNode::only(WordPart::BareLiteral("puts".to_string())),
+              WordNode::only(WordPart::BareLiteral("z".to_string())),
+            ]
+          },
+        ]
+      }
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn backslash_newline_continues_comment() -> Result<(), ParseError> {
+    assert_eq!(
+      parse("# still comment \\\nputs eaten\nputs survived")?,
+      parse("puts survived")?
+    );
+    assert_eq!(
+      parse("# does not continue \\\\\nputs kept")?,
+      parse("puts kept")?
+    );
+    assert_eq!(parse("# \\\u{4f60}\nputs hi")?, parse("puts hi")?);
+    Ok(())
+  }
+
+  #[test]
+  fn command_sub_comment_runs_to_newline_not_bracket() -> Result<(), ParseError> {
+    assert!(parse("puts [# comment]").is_err());
+    assert_eq!(
+      parse("puts [#\n]")?,
+      ScriptNode {
+        commands: vec![CommandNode {
+          words: vec![
+            WordNode::only(WordPart::BareLiteral("puts".to_string())),
+            WordNode::only(WordPart::CommandSub(ScriptNode { commands: vec![] })),
+          ]
+        }]
+      }
     );
     Ok(())
   }
