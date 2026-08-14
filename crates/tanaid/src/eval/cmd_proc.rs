@@ -1,5 +1,4 @@
-use super::{EvalContext, FrameId, Proc, cmd::EvalCmdResult};
-use crate::eval::proc::ProcParam;
+use super::{cmd::EvalCmdResult, proc::ProcParam, EvalContext, FrameId, Proc};
 use crate::eval_error::EvalError;
 use crate::parser::{self};
 use crate::value::Value;
@@ -29,11 +28,12 @@ pub(super) fn eval(
   let params = params_raw
     .iter()
     .map(|param_raw| {
-      let (list, "") =
-        parser::parse_list(param_raw).map_err(|e| EvalError::Generic(e.to_string()))?
+      let (list, "") = parser::parse_list(param_raw).map_err(|e| {
+        EvalError::ArgumentError(format!("invalid parameter \"{}\": {}", param_raw, e))
+      })?
       else {
         return Err(EvalError::ArgumentError(format!(
-          "invalid parameter: {}",
+          "invalid parameter \"{}\"",
           param_raw
         )));
       };
@@ -48,7 +48,7 @@ pub(super) fn eval(
           default: Some(default.clone()),
         }),
         _ => Err(EvalError::ArgumentError(format!(
-          "too many fields in argument specifier: {}",
+          "too many fields in argument specifier \"{}\"",
           param_raw
         ))),
       }

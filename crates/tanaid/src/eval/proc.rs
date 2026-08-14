@@ -1,4 +1,4 @@
-use super::{EvalContext, FrameId, eval_returnable_script};
+use super::{eval_returnable_script, EvalContext, FrameId};
 use crate::eval_error::EvalError;
 use crate::parser::ScriptNode;
 use crate::value::Value;
@@ -41,9 +41,9 @@ pub fn eval_proc(
 
       let value = match (args_it.next(), &param.default) {
         (Some(value), _) => Ok(value.clone()),
-        (None, Some(default)) => Ok(Value::new(default.to_string())),
+        (None, Some(default)) => Ok(Value::new(default.as_str())),
         _ => Err(EvalError::ArgumentError(format!(
-          "wrong number of args for: {}",
+          "wrong number of args for {}",
           name
         ))),
       }?;
