@@ -12,10 +12,13 @@ pub type FrameId = usize;
 pub(crate) const GLOBAL_FRAME: FrameId = 0;
 
 pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
+pub type CommandHandler =
+  Rc<dyn Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError>>;
 
 #[derive(Clone)]
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
+  commands: HashMap<String, CommandHandler>,
   frames: Vec<EvalFrame>,
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -49,8 +52,9 @@ impl std::fmt::Debug for EvalContext {
 
 impl EvalContext {
   pub fn new() -> EvalContext {
-    EvalContext {
+    let mut context = EvalContext {
       procs: HashMap::new(),
+      commands: HashMap::new(),
       frames: vec![EvalFrame::new()],
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -58,7 +62,9 @@ impl EvalContext {
         print!("{}", output);
         Ok(())
       }),
-    }
+    };
+    super::cmd::register_builtin_commands(&mut context);
+    context
   }
 
   pub fn with_stdout(mut self, stdout: OutputSink) -> Self {
@@ -84,6 +90,18 @@ impl EvalContext {
     let result = f(self, next_id);
     self.frames.pop();
     result
+  }
+
+  pub fn get_command(&self, name: &str) -> Option<CommandHandler> {
+    self.commands.get(name).cloned()
+  }
+
+  pub fn register_command(&mut self, name: &str, handler: CommandHandler) {
+    self.commands.insert(name.to_string(), handler.clone());
+  }
+
+  pub fn unregister_command(&mut self, name: &str) {
+    self.commands.remove(name);
   }
 
   pub fn get_proc(&self, name: &str) -> Option<Rc<Proc>> {
