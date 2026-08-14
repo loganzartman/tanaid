@@ -1,12 +1,18 @@
-use super::{EvalContext, FrameId, eval_returnable_script};
+use super::{eval_returnable_script, EvalContext, FrameId};
 use crate::eval_error::EvalError;
 use crate::parser::ScriptNode;
 use crate::value::Value;
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Proc {
-  pub(crate) params: Vec<String>,
+  pub(crate) params: Vec<ProcParam>,
   pub(crate) body: ScriptNode,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct ProcParam {
+  pub(crate) name: String,
+  pub(crate) default: Option<String>,
 }
 
 pub fn eval_proc(
@@ -22,7 +28,7 @@ pub fn eval_proc(
     for (i, param) in proc.params.iter().enumerate() {
       // handle rest args
       if i == proc.params.len() - 1 {
-        if param == "args" {
+        if param.name == "args" {
           let args_concat = args_it
             .by_ref()
             .map(|word| word.repr_str().map(|str| str.to_string()))
@@ -33,10 +39,16 @@ pub fn eval_proc(
         }
       }
 
-      let value = args_it
-        .next()
-        .ok_or_else(|| EvalError::ArgumentError(format!("not enough args for {}", name)))?;
-      context.set_variable(proc_frame, param, value.clone());
+      let value = match (args_it.next(), &param.default) {
+        (Some(value), _) => Ok(value.clone()),
+        (None, Some(default)) => Ok(Value::new(default.as_str())),
+        _ => Err(EvalError::ArgumentError(format!(
+          "wrong number of args for {}",
+          name
+        ))),
+      }?;
+
+      context.set_variable(proc_frame, param.name.as_str(), value);
     }
 
     if args_it.next().is_some() {

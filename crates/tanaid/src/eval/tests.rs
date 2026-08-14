@@ -748,6 +748,62 @@ fn eval_proc_too_many_args() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn eval_proc_default_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  eval(
+    &parser::parse("proc f {x {y 2}} {return \"$x $y\"}; proc g {{a 1} {b 2}} {return \"$a $b\"}")?,
+    &mut ctx,
+  )?;
+  assert_eq!(eval(&parser::parse("f 1")?, &mut ctx)?.repr_str()?, "1 2");
+  assert_eq!(eval(&parser::parse("f 1 9")?, &mut ctx)?.repr_str()?, "1 9");
+  assert_eq!(eval(&parser::parse("g")?, &mut ctx)?.repr_str()?, "1 2");
+  Ok(())
+}
+
+#[test]
+fn eval_proc_default_then_rest_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  eval(
+    &parser::parse("proc f {x {y 1} args} {return \"$x|$y|$args\"}")?,
+    &mut ctx,
+  )?;
+  assert_eq!(eval(&parser::parse("f a")?, &mut ctx)?.repr_str()?, "a|1|");
+  assert_eq!(
+    eval(&parser::parse("f a b c d")?, &mut ctx)?.repr_str()?,
+    "a|b|c d"
+  );
+  Ok(())
+}
+
+#[test]
+fn eval_proc_default_arg_with_spaces() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {{x {hello world}}} {return $x}; f")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "hello world");
+  Ok(())
+}
+
+#[test]
+fn eval_proc_default_arg_too_few() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("proc f {x {y 2}} {return \"$x $y\"}; f")?;
+  let mut ctx = EvalContext::new();
+  let result = eval(&ast, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_proc_too_many_fields_in_arg_specifier() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("proc f {{x 1 2}} {return 1}")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("proc f {{{a}x}} {return 1}")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
 fn eval_return_from_script() -> Result<(), Box<dyn std::error::Error>> {
   let ast = parser::parse("expr 1; expr 2; return 3; expr 4")?;
   let mut ctx = EvalContext::new();
