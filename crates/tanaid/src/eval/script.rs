@@ -1,4 +1,4 @@
-use super::{EvalContext, FrameId, cmd::eval_builtin, eval_proc, eval_word};
+use super::{EvalContext, FrameId, eval_proc, eval_word};
 use crate::eval_error::EvalError;
 use crate::parser::{CommandNode, ScriptNode};
 use crate::value::Value;
@@ -57,9 +57,9 @@ pub fn eval_command(
     return eval_proc(name_str, &proc, args, context, frame);
   }
 
-  // builtin
-  if let Some(result) = eval_builtin(name_str, args, context, frame) {
-    return result;
+  // command
+  if let Some(handler) = context.get_command(name_str) {
+    return handler(args, context, frame);
   }
 
   // user-defined unknown handler
@@ -68,8 +68,8 @@ pub fn eval_command(
   }
 
   // builtin unknown handler
-  if let Some(result) = eval_builtin("unknown", name_and_args, context, frame) {
-    return result;
+  if let Some(handler) = context.get_command("unknown") {
+    return handler(name_and_args, context, frame);
   }
 
   unreachable!("missing builtin handler for unknown command");

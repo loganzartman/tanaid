@@ -2,7 +2,9 @@ use super::*;
 use crate::eval::context::GLOBAL_FRAME;
 use crate::eval_error::EvalError;
 use crate::parser::{self, CommandNode, ScriptNode, WordNode, WordPart};
+use crate::value::Value;
 use std::assert_matches;
+use std::rc::Rc;
 
 #[test]
 fn eval_set_var_name() -> Result<(), Box<dyn std::error::Error>> {
@@ -1304,5 +1306,35 @@ fn eval_unknown_proc_not_used_for_defined_commands() -> Result<(), Box<dyn std::
     &mut ctx,
   )?;
   assert_eq!(result.repr_str()?, "1");
+  Ok(())
+}
+
+#[test]
+fn eval_register_command() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  ctx.register_command("hello", Rc::new(|_args, _ctx, _frame| Ok(Value::new("hi"))));
+  let mut result = eval(&parser::parse("hello")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "hi");
+  Ok(())
+}
+
+#[test]
+fn eval_unregister_command() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  ctx.unregister_command("set");
+  let result = eval(&parser::parse("set x 1")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::UndefinedCommand(name)) if name == "set");
+  Ok(())
+}
+
+#[test]
+fn eval_register_command_overrides_builtin() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  ctx.register_command(
+    "set",
+    Rc::new(|_args, _ctx, _frame| Ok(Value::new("overridden"))),
+  );
+  let mut result = eval(&parser::parse("set x 1")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "overridden");
   Ok(())
 }

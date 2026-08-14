@@ -35,6 +35,7 @@ mod tests;
 mod word;
 
 use context::GLOBAL_FRAME;
+pub use cmd::register_builtin_commands;
 pub use context::{Binding, EvalContext, EvalFrame, FrameId};
 pub use expr::{eval_expr, eval_expr_binary_op};
 pub use proc::{Proc, eval_proc};
