@@ -18,6 +18,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      # The sample suite diffs tanaid's output against a real Tcl interpreter.
+      # tcl8.6 is what Ubuntu ships; the samples produce identical output under
+      # 8.5, 8.6 and 9.0, so the gap from a local tclsh 9 does not matter yet.
+      - name: Set up Tcl
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tcl8.6
+          echo TCLSH=/usr/bin/tclsh8.6 >> "$GITHUB_ENV"
+          /usr/bin/tclsh8.6 <<< 'puts [info patchlevel]'
       - name: Build
         run: cargo build --locked --workspace --verbose
       - name: Test

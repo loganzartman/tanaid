@@ -96,3 +96,26 @@ Run the compiler checks with:
 ```sh
 cargo check --all-targets
 ```
+
+Run the tests with:
+
+```sh
+cargo test --workspace
+```
+
+### Sample tests
+
+Every script in `sample/` is a test case. Each one runs under both tanaid and `tclsh`, and the case fails if stdout or the exit status disagree. There are no expected-output files: `tclsh` is the expected output, so adding a script to `sample/` is all it takes to add a test.
+
+This needs `tclsh` on your `PATH`. Set `TCLSH` to use a specific interpreter instead.
+
+Two optional sibling files change how a case runs:
+
+- `sample/<name>.stdin` is piped to both interpreters.
+- `sample/<name>.xfail` records a known divergence, with the reason as its contents. The case then passes while the outputs differ, and fails once they match, so the file has to be deleted when the divergence is fixed.
+
+Run one case by name:
+
+```sh
+cargo test --test samples -- fib
+```
