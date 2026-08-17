@@ -1,7 +1,7 @@
 use super::{
-  EvalContext, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_global, cmd_if,
-  cmd_incr, cmd_info, cmd_lappend, cmd_lindex, cmd_list, cmd_llength, cmd_lreverse, cmd_proc,
-  cmd_puts, cmd_return, cmd_set, cmd_string, cmd_uplevel, cmd_upvar, cmd_while,
+  EvalContext, cmd_after, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_global,
+  cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lindex, cmd_list, cmd_llength, cmd_lreverse,
+  cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string, cmd_uplevel, cmd_upvar, cmd_while,
 };
 use crate::eval::cmd_unknown;
 use crate::eval_error::EvalError;
@@ -11,6 +11,7 @@ use std::rc::Rc;
 pub(super) type EvalCmdResult = Result<Value, EvalError>;
 
 pub fn register_builtin_commands(context: &mut EvalContext) {
+  context.register_command("after", Rc::new(cmd_after::eval));
   context.register_command("break", Rc::new(cmd_break::eval));
   context.register_command("continue", Rc::new(cmd_continue::eval));
   context.register_command("dict", Rc::new(cmd_dict::eval));
