@@ -100,6 +100,11 @@ pub fn run_repl(context: &mut eval::EvalContext) -> Result<(), Box<dyn std::erro
     }
 
     let mut event_loop = EventLoop::new();
-    event_loop.run(context)?;
+    match event_loop.run(context) {
+      Ok(()) => {}
+      Err(err) => {
+        println!("Error: {}", err);
+      }
+    }
   }
 }
