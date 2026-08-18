@@ -52,17 +52,25 @@ const appendStdout = (value: string) => {
 
 function runTcl(
   source: string,
-  { handleStdout, timeoutMs }: { handleStdout: (value: string) => void; timeoutMs?: number },
-): [() => void, Promise<string>] {
+  {
+    handleResult,
+    handleStdout,
+    timeoutMs,
+  }: {
+    handleResult: (value: string) => void;
+    handleStdout: (value: string) => void;
+    timeoutMs?: number;
+  },
+): [() => void, Promise<void>] {
   const worker = new TclWorker();
-  const cancelPromise = Promise.withResolvers<string>();
+  const cancelPromise = Promise.withResolvers<void>();
   const cancel = () => cancelPromise.reject(new Error("cancelled"));
   let timeout: number | null = null;
 
   return [
     cancel,
     Promise.race([
-      new Promise<string>((res, rej) => {
+      new Promise<void>((res, rej) => {
         const readyPromise = Promise.withResolvers<void>();
         readyPromise.promise.then(() => {
           worker.postMessage({ source });
@@ -74,7 +82,10 @@ function runTcl(
               readyPromise.resolve();
               break;
             case "result":
-              res(data.value);
+              handleResult(data.value);
+              break;
+            case "done":
+              res();
               break;
             case "error":
               rej(String(data.error));
@@ -92,7 +103,7 @@ function runTcl(
 
       ...(timeoutMs !== undefined
         ? [
-            new Promise<string>((_, rej) => {
+            new Promise<void>((_, rej) => {
               timeout = setTimeout(() => {
                 rej(new Error(`timeout: ${timeoutMs}ms`));
               }, timeoutMs);
@@ -129,15 +140,17 @@ const evaluate = async (code: string) => {
   clearStdout();
   try {
     cancel?.();
-    let result;
-    [cancel, result] = runTcl(code, {
+    let done;
+    [cancel, done] = runTcl(code, {
+      handleResult(value) {
+        resultEl.innerText = value.length ? value : " ";
+      },
       handleStdout(value) {
         appendStdout(value);
       },
       timeoutMs: 2000,
     });
-    const resultVal = await result;
-    resultEl.innerText = resultVal.length ? resultVal : " ";
+    await done;
   } catch (e) {
     resultEl.classList.add("error");
     resultEl.innerText = String(e);

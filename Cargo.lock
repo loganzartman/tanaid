@@ -827,6 +827,7 @@ dependencies = [
  "tanaid",
  "tsify",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

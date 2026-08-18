@@ -1,6 +1,6 @@
 import { Interpreter } from "tanaid";
 
-self.onmessage = ({ data: { source } }) => {
+self.onmessage = async ({ data: { source } }) => {
   let interp;
 
   let t0 = performance.now();
@@ -12,12 +12,22 @@ self.onmessage = ({ data: { source } }) => {
   };
 
   try {
+    let eventLoopEmpty = Promise.withResolvers<void>();
     interp = Interpreter.create({
       handleStdout(value) {
         stdoutBuffer.push(value);
         if (performance.now() - t0 > 16) {
           flushStdout();
         }
+      },
+      setTimeout(callback, delayMs) {
+        return globalThis.setTimeout(callback, delayMs);
+      },
+      clearTimeout(timeoutId) {
+        globalThis.clearTimeout(timeoutId as number);
+      },
+      handleEventLoopEmpty() {
+        eventLoopEmpty.resolve();
       },
     });
 
@@ -27,7 +37,13 @@ self.onmessage = ({ data: { source } }) => {
       type: "result",
       value,
     });
+
+    await eventLoopEmpty.promise;
+    flushStdout();
+
+    self.postMessage({ type: "done" });
   } catch (error) {
+    console.error(error);
     flushStdout();
     self.postMessage({
       type: "error",
