@@ -16,6 +16,9 @@ import "./pixel-perfect.ts";
 const exampleSelectEl = document.getElementById("example")! as HTMLSelectElement;
 const inputContainerEl = document.getElementById("input")! as HTMLElement;
 const resultEl = document.getElementById("result")! as HTMLElement;
+const pendingTimersEl = document.getElementById("pendingTimers")! as HTMLElement;
+const pendingTimersIconNoneEl = document.getElementById("pendingTimersIconNone")! as HTMLElement;
+const pendingTimersIconSomeEl = document.getElementById("pendingTimersIconSome")! as HTMLElement;
 const stdoutContainerEl = document.getElementById("stdout")! as HTMLElement;
 
 const stdoutView = new EditorView({
@@ -54,10 +57,12 @@ function runTcl(
   source: string,
   {
     handleResult,
+    handlePendingTimers,
     handleStdout,
     timeoutMs,
   }: {
     handleResult: (value: string) => void;
+    handlePendingTimers: (nPending: number) => void;
     handleStdout: (value: string) => void;
     timeoutMs?: number;
   },
@@ -83,6 +88,9 @@ function runTcl(
               break;
             case "result":
               handleResult(data.value);
+              break;
+            case "pending-timers":
+              handlePendingTimers(data.value);
               break;
             case "done":
               res();
@@ -144,6 +152,11 @@ const evaluate = async (code: string) => {
     [cancel, done] = runTcl(code, {
       handleResult(value) {
         resultEl.innerText = value.length ? value : " ";
+      },
+      handlePendingTimers(nPending) {
+        pendingTimersEl.innerText = `${nPending} timers`;
+        pendingTimersIconNoneEl.style.display = nPending > 0 ? "none" : "block";
+        pendingTimersIconSomeEl.style.display = nPending > 0 ? "block" : "none";
       },
       handleStdout(value) {
         appendStdout(value);

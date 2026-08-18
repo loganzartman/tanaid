@@ -12,7 +12,8 @@ self.onmessage = async ({ data: { source } }) => {
   };
 
   try {
-    let eventLoopEmpty = Promise.withResolvers<void>();
+    let eventLoop = Promise.withResolvers<void>();
+
     interp = Interpreter.create({
       handleStdout(value) {
         stdoutBuffer.push(value);
@@ -21,13 +22,22 @@ self.onmessage = async ({ data: { source } }) => {
         }
       },
       setTimeout(callback, delayMs) {
-        return globalThis.setTimeout(callback, delayMs);
+        return globalThis.setTimeout(() => {
+          try {
+            callback();
+          } catch (error) {
+            self.postMessage({ type: "stdout", value: `[error in timer] ${error}\n` });
+          }
+        }, delayMs);
       },
       clearTimeout(timeoutId) {
         globalThis.clearTimeout(timeoutId as number);
       },
-      handleEventLoopEmpty() {
-        eventLoopEmpty.resolve();
+      handleEventLoopStatus(nPending: number) {
+        self.postMessage({ type: "pending-timers", value: nPending });
+        if (nPending === 0) {
+          eventLoop.resolve();
+        }
       },
     });
 
@@ -38,7 +48,7 @@ self.onmessage = async ({ data: { source } }) => {
       value,
     });
 
-    await eventLoopEmpty.promise;
+    await eventLoop.promise;
     flushStdout();
 
     self.postMessage({ type: "done" });

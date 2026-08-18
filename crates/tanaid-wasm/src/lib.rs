@@ -17,7 +17,7 @@ pub struct Interpreter {
   timeout_ids: Rc<RefCell<HashMap<usize, JsValue>>>,
   set_timeout: Function,
   clear_timeout: Function,
-  handle_event_loop_empty: Function,
+  handle_event_loop_status: Function,
 }
 
 #[derive(Tsify, Serialize, Deserialize)]
@@ -36,8 +36,8 @@ pub struct InterpreterOptions {
   pub clear_timeout: Function,
 
   #[serde(with = "serde_wasm_bindgen::preserve")]
-  #[tsify(type = "() => void")]
-  pub handle_event_loop_empty: Function,
+  #[tsify(type = "(pendingTimers: number) => void")]
+  pub handle_event_loop_status: Function,
 }
 
 #[wasm_bindgen]
@@ -61,7 +61,7 @@ impl Interpreter {
       timeout_ids: Rc::new(RefCell::new(HashMap::new())),
       set_timeout: opts.set_timeout,
       clear_timeout: opts.clear_timeout,
-      handle_event_loop_empty: opts.handle_event_loop_empty,
+      handle_event_loop_status: opts.handle_event_loop_status,
     })
   }
 
@@ -83,7 +83,10 @@ impl Interpreter {
 
   fn run_event_loop(&self) -> Result<(), JsError> {
     let timer_actions = self.context.borrow_mut().take_timer_actions();
-    apply_timer_actions(self, timer_actions)
+    apply_timer_actions(self, timer_actions)?;
+    notify_if_event_loop_empty(self)?;
+
+    Ok(())
   }
 }
 
@@ -124,6 +127,10 @@ fn apply_timer_actions(
           if let Err(e) = fire_result {
             wasm_bindgen::throw_val(JsError::new(e.to_string().as_str()).into())
           }
+
+          if let Err(e) = notify_if_event_loop_empty(&callback_interpreter) {
+            wasm_bindgen::throw_val(e.into())
+          }
         })
         .into_js_value();
 
@@ -161,12 +168,16 @@ fn apply_timer_actions(
     }
   }
 
-  if interpreter.timeout_ids.borrow().is_empty() {
-    interpreter
-      .handle_event_loop_empty
-      .call0(&JsValue::UNDEFINED)
-      .map_err(|e| JsError::new(&js_sys::Error::from(e).message().as_string().unwrap()))?;
-  }
+  Ok(())
+}
+
+fn notify_if_event_loop_empty(interpreter: &Interpreter) -> Result<(), JsError> {
+  let n_pending = interpreter.timeout_ids.borrow().len();
+
+  interpreter
+    .handle_event_loop_status
+    .call1(&JsValue::UNDEFINED, &JsValue::from(n_pending))
+    .map_err(|e| JsError::new(&js_sys::Error::from(e).message().as_string().unwrap()))?;
 
   Ok(())
 }
