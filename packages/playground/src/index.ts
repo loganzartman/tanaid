@@ -161,7 +161,7 @@ const evaluate = async (code: string) => {
       handleStdout(value) {
         appendStdout(value);
       },
-      timeoutMs: 2000,
+      timeoutMs: 10000,
     });
     await done;
   } catch (e) {
