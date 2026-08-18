@@ -78,3 +78,61 @@ impl EventLoop {
     Ok(())
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{eval, parser};
+  use std::{cell::RefCell, rc::Rc};
+
+  fn context_with_output() -> (EvalContext, Rc<RefCell<String>>) {
+    let output = Rc::new(RefCell::new(String::new()));
+    let output_sink = output.clone();
+    let context = EvalContext::new().with_stdout(Rc::new(move |text| {
+      output_sink.borrow_mut().push_str(text);
+      Ok(())
+    }));
+    (context, output)
+  }
+
+  fn eval_source(source: &str, context: &mut EvalContext) {
+    eval::eval(&parser::parse(source).unwrap(), context).unwrap();
+  }
+
+  #[test]
+  fn fires_timers_in_deadline_order() {
+    let (mut context, output) = context_with_output();
+    eval_source("after 1 {puts later}; after 0 {puts sooner}", &mut context);
+
+    EventLoop::new().run(&mut context).unwrap();
+
+    assert_eq!(*output.borrow(), "sooner\nlater\n");
+  }
+
+  #[test]
+  fn handles_nested_and_cancelled_timers() {
+    let (mut context, output) = context_with_output();
+    eval_source(
+      "
+        after 0 {after 0 {puts nested}}
+        set cancelled [after 0 {puts cancelled}]
+        after cancel $cancelled
+      ",
+      &mut context,
+    );
+
+    EventLoop::new().run(&mut context).unwrap();
+
+    assert_eq!(*output.borrow(), "nested\n");
+  }
+
+  #[test]
+  fn remains_reusable_after_timer_error() {
+    let mut context = EvalContext::new();
+    let mut event_loop = EventLoop::new();
+    eval_source("after 0 {undefined_command}", &mut context);
+
+    assert!(event_loop.run(&mut context).is_err());
+    assert!(event_loop.run(&mut context).is_ok());
+  }
+}
