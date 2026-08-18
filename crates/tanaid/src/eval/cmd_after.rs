@@ -21,7 +21,11 @@ pub(super) fn eval(
 fn eval_cancel(args: &mut [Value], context: &mut EvalContext) -> EvalCmdResult {
   let id = match args {
     [id] => id.repr_int()?,
-    _ => unimplemented!("only supports \"after cancel id\""),
+    _ => {
+      return Err(EvalError::ArgumentError(
+        "unimplemented: only supports \"after cancel id\"".to_string(),
+      ));
+    }
   };
   context
     .cancel_timer(
@@ -32,7 +36,9 @@ fn eval_cancel(args: &mut [Value], context: &mut EvalContext) -> EvalCmdResult {
 }
 
 fn eval_idle(_args: &mut [Value], _context: &mut EvalContext) -> EvalCmdResult {
-  todo!()
+  Err(EvalError::ArgumentError(
+    "unimplemented: \"after idle\"".to_string(),
+  ))
 }
 
 fn eval_ms(ms: &mut Value, args: &mut [Value], context: &mut EvalContext) -> EvalCmdResult {

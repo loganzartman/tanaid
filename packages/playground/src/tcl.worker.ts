@@ -26,7 +26,7 @@ self.onmessage = async ({ data: { source } }) => {
           try {
             callback();
           } catch (error) {
-            self.postMessage({ type: "stdout", value: `[error in timer] ${error}\n` });
+            eventLoop.reject(error);
           }
         }, delayMs);
       },
