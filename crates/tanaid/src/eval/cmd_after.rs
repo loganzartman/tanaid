@@ -1,5 +1,3 @@
-use std::{thread::sleep, time::Duration};
-
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::{eval_error::EvalError, parser, value::Value};
 
@@ -48,8 +46,17 @@ fn eval_ms(ms: &mut Value, args: &mut [Value], context: &mut EvalContext) -> Eva
     .map_err(|_| EvalError::ArgumentError("\"after\" duration must be positive".to_string()))?;
 
   if args.is_empty() {
-    sleep(Duration::from_millis(delay_ms));
-    return Ok(Value::none());
+    #[cfg(not(target_family = "wasm"))]
+    {
+      std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+      return Ok(Value::none());
+    }
+    #[cfg(target_family = "wasm")]
+    {
+      return Err(EvalError::Generic(
+        "blocking \"after ms\" is unsupported in WASM".into(),
+      ));
+    }
   }
 
   let script_src: String = args
