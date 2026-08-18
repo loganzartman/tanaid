@@ -7,7 +7,7 @@
     "lint:fix": "oxlint --fix && oxfmt",
     "build": "pnpm run --recursive build",
     "clean": "pnpm run --recursive clean",
-    "dev": "pnpm run --recursive --parallel dev",
+    "dev": "pnpm --filter tanaid build && pnpm run --recursive --parallel dev",
     "test": "pnpm run --recursive test"
   },
   "devDependencies": {

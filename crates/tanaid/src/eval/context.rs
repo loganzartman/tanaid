@@ -1,4 +1,5 @@
 use super::Proc;
+use crate::eval::eval_returnable_script;
 use crate::eval_error::EvalError;
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
@@ -20,8 +21,14 @@ pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
   commands: HashMap<String, CommandHandler>,
   frames: Vec<EvalFrame>,
+
+  timer_id: usize,
+  pending_timers: HashMap<usize, ScriptNode>,
+  queued_timer_actions: Vec<TimerAction>,
+
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
+
   pub(crate) stdout: OutputSink,
 }
 
@@ -36,6 +43,12 @@ pub struct EvalFrame {
 pub enum Binding {
   Val(Value),
   Ref(FrameId, String),
+}
+
+#[derive(Clone, Debug)]
+pub enum TimerAction {
+  Start { timer_id: usize, delay_ms: u64 },
+  Cancel { timer_id: usize },
 }
 
 impl std::fmt::Debug for EvalContext {
@@ -56,6 +69,11 @@ impl EvalContext {
       procs: HashMap::new(),
       commands: HashMap::new(),
       frames: vec![EvalFrame::new()],
+
+      timer_id: 0,
+      pending_timers: HashMap::new(),
+      queued_timer_actions: Vec::new(),
+
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       stdout: Rc::new(|output: &str| {
@@ -110,6 +128,45 @@ impl EvalContext {
 
   pub fn set_proc(&mut self, name: &str, proc: Proc) {
     self.procs.insert(name.to_string(), Rc::new(proc));
+  }
+
+  pub fn take_timer_actions(&mut self) -> Vec<TimerAction> {
+    return std::mem::take(&mut self.queued_timer_actions);
+  }
+
+  pub fn start_timer(
+    &mut self,
+    timer_script: &ScriptNode,
+    delay_ms: u64,
+  ) -> Result<usize, EvalError> {
+    let timer_id = self.timer_id;
+    self.timer_id = self.timer_id.strict_add(1);
+    self.pending_timers.insert(timer_id, timer_script.clone());
+    self
+      .queued_timer_actions
+      .push(TimerAction::Start { timer_id, delay_ms });
+    return Ok(timer_id);
+  }
+
+  pub fn cancel_timer(&mut self, timer_id: usize) -> Result<bool, EvalError> {
+    if self.pending_timers.remove(&timer_id).is_none() {
+      return Ok(false);
+    }
+    self
+      .queued_timer_actions
+      .push(TimerAction::Cancel { timer_id });
+    Ok(true)
+  }
+
+  pub fn fire_timer(&mut self, timer_id: usize) -> Result<Value, EvalError> {
+    let Some(timer_script) = self.pending_timers.remove(&timer_id) else {
+      return Err(EvalError::Generic(format!(
+        "internal error: tried to fire nonexistent timer: {}",
+        timer_id
+      )));
+    };
+
+    eval_returnable_script(&timer_script, self, GLOBAL_FRAME)
   }
 
   pub fn parse_script_caching(

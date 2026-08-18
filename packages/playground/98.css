@@ -7,11 +7,12 @@
 :root {
   /* Color */
   --text-color: light-dark(rgb(34 34 34), rgb(221 221 221));
-  --surface: light-dark(rgb(192 192 192), rgb(48, 48, 48));
-  --button-highlight: light-dark(rgb(255 255 255), rgb(0 0 0));
-  --button-face: light-dark(rgb(223 223 223), rgb(93, 93, 93));
-  --button-shadow: light-dark(rgb(128 128 128), rgb(48 48 48));
+  --surface: light-dark(rgb(192 192 192), rgb(48 48 48));
+  --button-highlight: light-dark(rgb(255 255 255), rgb(128 128 128));
+  --button-face: light-dark(rgb(223 223 223), rgb(93 93 93));
+  --button-shadow: light-dark(rgb(128 128 128), rgb(16 16 16));
   --window-frame: light-dark(rgb(10 10 10), rgb(0 0 0));
+  --field-background: light-dark(rgb(255 255 255), rgb(0 0 0));
   --dialog-blue: light-dark(rgb(0 0 128), rgb(0 0 128));
   --dialog-blue-light: light-dark(rgb(16 132 208), rgb(16 132 208));
   --dialog-gray: light-dark(rgb(128 128 128), rgb(192 192 192));
@@ -104,7 +105,7 @@
   );
   --icon-groupbox-border: light-dark(
     url("data:image/svg+xml;charset=utf-8,%3Csvg width='5' height='5' fill='gray' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23808080' d='M0 0h4v1H0z'/%3E%3Cpath fill='%23808080' d='M0 0h1v4H0z'/%3E%3Cpath fill='%230a0a0a' d='M1 1h2v1H1z'/%3E%3Cpath fill='%230a0a0a' d='M1 1h1v2H1z'/%3E%3Cpath fill='%23ffffff' d='M0 4h5v1H0z'/%3E%3Cpath fill='%23ffffff' d='M4 0h1v5H4z'/%3E%3Cpath fill='%23dfdfdf' d='M3 1h1v3H3z'/%3E%3Cpath fill='%23dfdfdf' d='M1 3h3v1H1z'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml;charset=utf-8,%3Csvg width='5' height='5' fill='gray' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000000' d='M0 0h4v1H0z'/%3E%3Cpath fill='%23000000' d='M0 0h1v4H0z'/%3E%3Cpath fill='%23303030' d='M1 1h2v1H1z'/%3E%3Cpath fill='%23303030' d='M1 1h1v2H1z'/%3E%3Cpath fill='%23808080' d='M0 4h5v1H0z'/%3E%3Cpath fill='%23808080' d='M4 0h1v5H4z'/%3E%3Cpath fill='%235d5d5d' d='M3 1h1v3H3z'/%3E%3Cpath fill='%235d5d5d' d='M1 3h3v1H1z'/%3E%3C/svg%3E")
+    url("data:image/svg+xml;charset=utf-8,%3Csvg width='5' height='5' fill='gray' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000000' d='M0 0h4v1H0z'/%3E%3Cpath fill='%23000000' d='M0 0h1v4H0z'/%3E%3Cpath fill='%23101010' d='M1 1h2v1H1z'/%3E%3Cpath fill='%23101010' d='M1 1h1v2H1z'/%3E%3Cpath fill='%23808080' d='M0 4h5v1H0z'/%3E%3Cpath fill='%23808080' d='M4 0h1v5H4z'/%3E%3Cpath fill='%235d5d5d' d='M3 1h1v3H3z'/%3E%3Cpath fill='%235d5d5d' d='M1 3h3v1H1z'/%3E%3C/svg%3E")
   );
   --icon-radio-border: light-dark(
     url("data:image/svg+xml;charset=utf-8,%3Csvg width='12' height='12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M8 0H4v1H2v1H1v2H0v4h1v2h1V8H1V4h1V2h2V1h4v1h2V1H8V0z' fill='%23808080'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M8 1H4v1H2v2H1v4h1v1h1V8H2V4h1V3h1V2h4v1h2V2H8V1z' fill='%23222222'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M9 3h1v1H9V3zm1 5V4h1v4h-1zm-2 2V9h1V8h1v2H8zm-4 0v1h4v-1H4zm0 0V9H2v1h2z' fill='%23dfdfdf'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M11 2h-1v2h1v4h-1v2H8v1H4v-1H2v1h2v1h4v-1h2v-1h1V8h1V4h-1V2z' fill='%23ffffff'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M4 2h4v1h1v1h1v4H9v1H8v1H4V9H3V8H2V4h1V3h1V2z' fill='%23ffffff'/%3E%3C/svg%3E"),
@@ -132,7 +133,7 @@
   );
   --icon-button-down: light-dark(
     url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M15 0H0v16h1V1h14V0z' fill='%23dfdfdf'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M2 1H1v14h1V2h12V1H2z' fill='%23ffffff'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M16 17H0v-1h15V0h1v17z' fill='%23222222'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M15 1h-1v14H1v1h14V1z' fill='%23808080'/%3E%3Cpath fill='%23c0c0c0' d='M2 2h12v13H2z'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M11 6H4v1h1v1h1v1h1v1h1V9h1V8h1V7h1V6z' fill='%23222222'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M15 0H0v16h1V1h14V0z' fill='%23000000'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M2 1H1v14h1V2h12V1H2z' fill='%235d5d5d'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M16 17H0v-1h15V0h1v17z' fill='%23000000'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M15 1h-1v14H1v1h14V1z' fill='%23303030'/%3E%3Cpath fill='%23303030' d='M2 2h12v13H2z'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M11 6H4v1h1v1h1v1h1v1h1V9h1V8h1V7h1V6z' fill='%23dddddd'/%3E%3C/svg%3E")
+    url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M15 0H0v16h1V1h14V0z' fill='%23000000'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M2 1H1v14h1V2h12V1H2z' fill='%235d5d5d'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M16 17H0v-1h15V0h1v17z' fill='%23000000'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M15 1h-1v14H1v1h14V1z' fill='%23101010'/%3E%3Cpath fill='%23303030' d='M2 2h12v13H2z'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M11 6H4v1h1v1h1v1h1v1h1V9h1V8h1V7h1V6z' fill='%23dddddd'/%3E%3C/svg%3E")
   );
   --icon-button-down-active: light-dark(
     url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 0h16v17H0V0zm1 16h14V1H1v15z' fill='%23808080'/%3E%3Cpath fill='%23c0c0c0' d='M1 1h14v15H1z'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M12 7H5v1h1v1h1v1h1v1h1v-1h1V9h1V8h1V7z' fill='%23222222'/%3E%3C/svg%3E"),
@@ -168,7 +169,7 @@
   );
   --icon-sunken-panel-border: light-dark(
     url("data:image/svg+xml;charset=utf-8,%3Csvg width='5' height='5' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23808080' d='M0 0h4v1H0z'/%3E%3Cpath fill='%23808080' d='M0 0h1v4H0z'/%3E%3Cpath fill='%230a0a0a' d='M1 1h2v1H1z'/%3E%3Cpath fill='%230a0a0a' d='M1 1h1v2H1z'/%3E%3Cpath fill='%23ffffff' d='M0 4h5v1H0z'/%3E%3Cpath fill='%23ffffff' d='M4 0h1v5H4z'/%3E%3Cpath fill='%23dfdfdf' d='M3 1h1v3H3z'/%3E%3Cpath fill='%23dfdfdf' d='M1 3h3v1H1z'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml;charset=utf-8,%3Csvg width='5' height='5' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000000' d='M0 0h4v1H0z'/%3E%3Cpath fill='%23000000' d='M0 0h1v4H0z'/%3E%3Cpath fill='%23303030' d='M1 1h2v1H1z'/%3E%3Cpath fill='%23303030' d='M1 1h1v2H1z'/%3E%3Cpath fill='%23808080' d='M0 4h5v1H0z'/%3E%3Cpath fill='%23808080' d='M4 0h1v5H4z'/%3E%3Cpath fill='%235d5d5d' d='M3 1h1v3H3z'/%3E%3Cpath fill='%235d5d5d' d='M1 3h3v1H1z'/%3E%3C/svg%3E")
+    url("data:image/svg+xml;charset=utf-8,%3Csvg width='5' height='5' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000000' d='M0 0h4v1H0z'/%3E%3Cpath fill='%23000000' d='M0 0h1v4H0z'/%3E%3Cpath fill='%23101010' d='M1 1h2v1H1z'/%3E%3Cpath fill='%23101010' d='M1 1h1v2H1z'/%3E%3Cpath fill='%23808080' d='M0 4h5v1H0z'/%3E%3Cpath fill='%23808080' d='M4 0h1v5H4z'/%3E%3Cpath fill='%235d5d5d' d='M3 1h1v3H3z'/%3E%3Cpath fill='%235d5d5d' d='M1 3h3v1H1z'/%3E%3C/svg%3E")
   );
 }
 
@@ -240,7 +241,7 @@ input[type="reset"].default {
 .vertical-bar {
   width: 4px;
   height: 20px;
-  background: #c0c0c0;
+  background: var(--surface);
   box-shadow: var(--border-raised-outer), var(--border-raised-inner);
 }
 
@@ -513,7 +514,7 @@ input[type="checkbox"] + label::before {
   display: inline-block;
   width: var(--checkbox-width);
   height: var(--checkbox-width);
-  background: var(--button-highlight);
+  background: var(--field-background);
   box-shadow: var(--border-field);
   margin-right: var(--radio-label-spacing);
 }
@@ -552,7 +553,7 @@ textarea {
   padding: 3px 4px;
   border: none;
   box-shadow: var(--border-field);
-  background-color: var(--button-highlight);
+  background-color: var(--field-background);
   box-sizing: border-box;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -794,7 +795,7 @@ select:focus {
 }
 
 select option {
-  background: var(--button-highlight);
+  background: var(--field-background);
   font-size: calc(13px * var(--gs));
   color: var(--text-color);
 }
@@ -818,7 +819,7 @@ a:focus {
 
 ul.tree-view {
   display: block;
-  background: var(--button-highlight);
+  background: var(--field-background);
   box-shadow: var(--border-field);
   padding: 6px;
   margin: 0;
@@ -835,7 +836,7 @@ ul.tree-view a {
 
 ul.tree-view a:focus {
   background-color: var(--dialog-blue);
-  color: var(--button-highlight);
+  color: var(--field-background);
 }
 
 ul.tree-view ul,
@@ -872,7 +873,7 @@ ul.tree-view ul > li:last-child::after {
   top: 7px;
   bottom: 0px;
   width: 8px;
-  background: var(--button-highlight);
+  background: var(--field-background);
 }
 
 ul.tree-view details {
@@ -900,7 +901,7 @@ ul.tree-view details > summary:before {
   line-height: 8px;
   margin-right: 5px;
   padding-left: 1px;
-  background-color: #fff;
+  background-color: var(--field-background);
 }
 
 ul.tree-view details[open] > summary:before {
@@ -914,7 +915,7 @@ ul.tree-view details > summary::-webkit-details-marker {
 
 pre {
   display: block;
-  background: var(--button-highlight);
+  background: var(--field-background);
   border: 2px solid transparent;
   border-image: var(--icon-sunken-panel-border) 2;
   padding: 10px 6px;
@@ -1036,7 +1037,7 @@ menu[role="tablist"].multirows > li {
   border: 2px groove transparent;
   border-image: var(--icon-sunken-panel-border) 2;
   overflow: auto;
-  background-color: #fff;
+  background-color: var(--field-background);
 }
 
 table {
@@ -1044,7 +1045,7 @@ table {
   position: relative;
   text-align: left;
   white-space: nowrap;
-  background-color: #fff;
+  background-color: var(--field-background);
 }
 
 table > thead > tr > * {
@@ -1100,7 +1101,7 @@ table > tbody > tr > * {
 }
 
 .field-border {
-  background: var(--button-highlight);
+  background: var(--field-background);
   box-shadow: var(--border-field);
   padding: 2px;
 }

@@ -1,3 +1,4 @@
+use crate::event_loop::EventLoop;
 use crate::parser::ParseError;
 use crate::{eval, parser};
 use reedline::{
@@ -93,6 +94,14 @@ pub fn run_repl(context: &mut eval::EvalContext) -> Result<(), Box<dyn std::erro
       Ok(mut result) => {
         println!("{}", result.repr_str()?);
       }
+      Err(err) => {
+        println!("Error: {}", err);
+      }
+    }
+
+    let mut event_loop = EventLoop::new();
+    match event_loop.run(context) {
+      Ok(()) => {}
       Err(err) => {
         println!("Error: {}", err);
       }
