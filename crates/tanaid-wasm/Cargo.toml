@@ -17,7 +17,6 @@ tsify = { git = "https://github.com/madonoharu/tsify.git", rev = "d89d5c1d16a83c
   "js",
 ] }
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3.104", features = ["Window"] }
 
 [lints]
 workspace = true

@@ -40,6 +40,18 @@ pub struct InterpreterOptions {
   pub handle_event_loop_status: Function,
 }
 
+fn js_error_message(value: JsValue) -> String {
+  value
+    .dyn_ref::<js_sys::Error>()
+    .and_then(|error| error.message().as_string())
+    .or_else(|| value.as_string())
+    .unwrap_or_else(|| format!("{value:?}"))
+}
+
+fn js_value_to_error(value: JsValue) -> JsError {
+  JsError::new(&js_error_message(value))
+}
+
 #[wasm_bindgen]
 impl Interpreter {
   pub fn create(options: Ts<InterpreterOptions>) -> Result<Interpreter, JsError> {
@@ -51,7 +63,7 @@ impl Interpreter {
     let stdout = Rc::new(move |value: &str| {
       handle_stdout
         .call(&JsValue::NULL, (&JsValue::from(value),))
-        .map_err(|e| EvalError::Generic(js_sys::Error::from(e).message().into()))?;
+        .map_err(|e| EvalError::Generic(js_error_message(e)))?;
       Ok(())
     });
     let context = EvalContext::new().with_stdout(stdout);
@@ -141,7 +153,7 @@ fn apply_timer_actions(
             callback.as_ref(),
             &JsValue::from(delay_ms_i32),
           )
-          .map_err(|e| JsError::new(&js_sys::Error::from(e).message().as_string().unwrap()))?;
+          .map_err(js_value_to_error)?;
 
         interpreter
           .timeout_ids
@@ -159,7 +171,7 @@ fn apply_timer_actions(
             interpreter
               .clear_timeout
               .call1(&JsValue::UNDEFINED, timeout_id)
-              .map_err(|e| JsError::new(&js_sys::Error::from(e).message().as_string().unwrap()))?;
+              .map_err(js_value_to_error)?;
           }
         }
 
@@ -177,7 +189,7 @@ fn notify_if_event_loop_empty(interpreter: &Interpreter) -> Result<(), JsError> 
   interpreter
     .handle_event_loop_status
     .call1(&JsValue::UNDEFINED, &JsValue::from(n_pending))
-    .map_err(|e| JsError::new(&js_sys::Error::from(e).message().as_string().unwrap()))?;
+    .map_err(js_value_to_error)?;
 
   Ok(())
 }
