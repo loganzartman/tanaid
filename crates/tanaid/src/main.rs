@@ -4,8 +4,8 @@ use std::{
   io::{self, IsTerminal},
   process::ExitCode,
 };
-use tanaid::repl::run_repl;
 use tanaid::{eval, parser};
+use tanaid::{event_loop, repl::run_repl};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -65,6 +65,10 @@ fn run_source(
   }
 
   println!("{}", result.repr_str()?);
+
+  let mut event_loop = event_loop::EventLoop::new();
+  event_loop.run(context)?;
+
   Ok(())
 }
 

@@ -37,7 +37,7 @@ mod word;
 
 pub use cmd::register_builtin_commands;
 use context::GLOBAL_FRAME;
-pub use context::{Binding, EvalContext, EvalFrame, FrameId};
+pub use context::{Binding, EvalContext, EvalFrame, FrameId, TimerAction};
 pub use expr::{eval_expr, eval_expr_binary_op};
 pub use proc::{Proc, eval_proc};
 pub use script::{eval_command, eval_returnable_script, eval_script};

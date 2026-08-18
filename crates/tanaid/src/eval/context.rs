@@ -15,7 +15,6 @@ pub(crate) const GLOBAL_FRAME: FrameId = 0;
 pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
 pub type CommandHandler =
   Rc<dyn Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError>>;
-pub type TimerActionHandler = Rc<dyn Fn(TimerAction) -> Result<(), EvalError>>;
 
 #[derive(Clone)]
 pub struct EvalContext {
@@ -25,7 +24,7 @@ pub struct EvalContext {
 
   timer_id: usize,
   pending_timers: HashMap<usize, ScriptNode>,
-  handle_timer_action: TimerActionHandler,
+  queued_timer_actions: Vec<TimerAction>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -48,9 +47,7 @@ pub enum Binding {
 
 #[derive(Clone, Debug)]
 pub enum TimerAction {
-  #[expect(dead_code)]
   Start { timer_id: usize, delay_ms: u64 },
-  #[expect(dead_code)]
   Cancel { timer_id: usize },
 }
 
@@ -75,7 +72,7 @@ impl EvalContext {
 
       timer_id: 0,
       pending_timers: HashMap::new(),
-      handle_timer_action: Rc::new(|_| unimplemented!("missing handle_timer_action")),
+      queued_timer_actions: Vec::new(),
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -133,6 +130,10 @@ impl EvalContext {
     self.procs.insert(name.to_string(), Rc::new(proc));
   }
 
+  pub fn take_timer_actions(&mut self) -> Vec<TimerAction> {
+    return std::mem::take(&mut self.queued_timer_actions);
+  }
+
   pub fn start_timer(
     &mut self,
     timer_script: &ScriptNode,
@@ -141,7 +142,9 @@ impl EvalContext {
     let timer_id = self.timer_id;
     self.timer_id = self.timer_id.strict_add(1);
     self.pending_timers.insert(timer_id, timer_script.clone());
-    self.handle_timer_action.as_ref()(TimerAction::Start { timer_id, delay_ms })?;
+    self
+      .queued_timer_actions
+      .push(TimerAction::Start { timer_id, delay_ms });
     return Ok(timer_id);
   }
 
@@ -149,19 +152,21 @@ impl EvalContext {
     if self.pending_timers.remove(&timer_id).is_none() {
       return Ok(false);
     }
-    self.handle_timer_action.as_ref()(TimerAction::Cancel { timer_id })?;
+    self
+      .queued_timer_actions
+      .push(TimerAction::Cancel { timer_id });
     Ok(true)
   }
 
   pub fn fire_timer(&mut self, timer_id: usize) -> Result<Value, EvalError> {
-    let Some(timer_script) = self.pending_timers.get(&timer_id) else {
+    let Some(timer_script) = self.pending_timers.remove(&timer_id) else {
       return Err(EvalError::Generic(format!(
         "internal error: tried to fire nonexistent timer: {}",
         timer_id
       )));
     };
 
-    eval_returnable_script(&timer_script.clone(), self, GLOBAL_FRAME)
+    eval_returnable_script(&timer_script, self, GLOBAL_FRAME)
   }
 
   pub fn parse_script_caching(
