@@ -42,17 +42,37 @@
                 <img
                   alt="powered by tanaid"
                   src="./powered-by.png"
-                  style="float: right; image-rendering: pixelated; width: 88px"
+                  style="float: right; width: 88px"
                 />
               </a>
             </div>
             <div id="input" class="input sunken-panel"></div>
             <div>
-              <div class="field-row-stacked">
-                <label for="result">result:</label>
-                <pre id="result"></pre>
+              <div class="status-bar" style="width: 100%">
+                <div
+                  class="status-bar-field"
+                  style="
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 8px;
+                  "
+                >
+                  <label for="result">result:</label>
+                  <div id="result" class="font-mono"></div>
+                </div>
+                <div
+                  class="status-bar-field"
+                  style="flex-grow: 0; display: flex; flex-direction: column; gap: 8px"
+                >
+                  <div style="display: flex; flex-direction: row; align-items: center">
+                    <img src="./img/stopwtch-static.webp" />
+                    <div id="pending-timers" style="padding: 8px">0 timers</div>
+                  </div>
+                </div>
               </div>
-              <div class="field-row-stacked">
+              <div class="field-row-stacked" style="margin-top: 8px">
                 <label for="stdout">stdout:</label>
                 <div id="stdout" class="stdout sunken-panel"></div>
               </div>

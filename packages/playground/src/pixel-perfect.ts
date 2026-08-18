@@ -40,6 +40,7 @@ export class PixelPerfect extends HTMLElement {
       transform: scale(var(--gs));
       zoom: var(--us);
       box-sizing: border-box;
+      image-rendering: pixelated;
       -webkit-font-smoothing: none;
       -moz-osx-font-smoothing: grayscale;
     `;
