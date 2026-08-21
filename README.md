@@ -4,7 +4,55 @@
 
 i am learning rust and tcl by writing a tcl interpreter. i chose tcl because it is "very simple" and actually used for some things.
 
-implements a (probably broken) subset of tcl:
+## use it
+
+[try it on the web playground](https://tcl.loga.nz/)
+
+CLI:
+
+```sh
+cargo install tanaid-cli
+
+# repl
+tanaid
+
+# run a file
+tanaid ./sample/fib.tcl
+```
+
+rust library:
+
+```sh
+cargo add tanaid
+```
+
+```rust
+fn run_tcl() -> Result<(), Box<dyn std::error::Error>> {
+  let parsed = tanaid::parser::parse("expr {2 + 2}")?;
+  let mut ctx = tanaid::eval::EvalContext::new();
+  let result = tanaid::eval::eval(&parsed, &mut ctx)?;
+  println!("result: {}", result);
+  Ok(())
+}
+```
+
+typescript (wasm):
+
+```sh
+pnpm add tanaid-tcl
+```
+
+```typescript
+import { createInterpreter } from "tanaid-tcl";
+
+const interp = createInterpreter({});
+const result = await interp.run(`expr {2 + 2}`);
+console.log(result);
+```
+
+## Tcl support
+
+implements a small subset of Tcl. the supported subset is Tcl-compatible (runs identically in `tclsh`) to the best of my ability.
 
 - syntax
   - bare `words`
@@ -66,19 +114,9 @@ while {$i < 30} {
 }
 ```
 
-## Usage
+## development
 
-```sh
-cargo build --release
-
-# repl
-./target/release/tanaid
-
-# run a script
-./target/release/tanaid path/to/file.tcl
-```
-
-## Setup
+### setup
 
 Install Rust with `rustup`:
 
@@ -86,16 +124,30 @@ Install Rust with `rustup`:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-Run any Cargo command from the repo root to install/use the toolchain:
+### running
+
+CLI:
 
 ```sh
-cargo build
+# tests
+cargo test
+
+# repl
+cargo run
+
+# run file
+cargo run -- ./sample/fib.tcl
 ```
 
-## Development
-
-Run the compiler checks with:
+typescript:
 
 ```sh
-cargo check --all-targets
+# rebuild WASM (whenever you change rust code)
+./scripts/build-wasm.sh
+
+# install deps
+pnpm i
+
+# start dev server
+pnpm dev
 ```

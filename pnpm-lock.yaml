@@ -237,7 +237,7 @@ importers:
       '@sourcebot/codemirror-lang-tcl':
         specifier: ^1.0.13
         version: 1.0.13
-      tanaid:
+      tanaid-tcl:
         specifier: workspace:^
         version: link:../tanaid
     devDependencies:

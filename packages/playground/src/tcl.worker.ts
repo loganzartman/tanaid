@@ -1,4 +1,4 @@
-import { Interpreter } from "tanaid";
+import { Interpreter } from "tanaid-tcl";
 
 self.onmessage = async ({ data: { source } }) => {
   let interp;
