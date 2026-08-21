@@ -1,0 +1,2 @@
+# Same 7 days, for cargo-cooldown-check to verify against Cargo.lock in CI.
+cooldown_minutes = 10080
