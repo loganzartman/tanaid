@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 reedline = "0.48.0"
-tanaid = { path = "../tanaid" }
+tanaid = { workspace = true }
 
 [lints]
 workspace = true
