@@ -8,6 +8,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 tanaid = { path = "crates/tanaid", version = "0.1.0" }
+tanaid-tk = { path = "crates/tanaid-tk", version = "0.1.0" }
 
 [workspace.lints.rust]
 warnings = "deny"

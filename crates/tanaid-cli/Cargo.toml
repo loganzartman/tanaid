@@ -14,6 +14,7 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive"] }
 reedline = "0.48.0"
 tanaid = { workspace = true }
+tanaid-tk = { workspace = true }
 
 [lints]
 workspace = true

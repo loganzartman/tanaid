@@ -7,6 +7,7 @@ use std::{
 use tanaid::event_loop;
 use tanaid::{eval, parser};
 use tanaid_cli::repl::run_repl;
+use tanaid_tk::Tk;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -33,6 +34,9 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
   let mut context = eval::EvalContext::new();
+  let tk = Tk::new();
+  tk.install(&mut context)?;
+
   let opts = RunOpts { debug: args.debug };
 
   if let Some(file_path) = args.file_path {
