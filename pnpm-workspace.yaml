@@ -4,3 +4,5 @@ packages:
 # wasm-pack ships a postinstall that fetches its binary from the upstream GitHub release
 allowBuilds:
   wasm-pack: true
+
+minimumReleaseAge: 10080 # 7 days
