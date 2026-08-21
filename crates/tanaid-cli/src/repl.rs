@@ -1,12 +1,12 @@
-use crate::event_loop::EventLoop;
-use crate::parser::ParseError;
-use crate::{eval, parser};
 use reedline::{
   EditCommand, Emacs, KeyCode, KeyModifiers, Prompt, PromptEditMode, PromptHistorySearch,
   PromptHistorySearchStatus, Reedline, ReedlineEvent, Signal, ValidationResult, Validator,
   default_emacs_keybindings,
 };
 use std::borrow::Cow;
+use tanaid::event_loop::EventLoop;
+use tanaid::parser::ParseError;
+use tanaid::{eval, parser};
 
 struct TclValidator;
 
