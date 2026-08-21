@@ -39,11 +39,11 @@ fn run_tcl() -> Result<(), Box<dyn std::error::Error>> {
 typescript (wasm):
 
 ```sh
-pnpm add tanaid
+pnpm add tanaid-tcl
 ```
 
 ```typescript
-import { createInterpreter } from "tanaid";
+import { createInterpreter } from "tanaid-tcl";
 
 const interp = createInterpreter({});
 const result = await interp.run(`expr {2 + 2}`);
