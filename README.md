@@ -11,7 +11,7 @@ i am learning rust and tcl by writing a tcl interpreter. i chose tcl because it 
 CLI:
 
 ```sh
-cargo install tanaid
+cargo install tanaid-cli
 
 # repl
 tanaid
@@ -28,8 +28,8 @@ cargo add tanaid
 
 ```rust
 fn run_tcl() -> Result<(), Box<dyn std::error::Error>> {
-  let mut ctx = tanaid::eval::EvalContext::new();
   let parsed = tanaid::parser::parse("expr {2 + 2}")?;
+  let mut ctx = tanaid::eval::EvalContext::new();
   let result = tanaid::eval::eval(&parsed, &mut ctx)?;
   println!("result: {}", result);
   Ok(())
