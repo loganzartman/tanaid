@@ -1,0 +1,14 @@
+# Don't adopt a crate version until it has sat on crates.io for a week.
+#
+# This is cargo's own cooldown (RFC 3923). It is read by cargo versions that
+# implement it — nightly since 2026-06-21, via the `[unstable]` key below — and
+# ignored by older ones, so `scripts/check-crate-age.py` enforces the same rule
+# for the pinned stable toolchain. Versions already in Cargo.lock stay allowed.
+#
+# To take a newer version deliberately (an urgent security fix, say):
+#   CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update -p <crate>
+[registry]
+global-min-publish-age = "7 days"
+
+[unstable]
+min-publish-age = true

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Refuse to commit a lockfile that adopts a crate version published in the last
+# week. Enable with:
+#
+#   git config core.hooksPath .githooks
+set -e
+
+if git diff --cached --name-only | grep -qx "Cargo.lock"; then
+  echo "checking dependency cooldown..."
+  ./scripts/check-crate-age.py
+fi
