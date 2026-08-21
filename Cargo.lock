@@ -822,6 +822,14 @@ dependencies = [
  "clap",
  "reedline",
  "tanaid",
+ "tanaid-tk",
+]
+
+[[package]]
+name = "tanaid-tk"
+version = "0.1.0"
+dependencies = [
+ "tanaid",
 ]
 
 [[package]]
