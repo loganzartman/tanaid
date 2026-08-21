@@ -1,14 +1,19 @@
 [package]
-name = "tanaid"
+name = "tanaid-cli"
 description = "an experimental Tcl interpreter"
 license = "MPL-2.0"
 edition.workspace = true
 version.workspace = true
 publish = true
 
+[[bin]]
+name = "tanaid"
+path = "src/main.rs"
+
 [dependencies]
-lru = "0.18.0"
-regex = "1.12.4"
+clap = { version = "4", features = ["derive"] }
+reedline = "0.48.0"
+tanaid = { workspace = true }
 
 [lints]
 workspace = true

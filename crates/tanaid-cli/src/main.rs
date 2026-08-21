@@ -4,8 +4,9 @@ use std::{
   io::{self, IsTerminal},
   process::ExitCode,
 };
+use tanaid::event_loop;
 use tanaid::{eval, parser};
-use tanaid::{event_loop, repl::run_repl};
+use tanaid_cli::repl::run_repl;
 
 #[derive(Parser, Debug)]
 struct Args {
