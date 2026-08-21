@@ -1,6 +1,3 @@
-# Cargo's own dependency cooldown (RFC 3923). Only nightly enforces it today,
-# hence the toolchain pin. Override deliberately with
-# CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow.
 [registry]
 global-min-publish-age = "7 days"
 

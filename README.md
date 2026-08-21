@@ -92,23 +92,6 @@ Run any Cargo command from the repo root to install/use the toolchain:
 cargo build
 ```
 
-## Dependencies
-
-Crate versions aren't adopted until they have been on crates.io for 7 days —
-a malicious release does its damage before anyone has looked at it. The
-cooldown lives in `.cargo/config.toml`
-([RFC 3923](https://rust-lang.github.io/rfcs/3923-cargo-min-publish-age.html)),
-which is why the toolchain is pinned to nightly: only nightly enforces it while
-resolving. CI re-checks `Cargo.lock` with
-[cargo-cooldown-check](https://github.com/NomicFoundation/cargo-cooldown-check),
-because cargo doesn't revalidate versions that are already locked.
-
-To take a fresh version deliberately:
-
-```sh
-CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update -p some-crate
-```
-
 ## Development
 
 Run the compiler checks with:
