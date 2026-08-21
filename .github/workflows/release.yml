@@ -59,7 +59,7 @@ jobs:
       - name: Build wasm
         run: ./scripts/build-wasm.sh
       - name: Build
-        run: pnpm --filter tanaid build
+        run: pnpm --filter tanaid-tcl build
       - name: Publish to npm
         working-directory: packages/tanaid
         run: npm publish --access public
