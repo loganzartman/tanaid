@@ -1,6 +1,6 @@
 import { Interpreter } from "tanaid";
 
-self.onmessage = async ({ data: { source } }) => {
+self.onmessage = async ({ data: { source, canvas } }) => {
   let interp;
 
   let t0 = performance.now();
@@ -39,10 +39,20 @@ self.onmessage = async ({ data: { source } }) => {
           eventLoop.resolve();
         }
       },
+      canvas,
     });
 
-    const value = interp.run(source);
+    const value = await interp.run(source);
     flushStdout();
+
+    const windowSize = interp.windowSize();
+    if (windowSize) {
+      self.postMessage({
+        type: "window",
+        width: windowSize[0],
+        height: windowSize[1],
+      });
+    }
     self.postMessage({
       type: "result",
       value,

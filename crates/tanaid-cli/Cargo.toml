@@ -1,0 +1,20 @@
+[package]
+name = "tanaid-cli"
+description = "command line interface for the tanaid Tcl interpreter"
+license = "MPL-2.0"
+edition.workspace = true
+version.workspace = true
+publish = false
+
+[[bin]]
+name = "tanaid"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+reedline = { version = "0.48.0" }
+tanaid = { path = "../tanaid" }
+tanaid-tk = { path = "../tanaid-tk" }
+
+[lints]
+workspace = true

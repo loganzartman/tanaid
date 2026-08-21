@@ -45,6 +45,17 @@ implements a (probably broken) subset of tcl:
   - `uplevel ?level? arg ?arg ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/uplevel.html)
   - `upvar ?level? otherVar myVar ?otherVar myVar ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/upvar.html)
   - `while test body` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/while.html)
+- a sliver of tk, drawn with [wgpu](https://wgpu.rs/)
+  - `canvas pathName ?-width w? ?-height h? ?-background color?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/canvas.html)
+  - `pack pathName` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/pack.html#M5)
+  - `pathName coords tagOrId ?x1 y1 x2 y2?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/canvas.html#M42)
+  - `pathName create rectangle x1 y1 x2 y2 ?-fill color?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/canvas.html#M158)
+  - `pathName delete ?tagOrId ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/canvas.html#M47)
+  - `pathName itemconfigure tagOrId ?-fill color?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/canvas.html)
+  - `pathName move tagOrId xAmount yAmount` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TkCmd/canvas.html#M60)
+
+  only one widget can be packed, it fills the whole window, and the only tags
+  are item ids and `all`.
 
 this is enough to write simple scripts like:
 
@@ -76,7 +87,13 @@ cargo build --release
 
 # run a script
 ./target/release/tanaid path/to/file.tcl
+
+# a script that packs a canvas opens a window and keeps running until it closes
+./target/release/tanaid sample/canvas_bounce.tcl
 ```
+
+wgpu picks the graphics backend: a hardware adapter first, then GL, then a
+software one. `WGPU_BACKEND=gl` (or `vulkan`, `metal`, `dx12`) overrides it.
 
 ## Setup
 

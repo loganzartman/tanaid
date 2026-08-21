@@ -20,6 +20,13 @@ const pendingTimersEl = document.getElementById("pendingTimers")! as HTMLElement
 const pendingTimersIconNoneEl = document.getElementById("pendingTimersIconNone")! as HTMLElement;
 const pendingTimersIconSomeEl = document.getElementById("pendingTimersIconSome")! as HTMLElement;
 const stdoutContainerEl = document.getElementById("stdout")! as HTMLElement;
+const canvasWindowEl = document.getElementById("canvasWindow")! as HTMLElement;
+const canvasWindowTitleBarEl = document.getElementById("canvasWindowTitleBar")! as HTMLElement;
+const canvasWindowCloseEl = document.getElementById("canvasWindowClose")! as HTMLButtonElement;
+const canvasContainerEl = document.getElementById("canvas")! as HTMLElement;
+
+/** Marks a run that was stopped on purpose, rather than one that failed. */
+const CANCELLED = "cancelled";
 
 const stdoutView = new EditorView({
   state: EditorState.create({
@@ -53,23 +60,116 @@ const appendStdout = (value: string) => {
   }
 };
 
+const showPendingTimers = (nPending: number) => {
+  pendingTimersEl.innerText = `${nPending} timers`;
+  pendingTimersIconNoneEl.style.display = nPending > 0 ? "none" : "block";
+  pendingTimersIconSomeEl.style.display = nPending > 0 ? "block" : "none";
+};
+
+const clamp = (x: number, low: number, high: number) => Math.min(Math.max(x, low), high);
+
+/**
+ * The canvas window is laid out in design pixels, but pointer events arrive in
+ * CSS pixels; `<pixel-perfect>` scales between the two.
+ */
+const designPixelScale = () =>
+  canvasWindowEl.getBoundingClientRect().width / canvasWindowEl.offsetWidth || 1;
+
+let canvasWindowPosition: { left: number; top: number } | null = null;
+
+/** Moves the canvas window, keeping it on screen and on the pixel grid. */
+const moveCanvasWindow = (left: number, top: number) => {
+  const scale = designPixelScale();
+  const maxLeft = window.innerWidth / scale - canvasWindowEl.offsetWidth;
+  const maxTop = window.innerHeight / scale - canvasWindowEl.offsetHeight;
+
+  canvasWindowPosition = {
+    left: Math.round(clamp(left, 0, Math.max(0, maxLeft))),
+    top: Math.round(clamp(top, 0, Math.max(0, maxTop))),
+  };
+  canvasWindowEl.style.left = `${canvasWindowPosition.left}px`;
+  canvasWindowEl.style.top = `${canvasWindowPosition.top}px`;
+};
+
+const openCanvasWindow = (canvas: HTMLCanvasElement, width: number, height: number) => {
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  canvasContainerEl.replaceChildren(canvas);
+  canvasWindowEl.style.display = "";
+
+  const scale = designPixelScale();
+  // a window that hasn't been dragged anywhere yet opens in the middle
+  moveCanvasWindow(
+    canvasWindowPosition?.left ?? (window.innerWidth / scale - canvasWindowEl.offsetWidth) / 2,
+    canvasWindowPosition?.top ?? (window.innerHeight / scale - canvasWindowEl.offsetHeight) / 2,
+  );
+};
+
+const closeCanvasWindow = () => {
+  canvasWindowEl.style.display = "none";
+  canvasContainerEl.replaceChildren();
+};
+
+canvasWindowTitleBarEl.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || !canvasWindowPosition) return;
+  // capturing the pointer for a drag would swallow the close button's click
+  if ((event.target as HTMLElement).closest(".title-bar-controls")) return;
+
+  const scale = designPixelScale();
+  const start = { x: event.clientX, y: event.clientY, ...canvasWindowPosition };
+
+  const drag = (moveEvent: PointerEvent) => {
+    moveCanvasWindow(
+      start.left + (moveEvent.clientX - start.x) / scale,
+      start.top + (moveEvent.clientY - start.y) / scale,
+    );
+  };
+  const drop = () => {
+    canvasWindowTitleBarEl.removeEventListener("pointermove", drag);
+    canvasWindowTitleBarEl.removeEventListener("pointerup", drop);
+    canvasWindowTitleBarEl.removeEventListener("pointercancel", drop);
+  };
+
+  canvasWindowTitleBarEl.setPointerCapture(event.pointerId);
+  canvasWindowTitleBarEl.addEventListener("pointermove", drag);
+  canvasWindowTitleBarEl.addEventListener("pointerup", drop);
+  canvasWindowTitleBarEl.addEventListener("pointercancel", drop);
+  event.preventDefault();
+});
+
+// a window dragged to the edge shouldn't end up off screen
+window.addEventListener("resize", () => {
+  if (canvasWindowPosition && canvasWindowEl.style.display !== "none") {
+    moveCanvasWindow(canvasWindowPosition.left, canvasWindowPosition.top);
+  }
+});
+
 function runTcl(
   source: string,
   {
     handleResult,
     handlePendingTimers,
     handleStdout,
+    handleWindow,
+    handleNoWindow,
     timeoutMs,
   }: {
     handleResult: (value: string) => void;
     handlePendingTimers: (nPending: number) => void;
     handleStdout: (value: string) => void;
+    handleWindow: (canvas: HTMLCanvasElement, width: number, height: number) => void;
+    handleNoWindow: () => void;
     timeoutMs?: number;
   },
 ): [() => void, Promise<void>] {
   const worker = new TclWorker();
+  // Tk draws in the worker, which can only be handed an OffscreenCanvas, and
+  // control of a canvas can only be transferred once: hence one per run.
+  const canvasEl = document.createElement("canvas");
+  const offscreenCanvas = canvasEl.transferControlToOffscreen();
+  let openedWindow = false;
   const cancelPromise = Promise.withResolvers<void>();
-  const cancel = () => cancelPromise.reject(new Error("cancelled"));
+  const cancel = () => cancelPromise.reject(new Error(CANCELLED));
   let timeout: number | null = null;
 
   return [
@@ -78,7 +178,7 @@ function runTcl(
       new Promise<void>((res, rej) => {
         const readyPromise = Promise.withResolvers<void>();
         readyPromise.promise.then(() => {
-          worker.postMessage({ source });
+          worker.postMessage({ source, canvas: offscreenCanvas }, [offscreenCanvas]);
         });
 
         worker.onmessage = ({ data }) => {
@@ -88,9 +188,23 @@ function runTcl(
               break;
             case "result":
               handleResult(data.value);
+              // the worker reports a mapped widget before the result, so by now
+              // we know whether this run draws at all
+              if (!openedWindow) {
+                handleNoWindow();
+              }
               break;
             case "pending-timers":
               handlePendingTimers(data.value);
+              break;
+            case "window":
+              // an animation keeps scheduling timers, so it never "finishes"
+              if (timeout !== null) {
+                clearTimeout(timeout);
+                timeout = null;
+              }
+              openedWindow = true;
+              handleWindow(canvasEl, data.width, data.height);
               break;
             case "done":
               res();
@@ -106,7 +220,7 @@ function runTcl(
           }
         };
 
-        worker.onerror = (error) => rej(String(error));
+        worker.onerror = (error) => rej(error.message || String(error));
       }),
 
       ...(timeoutMs !== undefined
@@ -142,6 +256,15 @@ const initialDoc = `proc fib {x} {
 fib 8`;
 
 let cancel: (() => void) | null = null;
+
+// closing the window stops the script, the way closing a Tk toplevel does
+canvasWindowCloseEl.addEventListener("click", () => {
+  closeCanvasWindow();
+  cancel?.();
+  cancel = null;
+  // the script's timers went with it
+  showPendingTimers(0);
+});
 const evaluate = async (code: string) => {
   resultEl.classList.remove("error");
   resultEl.innerText = "...";
@@ -154,17 +277,26 @@ const evaluate = async (code: string) => {
         resultEl.innerText = value.length ? value : " ";
       },
       handlePendingTimers(nPending) {
-        pendingTimersEl.innerText = `${nPending} timers`;
-        pendingTimersIconNoneEl.style.display = nPending > 0 ? "none" : "block";
-        pendingTimersIconSomeEl.style.display = nPending > 0 ? "block" : "none";
+        showPendingTimers(nPending);
       },
       handleStdout(value) {
         appendStdout(value);
+      },
+      handleWindow(canvas, width, height) {
+        openCanvasWindow(canvas, width, height);
+      },
+      handleNoWindow() {
+        closeCanvasWindow();
       },
       timeoutMs: 10000,
     });
     await done;
   } catch (e) {
+    if (e instanceof Error && e.message === CANCELLED) {
+      // a newer run, or the canvas window's close button, replaced this one
+      return;
+    }
+    closeCanvasWindow();
     resultEl.classList.add("error");
     resultEl.innerText = String(e);
   } finally {
@@ -227,6 +359,32 @@ const examples = {
 }
 
 fib 8`,
+
+  canvas: `set width 400
+set height 300
+
+canvas .c -width $width -height $height -background #1d1f21
+pack .c
+
+set box [.c create rectangle 20 110 140 190 -fill #e2725b]
+set dx 4
+
+proc step {} {
+  global box dx width
+
+  set coords [.c coords $box]
+  set x1 [lindex $coords 0]
+  set x2 [lindex $coords 2]
+
+  if {$x2 + $dx > $width || $x1 + $dx < 0} {
+    set dx [expr {0 - $dx}]
+  }
+
+  .c move $box $dx 0
+  after 16 step
+}
+
+step`,
 
   uplevel: `proc do {body while condition} {
   if {$while != "while"} {

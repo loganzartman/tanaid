@@ -4,8 +4,12 @@ use std::{
   io::{self, IsTerminal},
   process::ExitCode,
 };
-use tanaid::{eval, parser};
-use tanaid::{event_loop, repl::run_repl};
+use tanaid::{eval, event_loop, parser};
+use tanaid_tk::Tk;
+
+mod repl;
+
+use repl::run_repl;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -32,17 +36,25 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
   let mut context = eval::EvalContext::new();
+  let tk = Tk::new();
+  tk.register_commands(&mut context);
   let opts = RunOpts { debug: args.debug };
 
   if let Some(file_path) = args.file_path {
-    return run_source(fs::read_to_string(file_path)?.as_str(), &mut context, &opts);
+    return run_source(
+      fs::read_to_string(file_path)?.as_str(),
+      &mut context,
+      &tk,
+      &opts,
+    );
   }
   if io::stdin().is_terminal() {
-    return run_repl(&mut context);
+    return run_repl(&mut context, &tk);
   }
   run_source(
     io::read_to_string(io::stdin())?.as_str(),
     &mut context,
+    &tk,
     &opts,
   )
 }
@@ -50,6 +62,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn run_source(
   src: &str,
   context: &mut eval::EvalContext,
+  tk: &Tk,
   opts: &RunOpts,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
@@ -66,6 +79,12 @@ fn run_source(
 
   println!("{}", result.repr_str()?);
 
+  // a script that mapped a widget hands the process over to its window
+  if tk.has_window() {
+    tanaid_tk::run(tk.clone(), context)?;
+    return Ok(());
+  }
+
   let mut event_loop = event_loop::EventLoop::new();
   event_loop.run(context)?;
 
@@ -79,12 +98,14 @@ mod tests {
   #[test]
   fn test() -> Result<(), Box<dyn std::error::Error>> {
     let mut context = eval::EvalContext::new();
+    let tk = Tk::new();
     let opts = RunOpts { debug: true };
     run_source(
       // Relative to the manifest, not the cwd: `cargo test` runs from the
       // package root, but sample/ lives at the workspace root.
       fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../sample/fib.tcl"))?.as_str(),
       &mut context,
+      &tk,
       &opts,
     )
   }

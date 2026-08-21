@@ -1,12 +1,13 @@
-use crate::event_loop::EventLoop;
-use crate::parser::ParseError;
-use crate::{eval, parser};
 use reedline::{
   EditCommand, Emacs, KeyCode, KeyModifiers, Prompt, PromptEditMode, PromptHistorySearch,
   PromptHistorySearchStatus, Reedline, ReedlineEvent, Signal, ValidationResult, Validator,
   default_emacs_keybindings,
 };
 use std::borrow::Cow;
+use tanaid::event_loop::EventLoop;
+use tanaid::parser::ParseError;
+use tanaid::{eval, parser};
+use tanaid_tk::Tk;
 
 struct TclValidator;
 
@@ -53,7 +54,10 @@ impl Prompt for TclPrompt {
   }
 }
 
-pub fn run_repl(context: &mut eval::EvalContext) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_repl(
+  context: &mut eval::EvalContext,
+  tk: &Tk,
+) -> Result<(), Box<dyn std::error::Error>> {
   let mut keybindings = default_emacs_keybindings();
   keybindings.add_binding(
     KeyModifiers::CONTROL,
@@ -97,6 +101,15 @@ pub fn run_repl(context: &mut eval::EvalContext) -> Result<(), Box<dyn std::erro
       Err(err) => {
         println!("Error: {}", err);
       }
+    }
+
+    // a command that mapped a widget hands the prompt over to its window until
+    // the window is closed
+    if tk.has_window() {
+      if let Err(err) = tanaid_tk::run(tk.clone(), context) {
+        println!("Error: {}", err);
+      }
+      continue;
     }
 
     let mut event_loop = EventLoop::new();

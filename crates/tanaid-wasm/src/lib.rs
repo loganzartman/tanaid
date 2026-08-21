@@ -6,9 +6,11 @@ use tanaid::{
   eval_error::EvalError,
   parser::parse,
 };
+use tanaid_tk::{Renderer, Tk};
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
+use web_sys::OffscreenCanvas;
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -18,6 +20,11 @@ pub struct Interpreter {
   set_timeout: Function,
   clear_timeout: Function,
   handle_event_loop_status: Function,
+
+  tk: Tk,
+  /// The canvas to draw on, until it is handed to a renderer.
+  canvas: Rc<RefCell<Option<OffscreenCanvas>>>,
+  renderer: Rc<RefCell<Option<Renderer>>>,
 }
 
 #[derive(Tsify, Serialize, Deserialize)]
@@ -38,6 +45,32 @@ pub struct InterpreterOptions {
   #[serde(with = "serde_wasm_bindgen::preserve")]
   #[tsify(type = "(pendingTimers: number) => void")]
   pub handle_event_loop_status: Function,
+
+  /// Where Tk draws. A worker can only be handed an `OffscreenCanvas`, so the
+  /// page transfers one before running anything that might draw.
+  #[serde(default, with = "serde_wasm_bindgen::preserve")]
+  #[tsify(type = "OffscreenCanvas | undefined")]
+  pub canvas: JsValue,
+}
+
+#[wasm_bindgen]
+extern "C" {
+  #[wasm_bindgen(js_namespace = console, js_name = error)]
+  fn console_error(value: &JsValue);
+}
+
+/// A wasm panic aborts with a bare `RuntimeError: unreachable`, and the message
+/// std would have printed goes nowhere. Log it — as an `Error`, so the console
+/// shows a stack with it — before the process gives up.
+fn report_panics_to_console() {
+  use std::sync::Once;
+
+  static HOOK: Once = Once::new();
+  HOOK.call_once(|| {
+    std::panic::set_hook(Box::new(|info| {
+      console_error(&js_sys::Error::new(&info.to_string()).into());
+    }));
+  });
 }
 
 fn js_error_message(value: JsValue) -> String {
@@ -55,6 +88,8 @@ fn js_value_to_error(value: JsValue) -> JsError {
 #[wasm_bindgen]
 impl Interpreter {
   pub fn create(options: Ts<InterpreterOptions>) -> Result<Interpreter, JsError> {
+    report_panics_to_console();
+
     let opts = options
       .to_rust()
       .map_err(|e| JsError::new(format!("failed to parse options: {}", e).as_str()))?;
@@ -66,7 +101,21 @@ impl Interpreter {
         .map_err(|e| EvalError::Generic(js_error_message(e)))?;
       Ok(())
     });
-    let context = EvalContext::new().with_stdout(stdout);
+    let mut context = EvalContext::new().with_stdout(stdout);
+
+    let tk = Tk::new();
+    tk.register_commands(&mut context);
+
+    let canvas = if opts.canvas.is_undefined() || opts.canvas.is_null() {
+      None
+    } else {
+      Some(
+        opts
+          .canvas
+          .dyn_into::<OffscreenCanvas>()
+          .map_err(|_| JsError::new("canvas must be an OffscreenCanvas"))?,
+      )
+    };
 
     Ok(Interpreter {
       context: Rc::new(RefCell::new(context)),
@@ -74,10 +123,23 @@ impl Interpreter {
       set_timeout: opts.set_timeout,
       clear_timeout: opts.clear_timeout,
       handle_event_loop_status: opts.handle_event_loop_status,
+
+      tk,
+      canvas: Rc::new(RefCell::new(canvas)),
+      renderer: Rc::new(RefCell::new(None)),
     })
   }
 
-  pub fn run(&mut self, src: &str) -> Result<JsValue, JsError> {
+  /// The size of the widget the script mapped, if it opened a window.
+  #[wasm_bindgen(js_name = windowSize)]
+  pub fn window_size(&self) -> Option<Vec<u32>> {
+    self
+      .tk
+      .mapped_canvas()
+      .map(|canvas| vec![canvas.width, canvas.height])
+  }
+
+  pub async fn run(&mut self, src: &str) -> Result<JsValue, JsError> {
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
     let mut result = {
@@ -85,12 +147,50 @@ impl Interpreter {
       eval(&parsed, &mut *context).map_err(|e| JsError::new(e.to_string().as_str()))
     }?;
 
+    self.open_window().await?;
     self.run_event_loop()?;
 
     match result.repr_str() {
       Ok(result_str) => Ok(JsValue::from_str(result_str)),
       Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
     }
+  }
+
+  /// Attaches a renderer to the canvas, once a script has mapped a widget.
+  async fn open_window(&self) -> Result<(), JsError> {
+    if !self.tk.has_window() || self.renderer.borrow().is_some() {
+      return Ok(());
+    }
+
+    let Some(canvas) = self.canvas.borrow_mut().take() else {
+      return Err(JsError::new(
+        "this script draws, but no canvas was given to the interpreter",
+      ));
+    };
+
+    if let Some(widget) = self.tk.mapped_canvas() {
+      canvas.set_width(widget.width);
+      canvas.set_height(widget.height);
+    }
+
+    let renderer = tanaid_tk::create_renderer(canvas)
+      .await
+      .map_err(|e| JsError::new(e.to_string().as_str()))?;
+    *self.renderer.borrow_mut() = Some(renderer);
+
+    self.tk.take_dirty();
+    self.draw()
+  }
+
+  fn draw(&self) -> Result<(), JsError> {
+    let mut renderer = self.renderer.borrow_mut();
+    let (Some(renderer), Some(canvas)) = (renderer.as_mut(), self.tk.mapped_canvas()) else {
+      return Ok(());
+    };
+
+    renderer
+      .render(&canvas)
+      .map_err(|e| JsError::new(e.to_string().as_str()))
   }
 
   fn run_event_loop(&self) -> Result<(), JsError> {
@@ -138,6 +238,12 @@ fn apply_timer_actions(
 
           if let Err(e) = fire_result {
             wasm_bindgen::throw_val(JsError::new(e.to_string().as_str()).into())
+          }
+
+          if callback_interpreter.tk.take_dirty()
+            && let Err(e) = callback_interpreter.draw()
+          {
+            wasm_bindgen::throw_val(e.into())
           }
 
           if let Err(e) = notify_if_event_loop_empty(&callback_interpreter) {
