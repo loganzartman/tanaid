@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
 use tanaid::eval::FrameId;
@@ -8,12 +8,14 @@ use winit::event::WindowEvent;
 use winit::window::Window;
 
 pub struct TkContext {
+  show_window: Cell<bool>,
   window: RefCell<Option<winit::window::Window>>,
 }
 
 impl TkContext {
   pub fn new() -> Self {
     Self {
+      show_window: Cell::new(false),
       window: RefCell::new(None),
     }
   }
@@ -58,15 +60,28 @@ impl TkContext {
     _ctx: &mut EvalContext,
     _frame: FrameId,
   ) -> Result<Value, EvalError> {
+    self.show_window.set(true);
     Ok(Value::none())
   }
 
   pub(crate) fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.window.replace(Some(
-      event_loop
-        .create_window(Window::default_attributes())
-        .unwrap(),
-    ));
+    if self.show_window.get() {
+      self.window.replace(Some(
+        event_loop
+          .create_window(Window::default_attributes())
+          .unwrap(),
+      ));
+    }
+  }
+
+  pub(crate) fn handle_about_to_wait(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    if self.show_window.get() {
+      self.window.replace(Some(
+        event_loop
+          .create_window(Window::default_attributes())
+          .unwrap(),
+      ));
+    }
   }
 
   pub(crate) fn handle_window_event(

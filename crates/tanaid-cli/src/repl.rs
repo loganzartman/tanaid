@@ -4,7 +4,9 @@ use reedline::{
   default_emacs_keybindings,
 };
 use std::borrow::Cow;
-use tanaid::event_loop::EventLoop;
+use std::sync::mpsc;
+use std::thread;
+use tanaid::eval::EvalContext;
 use tanaid::parser::ParseError;
 use tanaid::{eval, parser};
 use tanaid_tk::Tk;
@@ -56,62 +58,60 @@ impl Prompt for TclPrompt {
 
 pub fn run_repl(
   context: &mut eval::EvalContext,
-  tk: &mut Tk,
+  _tk: &mut Tk,
 ) -> Result<(), Box<dyn std::error::Error>> {
-  let mut keybindings = default_emacs_keybindings();
-  keybindings.add_binding(
-    KeyModifiers::CONTROL,
-    KeyCode::Char('c'),
-    ReedlineEvent::ExecuteHostCommand("ctrl-c".to_string()),
-  );
+  let (lines_tx, lines_rx) = mpsc::channel();
+  let (next_tx, next_rx) = mpsc::channel();
 
-  let mut line_editor = Reedline::create()
-    .with_edit_mode(Box::new(Emacs::new(keybindings)))
-    .with_validator(Box::new(TclValidator {}));
+  let rl_thread = thread::spawn(move || {
+    let mut keybindings = default_emacs_keybindings();
+    keybindings.add_binding(
+      KeyModifiers::CONTROL,
+      KeyCode::Char('c'),
+      ReedlineEvent::ExecuteHostCommand("ctrl-c".to_string()),
+    );
 
-  let prompt = TclPrompt {};
+    let mut line_editor = Reedline::create()
+      .with_edit_mode(Box::new(Emacs::new(keybindings)))
+      .with_validator(Box::new(TclValidator {}));
 
-  loop {
-    let line = match line_editor.read_line(&prompt) {
-      Ok(Signal::Success(buffer)) => buffer,
-      Ok(Signal::CtrlD) => {
-        return Ok(());
-      }
-      Ok(Signal::HostCommand(command)) if command == "ctrl-c" => {
-        line_editor.run_edit_commands(&[EditCommand::Clear]);
-        println!();
-        println!("ctrl+d to exit");
-        continue;
-      }
-      _ => unimplemented!(),
-    };
+    let prompt = TclPrompt {};
 
-    let parsed = match parser::parse(line.as_str()) {
-      Ok(parsed) => parsed,
-      Err(err) => {
-        println!("Error: {}", err);
-        continue;
-      }
-    };
+    loop {
+      let line = match line_editor.read_line(&prompt) {
+        Ok(Signal::Success(buffer)) => buffer,
+        Ok(Signal::CtrlD) => {
+          return;
+        }
+        Ok(Signal::HostCommand(command)) if command == "ctrl-c" => {
+          line_editor.run_edit_commands(&[EditCommand::Clear]);
+          println!();
+          println!("ctrl+d to exit");
+          continue;
+        }
+        _ => unimplemented!(),
+      };
 
-    match eval::eval(&parsed, context) {
-      Ok(mut result) => {
-        println!("{}", result.repr_str()?);
-      }
-      Err(err) => {
-        println!("Error: {}", err);
-      }
+      lines_tx.send(line).unwrap();
+      next_rx.recv().unwrap();
     }
+  });
 
-    let mut event_loop = EventLoop::new();
-    match event_loop.run(context, || {
-      tk.pump_app_events();
-      Ok(())
-    }) {
-      Ok(()) => {}
-      Err(err) => {
-        println!("Error: {}", err);
-      }
+  for line in lines_rx.iter() {
+    if let Err(err) = run_line(line.as_str(), context) {
+      println!("Error: {}", err);
     }
+    next_tx.send(()).unwrap();
   }
+
+  rl_thread.join().unwrap();
+
+  Ok(())
+}
+
+fn run_line(line: &str, context: &mut EvalContext) -> Result<(), Box<dyn std::error::Error>> {
+  let parsed = parser::parse(line)?;
+  let mut result = eval::eval(&parsed, context)?;
+  println!("{}", result.repr_str()?);
+  Ok(())
 }
