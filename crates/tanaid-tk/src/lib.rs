@@ -1,3 +1,4 @@
+mod cmd;
 pub mod tk;
 pub mod tk_context;
 

@@ -1,3 +1,4 @@
+use crate::cmd;
 use crate::tk_context::TkContext;
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
@@ -15,21 +16,7 @@ impl Tk {
   }
 
   pub fn install(&mut self, ctx: &mut EvalContext) -> Result<(), EvalError> {
-    {
-      let context = self.context.clone();
-      ctx.register_command(
-        "canvas",
-        Rc::new(move |args, ctx, frame| context.canvas(args, ctx, frame)),
-      );
-    }
-    {
-      let context = self.context.clone();
-      ctx.register_command(
-        "pack",
-        Rc::new(move |args, ctx, frame| context.pack(args, ctx, frame)),
-      );
-    }
-
+    cmd::register_commands(ctx, self.context.clone());
     Ok(())
   }
 }

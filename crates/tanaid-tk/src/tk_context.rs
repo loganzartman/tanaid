@@ -3,19 +3,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::num::NonZero;
 use std::rc::Rc;
-use tanaid::eval::EvalContext;
-use tanaid::eval::FrameId;
-use tanaid::eval_error::EvalError;
-use tanaid::value::Value;
-use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::OwnedDisplayHandle;
 use winit::window::{Window, WindowAttributes};
 
 pub struct TkContext {
-  widgets: RefCell<HashMap<String, Widget>>,
-  window_attributes: RefCell<Option<WindowAttributes>>,
-  surface: RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>,
+  pub(crate) widgets: RefCell<HashMap<String, Widget>>,
+  pub(crate) window_attributes: RefCell<Option<WindowAttributes>>,
+  pub(crate) surface: RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>,
 }
 
 pub enum Widget {
@@ -23,8 +18,8 @@ pub enum Widget {
 }
 
 pub struct CanvasAttributes {
-  width: Option<u32>,
-  height: Option<u32>,
+  pub(crate) width: Option<u32>,
+  pub(crate) height: Option<u32>,
 }
 
 impl TkContext {
@@ -34,135 +29,6 @@ impl TkContext {
       window_attributes: RefCell::new(None),
       surface: RefCell::new(None),
     }
-  }
-
-  pub(crate) fn canvas(
-    &self,
-    args: &mut [Value],
-    ctx: &mut EvalContext,
-    _frame: FrameId,
-  ) -> Result<Value, EvalError> {
-    let (path_name, rest) = match args {
-      [path_name, rest @ ..] => (path_name, rest),
-      _ => {
-        return Err(EvalError::ArgumentError(
-          "canvas: missing path name".to_string(),
-        ));
-      }
-    };
-
-    let path_name_str = path_name.repr_str()?;
-
-    if !path_name_str.starts_with(".") {
-      return Err(EvalError::ArgumentError(
-        "canvas: path name must start with '.'".to_string(),
-      ));
-    }
-
-    let mut attrs = CanvasAttributes {
-      width: None,
-      height: None,
-    };
-
-    let mut opts = rest.iter_mut();
-    loop {
-      let Some(option) = opts.next() else {
-        break;
-      };
-
-      let option_str = option.repr_str()?;
-      let option_str = option_str
-        .strip_prefix('-')
-        .ok_or(EvalError::ArgumentError(format!(
-          "canvas: invalid option: {}",
-          option_str
-        )))?;
-
-      match option_str {
-        "width" => {
-          let Some(value) = opts.next() else {
-            return Err(EvalError::ArgumentError(
-              "value for width missing".to_string(),
-            ));
-          };
-          attrs.width = Some(
-            u32::try_from(value.repr_int()?)
-              .map_err(|e| EvalError::ArgumentError(format!("invalid width: {}", e)))?,
-          );
-        }
-        "height" => {
-          let Some(value) = opts.next() else {
-            return Err(EvalError::ArgumentError(
-              "value for width missing".to_string(),
-            ));
-          };
-          attrs.height = Some(
-            u32::try_from(value.repr_int()?)
-              .map_err(|e| EvalError::ArgumentError(format!("invalid height: {}", e)))?,
-          );
-        }
-        _ => {
-          return Err(EvalError::ArgumentError(format!(
-            "canvas: invalid option: {}",
-            option_str
-          )));
-        }
-      }
-    }
-
-    self
-      .widgets
-      .borrow_mut()
-      .insert(path_name_str.to_string(), Widget::Canvas(attrs));
-
-    ctx.register_command(
-      path_name_str,
-      Rc::new(move |args, ctx, _frame| {
-        ctx.write_stdout(format!("canvas: {:?}", args).as_str())?;
-        Ok(Value::none())
-      }),
-    );
-
-    Ok(Value::from(path_name_str))
-  }
-
-  pub(crate) fn pack(
-    &self,
-    args: &mut [Value],
-    _ctx: &mut EvalContext,
-    _frame: FrameId,
-  ) -> Result<Value, EvalError> {
-    match args {
-      [widget_name] => {
-        let widget_name_str = widget_name.repr_str()?;
-        let widgets = self.widgets.borrow();
-        let Some(widget) = widgets.get(widget_name_str) else {
-          return Err(EvalError::ArgumentError(format!(
-            "pack: widget not found: {}",
-            widget_name_str
-          )));
-        };
-
-        match widget {
-          Widget::Canvas(attrs) => {
-            self.window_attributes.replace(Some(
-              Window::default_attributes()
-                .with_title("tanaid-tk")
-                .with_inner_size(LogicalSize::new(
-                  f64::from(attrs.width.unwrap_or(256)),
-                  f64::from(attrs.height.unwrap_or(256)),
-                )),
-            ));
-          }
-        }
-      }
-      _ => {
-        return Err(EvalError::ArgumentError(
-          "pack: expected exactly 1 argument".to_string(),
-        ));
-      }
-    }
-    Ok(Value::none())
   }
 
   fn ensure_window(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
