@@ -4,7 +4,6 @@ use std::{
   io::{self, IsTerminal},
   process::ExitCode,
 };
-use tanaid::event_loop;
 use tanaid::{eval, parser};
 use tanaid_cli::repl::run_repl;
 use tanaid_tk::Tk;
@@ -62,7 +61,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn run_source(
   src: &str,
   context: &mut eval::EvalContext,
-  tk: &mut Tk,
+  _tk: &mut Tk,
   opts: &RunOpts,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
@@ -78,12 +77,6 @@ fn run_source(
   }
 
   println!("{}", result.repr_str()?);
-
-  let mut tcl_event_loop = event_loop::EventLoop::new();
-  tcl_event_loop.run(context, || {
-    tk.pump_app_events();
-    Ok(())
-  })?;
 
   Ok(())
 }
