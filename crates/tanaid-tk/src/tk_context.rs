@@ -1,22 +1,26 @@
+use softbuffer::Surface;
 use std::cell::{Cell, RefCell};
+use std::num::NonZero;
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
 use tanaid::eval::FrameId;
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
+use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
+use winit::event_loop::OwnedDisplayHandle;
 use winit::window::Window;
 
 pub struct TkContext {
   show_window: Cell<bool>,
-  window: RefCell<Option<winit::window::Window>>,
+  surface: RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>,
 }
 
 impl TkContext {
   pub fn new() -> Self {
     Self {
       show_window: Cell::new(false),
-      window: RefCell::new(None),
+      surface: RefCell::new(None),
     }
   }
 
@@ -64,24 +68,54 @@ impl TkContext {
     Ok(Value::none())
   }
 
-  pub fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if self.show_window.get() {
-      self.window.replace(Some(
-        event_loop
-          .create_window(Window::default_attributes())
-          .unwrap(),
-      ));
+  fn ensure_window(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    if !self.show_window.get() || self.surface.borrow().is_some() {
+      return;
     }
+
+    let context = softbuffer::Context::new(event_loop.owned_display_handle()).unwrap();
+    let window = Rc::new(
+      event_loop
+        .create_window(
+          Window::default_attributes()
+            .with_title("tanaid-tk")
+            .with_inner_size(PhysicalSize::new(256, 256)),
+        )
+        .unwrap(),
+    );
+    let surface = Surface::new(&context, window).unwrap();
+    self.surface.replace(Some(surface));
+  }
+
+  fn redraw(&self) {
+    let mut surface = self.surface.borrow_mut();
+    let Some(surface) = surface.as_mut() else {
+      return;
+    };
+
+    let size = surface.window().inner_size();
+    let Some(width) = NonZero::new(size.width) else {
+      return;
+    };
+    let Some(height) = NonZero::new(size.height) else {
+      return;
+    };
+    if surface.resize(width, height).is_err() {
+      return;
+    }
+    let Ok(mut buffer) = surface.buffer_mut() else {
+      return;
+    };
+    buffer.fill(0xFF808080);
+    let _ = buffer.present();
+  }
+
+  pub fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    self.ensure_window(event_loop);
   }
 
   pub fn handle_about_to_wait(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if self.show_window.get() {
-      self.window.replace(Some(
-        event_loop
-          .create_window(Window::default_attributes())
-          .unwrap(),
-      ));
-    }
+    self.ensure_window(event_loop);
   }
 
   pub fn handle_window_event(
@@ -91,6 +125,14 @@ impl TkContext {
     event: winit::event::WindowEvent,
   ) {
     match event {
+      WindowEvent::Resized(_) => {
+        if let Some(surface) = self.surface.borrow().as_ref() {
+          surface.window().request_redraw();
+        }
+      }
+      WindowEvent::RedrawRequested => {
+        self.redraw();
+      }
       WindowEvent::CloseRequested => {
         println!("The close button was pressed; stopping");
         event_loop.exit();
