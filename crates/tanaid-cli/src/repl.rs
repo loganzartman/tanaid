@@ -91,7 +91,7 @@ pub fn run_repl(
       let line = match line_editor.read_line(&prompt) {
         Ok(Signal::Success(buffer)) => buffer,
         Ok(Signal::CtrlD) => {
-          send_proxy.send_event(ReplEvent::Exit).unwrap();
+          send_proxy.send_event(ReplEvent::Exit).unwrap_or(());
           break;
         }
         Ok(Signal::HostCommand(command)) if command == "ctrl-c" => {
