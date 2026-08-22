@@ -64,7 +64,7 @@ impl TkContext {
     Ok(Value::none())
   }
 
-  pub(crate) fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+  pub fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
     if self.show_window.get() {
       self.window.replace(Some(
         event_loop
@@ -74,7 +74,7 @@ impl TkContext {
     }
   }
 
-  pub(crate) fn handle_about_to_wait(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+  pub fn handle_about_to_wait(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
     if self.show_window.get() {
       self.window.replace(Some(
         event_loop
@@ -84,7 +84,7 @@ impl TkContext {
     }
   }
 
-  pub(crate) fn handle_window_event(
+  pub fn handle_window_event(
     &self,
     event_loop: &winit::event_loop::ActiveEventLoop,
     _window_id: winit::window::WindowId,

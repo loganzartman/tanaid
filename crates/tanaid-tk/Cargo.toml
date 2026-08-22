@@ -8,7 +8,7 @@ publish = true
 
 [dependencies]
 tanaid = { workspace = true }
-winit = "0.30"
+winit = { workspace = true }
 
 [lints]
 workspace = true

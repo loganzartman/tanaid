@@ -2,11 +2,9 @@ use crate::tk_context::TkContext;
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
 use tanaid::eval_error::EvalError;
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
 
 pub struct Tk {
-  context: Rc<TkContext>,
+  pub context: Rc<TkContext>,
 }
 
 impl Tk {
@@ -33,37 +31,5 @@ impl Tk {
     }
 
     Ok(())
-  }
-}
-
-/// Dispatches winit events to a TkContext
-pub struct TkApp {
-  context: Rc<TkContext>,
-}
-
-impl TkApp {
-  pub fn new(context: Rc<TkContext>) -> Self {
-    Self { context }
-  }
-}
-
-impl ApplicationHandler for TkApp {
-  fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.context.handle_resumed(event_loop);
-  }
-
-  fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.context.handle_about_to_wait(event_loop);
-  }
-
-  fn window_event(
-    &mut self,
-    event_loop: &winit::event_loop::ActiveEventLoop,
-    window_id: winit::window::WindowId,
-    event: WindowEvent,
-  ) {
-    self
-      .context
-      .handle_window_event(event_loop, window_id, event);
   }
 }

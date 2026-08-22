@@ -10,6 +10,8 @@ use tanaid::eval::EvalContext;
 use tanaid::parser::ParseError;
 use tanaid::{eval, parser};
 use tanaid_tk::Tk;
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
 
 struct TclValidator;
 
@@ -56,12 +58,20 @@ impl Prompt for TclPrompt {
   }
 }
 
+#[derive(Debug)]
+enum ReplEvent {
+  Line(String),
+  Exit,
+}
+
 pub fn run_repl(
   context: &mut eval::EvalContext,
-  _tk: &mut Tk,
+  tk: &mut Tk,
 ) -> Result<(), Box<dyn std::error::Error>> {
-  let (lines_tx, lines_rx) = mpsc::channel();
-  let (next_tx, next_rx) = mpsc::channel();
+  let (next_tx, next_rx) = mpsc::channel::<()>();
+
+  let event_loop = winit::event_loop::EventLoop::<ReplEvent>::with_user_event().build()?;
+  let send_proxy = event_loop.create_proxy();
 
   let rl_thread = thread::spawn(move || {
     let mut keybindings = default_emacs_keybindings();
@@ -81,7 +91,8 @@ pub fn run_repl(
       let line = match line_editor.read_line(&prompt) {
         Ok(Signal::Success(buffer)) => buffer,
         Ok(Signal::CtrlD) => {
-          return;
+          send_proxy.send_event(ReplEvent::Exit).unwrap();
+          break;
         }
         Ok(Signal::HostCommand(command)) if command == "ctrl-c" => {
           line_editor.run_edit_commands(&[EditCommand::Clear]);
@@ -92,21 +103,63 @@ pub fn run_repl(
         _ => unimplemented!(),
       };
 
-      lines_tx.send(line).unwrap();
+      send_proxy.send_event(ReplEvent::Line(line)).unwrap();
       next_rx.recv().unwrap();
     }
   });
 
-  for line in lines_rx.iter() {
-    if let Err(err) = run_line(line.as_str(), context) {
-      println!("Error: {}", err);
-    }
-    next_tx.send(()).unwrap();
-  }
+  let mut app = ReplApp {
+    tk,
+    context,
+    next_tx,
+  };
+  event_loop.run_app(&mut app)?;
 
   rl_thread.join().unwrap();
 
   Ok(())
+}
+
+struct ReplApp<'a> {
+  tk: &'a mut Tk,
+  context: &'a mut EvalContext,
+  next_tx: mpsc::Sender<()>,
+}
+
+impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
+  fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: ReplEvent) {
+    match event {
+      ReplEvent::Exit => {
+        event_loop.exit();
+      }
+      ReplEvent::Line(line) => {
+        if let Err(err) = run_line(&line, &mut self.context) {
+          println!("Error: {}", err);
+        }
+        self.next_tx.send(()).unwrap();
+      }
+    }
+  }
+
+  fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    self.tk.context.handle_resumed(event_loop);
+  }
+
+  fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    self.tk.context.handle_about_to_wait(event_loop);
+  }
+
+  fn window_event(
+    &mut self,
+    event_loop: &winit::event_loop::ActiveEventLoop,
+    window_id: winit::window::WindowId,
+    event: WindowEvent,
+  ) {
+    self
+      .tk
+      .context
+      .handle_window_event(event_loop, window_id, event);
+  }
 }
 
 fn run_line(line: &str, context: &mut EvalContext) -> Result<(), Box<dyn std::error::Error>> {
