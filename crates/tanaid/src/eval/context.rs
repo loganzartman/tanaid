@@ -90,6 +90,10 @@ impl EvalContext {
     self
   }
 
+  pub fn write_stdout(&self, output: &str) -> Result<(), EvalError> {
+    (self.stdout)(output)
+  }
+
   pub fn frame(&self, id: FrameId) -> &EvalFrame {
     self.frames.get(id).unwrap()
   }
