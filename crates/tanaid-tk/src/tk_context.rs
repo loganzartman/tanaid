@@ -120,7 +120,7 @@ impl TkContext {
 
   pub fn handle_window_event(
     &self,
-    event_loop: &winit::event_loop::ActiveEventLoop,
+    _event_loop: &winit::event_loop::ActiveEventLoop,
     _window_id: winit::window::WindowId,
     event: winit::event::WindowEvent,
   ) {
@@ -134,8 +134,8 @@ impl TkContext {
         self.redraw();
       }
       WindowEvent::CloseRequested => {
-        println!("The close button was pressed; stopping");
-        event_loop.exit();
+        self.show_window.set(false);
+        self.surface.replace(None);
       }
       _ => {}
     }
