@@ -1,25 +1,37 @@
 use softbuffer::Surface;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::num::NonZero;
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
 use tanaid::eval::FrameId;
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
-use winit::dpi::PhysicalSize;
+use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::OwnedDisplayHandle;
-use winit::window::Window;
+use winit::window::{Window, WindowAttributes};
 
 pub struct TkContext {
-  show_window: Cell<bool>,
+  widgets: RefCell<HashMap<String, Widget>>,
+  window_attributes: RefCell<Option<WindowAttributes>>,
   surface: RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>,
+}
+
+pub enum Widget {
+  Canvas(CanvasAttributes),
+}
+
+pub struct CanvasAttributes {
+  width: Option<u32>,
+  height: Option<u32>,
 }
 
 impl TkContext {
   pub fn new() -> Self {
     Self {
-      show_window: Cell::new(false),
+      widgets: RefCell::new(HashMap::new()),
+      window_attributes: RefCell::new(None),
       surface: RefCell::new(None),
     }
   }
@@ -30,8 +42,8 @@ impl TkContext {
     ctx: &mut EvalContext,
     _frame: FrameId,
   ) -> Result<Value, EvalError> {
-    let path_name = match args {
-      [path_name, _rest @ ..] => path_name,
+    let (path_name, rest) = match args {
+      [path_name, rest @ ..] => (path_name, rest),
       _ => {
         return Err(EvalError::ArgumentError(
           "canvas: missing path name".to_string(),
@@ -47,6 +59,62 @@ impl TkContext {
       ));
     }
 
+    let mut attrs = CanvasAttributes {
+      width: None,
+      height: None,
+    };
+
+    let mut opts = rest.iter_mut();
+    loop {
+      let Some(option) = opts.next() else {
+        break;
+      };
+
+      let option_str = option.repr_str()?;
+      let option_str = option_str
+        .strip_prefix('-')
+        .ok_or(EvalError::ArgumentError(format!(
+          "canvas: invalid option: {}",
+          option_str
+        )))?;
+
+      match option_str {
+        "width" => {
+          let Some(value) = opts.next() else {
+            return Err(EvalError::ArgumentError(
+              "value for width missing".to_string(),
+            ));
+          };
+          attrs.width = Some(
+            u32::try_from(value.repr_int()?)
+              .map_err(|e| EvalError::ArgumentError(format!("invalid width: {}", e)))?,
+          );
+        }
+        "height" => {
+          let Some(value) = opts.next() else {
+            return Err(EvalError::ArgumentError(
+              "value for width missing".to_string(),
+            ));
+          };
+          attrs.height = Some(
+            u32::try_from(value.repr_int()?)
+              .map_err(|e| EvalError::ArgumentError(format!("invalid height: {}", e)))?,
+          );
+        }
+        _ => {
+          return Err(EvalError::ArgumentError(format!(
+            "canvas: invalid option: {}",
+            option_str
+          )));
+        }
+      }
+    }
+
+    self
+      .widgets
+      .borrow_mut()
+      .insert(path_name_str.to_string(), Widget::Canvas(attrs));
+
     ctx.register_command(
       path_name_str,
       Rc::new(move |args, ctx, _frame| {
@@ -60,29 +128,55 @@ impl TkContext {
 
   pub(crate) fn pack(
     &self,
-    _args: &mut [Value],
+    args: &mut [Value],
     _ctx: &mut EvalContext,
     _frame: FrameId,
   ) -> Result<Value, EvalError> {
-    self.show_window.set(true);
+    match args {
+      [widget_name] => {
+        let widget_name_str = widget_name.repr_str()?;
+        let widgets = self.widgets.borrow();
+        let Some(widget) = widgets.get(widget_name_str) else {
+          return Err(EvalError::ArgumentError(format!(
+            "pack: widget not found: {}",
+            widget_name_str
+          )));
+        };
+
+        match widget {
+          Widget::Canvas(attrs) => {
+            self.window_attributes.replace(Some(
+              Window::default_attributes()
+                .with_title("tanaid-tk")
+                .with_inner_size(LogicalSize::new(
+                  f64::from(attrs.width.unwrap_or(256)),
+                  f64::from(attrs.height.unwrap_or(256)),
+                )),
+            ));
+          }
+        }
+      }
+      _ => {
+        return Err(EvalError::ArgumentError(
+          "pack: expected exactly 1 argument".to_string(),
+        ));
+      }
+    }
     Ok(Value::none())
   }
 
   fn ensure_window(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if !self.show_window.get() || self.surface.borrow().is_some() {
+    if self.window_attributes.borrow().is_none() || self.surface.borrow().is_some() {
       return;
     }
 
     let context = softbuffer::Context::new(event_loop.owned_display_handle()).unwrap();
     let window = Rc::new(
       event_loop
-        .create_window(
-          Window::default_attributes()
-            .with_title("tanaid-tk")
-            .with_inner_size(PhysicalSize::new(256, 256)),
-        )
+        .create_window(self.window_attributes.borrow().clone().unwrap())
         .unwrap(),
     );
+    window.focus_window();
     let surface = Surface::new(&context, window).unwrap();
     self.surface.replace(Some(surface));
   }
@@ -134,7 +228,7 @@ impl TkContext {
         self.redraw();
       }
       WindowEvent::CloseRequested => {
-        self.show_window.set(false);
+        self.window_attributes.replace(None);
         self.surface.replace(None);
       }
       _ => {}
