@@ -1,18 +1,20 @@
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
 use tanaid::eval::FrameId;
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
+use winit::event::WindowEvent;
+use winit::window::Window;
 
 pub struct TkContext {
-  is_packed: Cell<bool>,
+  window: RefCell<Option<winit::window::Window>>,
 }
 
 impl TkContext {
   pub fn new() -> Self {
     Self {
-      is_packed: Cell::new(false),
+      window: RefCell::new(None),
     }
   }
 
@@ -56,7 +58,29 @@ impl TkContext {
     _ctx: &mut EvalContext,
     _frame: FrameId,
   ) -> Result<Value, EvalError> {
-    self.is_packed.set(true);
     Ok(Value::none())
+  }
+
+  pub(crate) fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    self.window.replace(Some(
+      event_loop
+        .create_window(Window::default_attributes())
+        .unwrap(),
+    ));
+  }
+
+  pub(crate) fn handle_window_event(
+    &self,
+    event_loop: &winit::event_loop::ActiveEventLoop,
+    _window_id: winit::window::WindowId,
+    event: winit::event::WindowEvent,
+  ) {
+    match event {
+      WindowEvent::CloseRequested => {
+        println!("The close button was pressed; stopping");
+        event_loop.exit();
+      }
+      _ => {}
+    }
   }
 }

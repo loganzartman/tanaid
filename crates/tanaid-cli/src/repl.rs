@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use tanaid::event_loop::EventLoop;
 use tanaid::parser::ParseError;
 use tanaid::{eval, parser};
+use tanaid_tk::Tk;
 
 struct TclValidator;
 
@@ -53,7 +54,10 @@ impl Prompt for TclPrompt {
   }
 }
 
-pub fn run_repl(context: &mut eval::EvalContext) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_repl(
+  context: &mut eval::EvalContext,
+  tk: &mut Tk,
+) -> Result<(), Box<dyn std::error::Error>> {
   let mut keybindings = default_emacs_keybindings();
   keybindings.add_binding(
     KeyModifiers::CONTROL,
@@ -100,7 +104,10 @@ pub fn run_repl(context: &mut eval::EvalContext) -> Result<(), Box<dyn std::erro
     }
 
     let mut event_loop = EventLoop::new();
-    match event_loop.run(context) {
+    match event_loop.run(context, || {
+      tk.pump_app_events();
+      Ok(())
+    }) {
       Ok(()) => {}
       Err(err) => {
         println!("Error: {}", err);

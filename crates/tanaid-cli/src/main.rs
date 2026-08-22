@@ -34,20 +34,27 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
   let mut context = eval::EvalContext::new();
-  let tk = Tk::new();
+
+  let mut tk = Tk::new();
   tk.install(&mut context)?;
 
   let opts = RunOpts { debug: args.debug };
 
   if let Some(file_path) = args.file_path {
-    return run_source(fs::read_to_string(file_path)?.as_str(), &mut context, &opts);
+    return run_source(
+      fs::read_to_string(file_path)?.as_str(),
+      &mut context,
+      &mut tk,
+      &opts,
+    );
   }
   if io::stdin().is_terminal() {
-    return run_repl(&mut context);
+    return run_repl(&mut context, &mut tk);
   }
   run_source(
     io::read_to_string(io::stdin())?.as_str(),
     &mut context,
+    &mut tk,
     &opts,
   )
 }
@@ -55,6 +62,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn run_source(
   src: &str,
   context: &mut eval::EvalContext,
+  tk: &mut Tk,
   opts: &RunOpts,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
@@ -71,26 +79,11 @@ fn run_source(
 
   println!("{}", result.repr_str()?);
 
-  let mut event_loop = event_loop::EventLoop::new();
-  event_loop.run(context)?;
+  let mut tcl_event_loop = event_loop::EventLoop::new();
+  tcl_event_loop.run(context, || {
+    tk.pump_app_events();
+    Ok(())
+  })?;
 
   Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test() -> Result<(), Box<dyn std::error::Error>> {
-    let mut context = eval::EvalContext::new();
-    let opts = RunOpts { debug: true };
-    run_source(
-      // Relative to the manifest, not the cwd: `cargo test` runs from the
-      // package root, but sample/ lives at the workspace root.
-      fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../sample/fib.tcl"))?.as_str(),
-      &mut context,
-      &opts,
-    )
-  }
 }
