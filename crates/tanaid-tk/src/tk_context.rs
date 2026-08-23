@@ -1,3 +1,4 @@
+use crate::cmd::canvas::CanvasWidget;
 use softbuffer::Surface;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -7,27 +8,23 @@ use winit::event::WindowEvent;
 use winit::event_loop::OwnedDisplayHandle;
 use winit::window::{Window, WindowAttributes};
 
+#[derive(Clone)]
 pub struct TkContext {
-  pub(crate) widgets: RefCell<HashMap<String, Widget>>,
-  pub(crate) window_attributes: RefCell<Option<WindowAttributes>>,
-  pub(crate) surface: RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>,
+  pub(crate) widgets: Rc<RefCell<HashMap<String, Widget>>>,
+  pub(crate) window_attributes: Rc<RefCell<Option<WindowAttributes>>>,
+  pub(crate) surface: Rc<RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>>,
 }
 
 pub enum Widget {
-  Canvas(CanvasAttributes),
-}
-
-pub struct CanvasAttributes {
-  pub(crate) width: Option<u32>,
-  pub(crate) height: Option<u32>,
+  Canvas(CanvasWidget),
 }
 
 impl TkContext {
   pub fn new() -> Self {
     Self {
-      widgets: RefCell::new(HashMap::new()),
-      window_attributes: RefCell::new(None),
-      surface: RefCell::new(None),
+      widgets: Rc::new(RefCell::new(HashMap::new())),
+      window_attributes: Rc::new(RefCell::new(None)),
+      surface: Rc::new(RefCell::new(None)),
     }
   }
 
@@ -67,6 +64,13 @@ impl TkContext {
       return;
     };
     buffer.fill(0xFF808080);
+
+    for widget in self.widgets.borrow().values() {
+      match widget {
+        Widget::Canvas(widget) => widget.redraw(&mut buffer),
+      }
+    }
+
     let _ = buffer.present();
   }
 
@@ -92,6 +96,9 @@ impl TkContext {
       }
       WindowEvent::RedrawRequested => {
         self.redraw();
+        if let Some(surface) = self.surface.borrow().as_ref() {
+          surface.window().request_redraw();
+        }
       }
       WindowEvent::CloseRequested => {
         self.window_attributes.replace(None);

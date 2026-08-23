@@ -1,5 +1,5 @@
-use super::EvalCmdResult;
 use crate::tk_context::{TkContext, Widget};
+use tanaid::eval::EvalCmdResult;
 use tanaid::eval::{EvalContext, FrameId};
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
@@ -24,13 +24,13 @@ pub(super) fn eval(
       };
 
       match widget {
-        Widget::Canvas(attrs) => {
+        Widget::Canvas(widget) => {
           tk.window_attributes.replace(Some(
             Window::default_attributes()
               .with_title("tanaid-tk")
               .with_inner_size(LogicalSize::new(
-                f64::from(attrs.width.unwrap_or(256)),
-                f64::from(attrs.height.unwrap_or(256)),
+                f64::from(widget.attrs.borrow().width.unwrap_or(256)),
+                f64::from(widget.attrs.borrow().height.unwrap_or(256)),
               )),
           ));
         }

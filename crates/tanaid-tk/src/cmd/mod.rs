@@ -1,13 +1,10 @@
+pub(crate) mod canvas;
+pub(crate) mod canvas_create;
+pub(crate) mod pack;
+
 use super::tk_context::TkContext;
 use std::rc::Rc;
 use tanaid::eval::EvalContext;
-use tanaid::eval_error::EvalError;
-use tanaid::value::Value;
-
-mod canvas;
-mod pack;
-
-pub(super) type EvalCmdResult = Result<Value, EvalError>;
 
 pub fn register_commands(context: &mut EvalContext, tk: Rc<TkContext>) {
   {

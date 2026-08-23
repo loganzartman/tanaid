@@ -9,7 +9,7 @@ use crate::eval_error::EvalError;
 use crate::value::Value;
 use std::rc::Rc;
 
-pub(super) type EvalCmdResult = Result<Value, EvalError>;
+pub type EvalCmdResult = Result<Value, EvalError>;
 
 pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_command("after", Rc::new(cmd_after::eval));
