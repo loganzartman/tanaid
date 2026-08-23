@@ -1,5 +1,6 @@
 use crate::cmd;
 use crate::tk_context::{TkContext, Widget};
+use indexmap::IndexMap;
 use softbuffer::Buffer;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -13,7 +14,7 @@ use winit::window::Window;
 #[derive(Clone)]
 pub struct CanvasWidget {
   pub attrs: Rc<RefCell<CanvasAttributes>>,
-  pub items: Rc<RefCell<Vec<CanvasItem>>>,
+  pub items: Rc<RefCell<IndexMap<i64, CanvasItem>>>,
 }
 
 pub struct CanvasAttributes {
@@ -34,6 +35,20 @@ pub enum CanvasItem {
   Rect(Rect),
 }
 
+impl CanvasItem {
+  pub fn get_coords(&self) -> Vec<f64> {
+    match self {
+      CanvasItem::Rect(rect) => rect.get_coords(),
+    }
+  }
+
+  pub fn redraw(&self, buffer: &mut Buffer<'_, OwnedDisplayHandle, Rc<Window>>) {
+    match self {
+      CanvasItem::Rect(rect) => rect.redraw(buffer),
+    }
+  }
+}
+
 pub struct Rect {
   pub x: f64,
   pub y: f64,
@@ -45,22 +60,45 @@ impl CanvasWidget {
   pub fn new(attrs: CanvasAttributes) -> Self {
     Self {
       attrs: Rc::new(RefCell::new(attrs)),
-      items: Rc::new(RefCell::new(vec![])),
+      items: Rc::new(RefCell::new(IndexMap::new())),
     }
   }
 }
 
 impl CanvasWidget {
   pub fn redraw(&self, buffer: &mut Buffer<'_, OwnedDisplayHandle, Rc<Window>>) {
-    for item in self.items.borrow().iter() {
-      match item {
-        CanvasItem::Rect(rect) => rect.redraw(buffer),
-      }
+    for item in self.items.borrow().values() {
+      item.redraw(buffer);
     }
   }
 }
 
 impl Rect {
+  pub fn new() -> Self {
+    Self {
+      x: 0.0,
+      y: 0.0,
+      width: 0.0,
+      height: 0.0,
+    }
+  }
+
+  pub fn with_coords(mut self, x1: f64, y1: f64, x2: f64, y2: f64) -> Self {
+    self.set_coords(x1, y1, x2, y2);
+    self
+  }
+
+  pub fn set_coords(&mut self, x1: f64, y1: f64, x2: f64, y2: f64) {
+    self.x = x1.min(x2);
+    self.y = y1.min(y2);
+    self.width = x2.max(x1) - self.x;
+    self.height = y2.max(y1) - self.y;
+  }
+
+  pub fn get_coords(&self) -> Vec<f64> {
+    vec![self.x, self.y, self.x + self.width, self.y + self.height]
+  }
+
   pub fn redraw(&self, buffer: &mut Buffer<'_, OwnedDisplayHandle, Rc<Window>>) {
     for x in (self.x.round() as i64)..(self.x + self.width).round() as i64 {
       for y in (self.y.round() as i64)..(self.y + self.height).round() as i64 {
@@ -165,6 +203,7 @@ pub(super) fn eval(
         };
 
         match subcommand {
+          "coords" => cmd::canvas_coords::eval(rest, ctx, frame, &tk, &widget),
           "create" => cmd::canvas_create::eval(rest, ctx, frame, &tk, &widget),
           _ => Err(EvalError::ArgumentError(format!(
             "canvas: invalid subcommand: {}",

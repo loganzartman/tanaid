@@ -32,6 +32,10 @@ pub(crate) fn eval(
   }
 }
 
+fn next_id(widget: &CanvasWidget) -> i64 {
+  widget.items.borrow().last().map_or(0, |(id, _)| id + 1)
+}
+
 fn create_rect(opts: &mut [Value], widget: &CanvasWidget) -> EvalCmdResult {
   let (x1, y1, x2, y2, _rest) = match opts {
     [x1, y1, x2, y2, rest @ ..] => (
@@ -49,16 +53,11 @@ fn create_rect(opts: &mut [Value], widget: &CanvasWidget) -> EvalCmdResult {
     }
   };
 
-  let x = x1.min(x2);
-  let y = y1.min(y2);
-  let width = x2.max(x1) - x;
-  let height = y2.max(y1) - y;
-  widget.items.borrow_mut().push(CanvasItem::Rect(Rect {
-    x,
-    y,
-    width,
-    height,
-  }));
+  let id = next_id(widget);
+  widget.items.borrow_mut().insert(
+    id,
+    CanvasItem::Rect(Rect::new().with_coords(x1, y1, x2, y2)),
+  );
 
-  Ok(Value::from(widget.items.borrow().len() as i64))
+  Ok(Value::from(id))
 }

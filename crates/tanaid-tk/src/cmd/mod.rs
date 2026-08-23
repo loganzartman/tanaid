@@ -1,4 +1,5 @@
 pub(crate) mod canvas;
+pub(crate) mod canvas_coords;
 pub(crate) mod canvas_create;
 pub(crate) mod pack;
 
