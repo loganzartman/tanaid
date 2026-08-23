@@ -12,6 +12,7 @@ use tanaid::{eval, parser};
 use tanaid_tk::Tk;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
+use winit::event_loop::ControlFlow;
 
 struct TclValidator;
 
@@ -112,6 +113,7 @@ pub fn run_repl(
     tk,
     context,
     next_tx,
+    tcl_event_loop: tanaid::event_loop::EventLoop::new(),
   };
   event_loop.run_app(&mut app)?;
 
@@ -124,6 +126,7 @@ struct ReplApp<'a> {
   tk: &'a mut Tk,
   context: &'a mut EvalContext,
   next_tx: mpsc::Sender<()>,
+  tcl_event_loop: tanaid::event_loop::EventLoop,
 }
 
 impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
@@ -133,7 +136,7 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
         event_loop.exit();
       }
       ReplEvent::Line(line) => {
-        if let Err(err) = run_line(&line, &mut self.context) {
+        if let Err(err) = run_line(&line, &mut self.context, &mut self.tcl_event_loop) {
           println!("Error: {}", err);
         }
         self.next_tx.send(()).unwrap();
@@ -147,6 +150,19 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
+
+    if let Err(err) = self.tcl_event_loop.run_elapsed(self.context) {
+      println!("Error: {}", err);
+    }
+
+    match self.tcl_event_loop.next_deadline() {
+      Some(deadline) => {
+        event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+      }
+      None => {
+        event_loop.set_control_flow(ControlFlow::Wait);
+      }
+    }
   }
 
   fn window_event(
@@ -162,9 +178,14 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   }
 }
 
-fn run_line(line: &str, context: &mut EvalContext) -> Result<(), Box<dyn std::error::Error>> {
+fn run_line(
+  line: &str,
+  context: &mut EvalContext,
+  tcl_event_loop: &mut tanaid::event_loop::EventLoop,
+) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(line)?;
   let mut result = eval::eval(&parsed, context)?;
   println!("{}", result.repr_str()?);
+  tcl_event_loop.run_elapsed(context)?;
   Ok(())
 }
