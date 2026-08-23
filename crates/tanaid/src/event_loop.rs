@@ -81,14 +81,15 @@ impl EventLoop {
     None
   }
 
-  /// Fire elapsed timers and queue any newly-generated timer actions.
-  pub fn run_elapsed(&mut self, context: &mut EvalContext) -> Result<(), EvalError> {
+  /// Fire up to one elapsed timer and enqueue any newly-generated timer actions.
+  pub fn poll(&mut self, context: &mut EvalContext) -> Result<(), EvalError> {
     self.apply_actions(context.take_timer_actions());
 
-    while let Some(timer_id) = self.take_elapsed()? {
-      context.fire_timer(timer_id)?;
+    if let Some(timer_id) = self.take_elapsed()? {
+      let result = context.fire_timer(timer_id);
+      self.apply_actions(context.take_timer_actions());
+      result?;
     }
-    self.apply_actions(context.take_timer_actions());
 
     Ok(())
   }
@@ -184,20 +185,20 @@ mod tests {
   }
 
   #[test]
-  fn run_elapsed_yields_before_newly_scheduled_timer() {
+  fn poll_yields_before_newly_scheduled_timer() {
     let (mut context, output) = context_with_output();
     let mut event_loop = EventLoop::new();
     eval_source("after 0 {puts first; after 0 {puts second}}", &mut context);
 
-    event_loop.run_elapsed(&mut context).unwrap();
+    event_loop.poll(&mut context).unwrap();
     assert_eq!(*output.borrow(), "first\n");
 
-    event_loop.run_elapsed(&mut context).unwrap();
+    event_loop.poll(&mut context).unwrap();
     assert_eq!(*output.borrow(), "first\nsecond\n");
   }
 
   #[test]
-  fn run_elapsed_preserves_other_timers_after_error() {
+  fn poll_preserves_other_timers_after_error() {
     let (mut context, output) = context_with_output();
     let mut event_loop = EventLoop::new();
     eval_source(
@@ -205,8 +206,8 @@ mod tests {
       &mut context,
     );
 
-    assert!(event_loop.run_elapsed(&mut context).is_err());
-    event_loop.run_elapsed(&mut context).unwrap();
+    assert!(event_loop.poll(&mut context).is_err());
+    event_loop.poll(&mut context).unwrap();
 
     assert_eq!(*output.borrow(), "second\n");
   }

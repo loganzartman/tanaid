@@ -151,7 +151,7 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
 
-    if let Err(err) = self.tcl_event_loop.run_elapsed(self.context) {
+    if let Err(err) = self.tcl_event_loop.poll(self.context) {
       println!("Error: {}", err);
     }
 
@@ -186,6 +186,6 @@ fn run_line(
   let parsed = parser::parse(line)?;
   let mut result = eval::eval(&parsed, context)?;
   println!("{}", result.repr_str()?);
-  tcl_event_loop.run_elapsed(context)?;
+  tcl_event_loop.poll(context)?;
   Ok(())
 }
