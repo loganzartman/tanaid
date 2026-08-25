@@ -41,14 +41,8 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
 }
 
 fn set_path(mut current: Value, path: &[i64], value: &Value) -> EvalCmdResult {
-  if path.is_empty() {
-    return Ok(value.clone());
-  }
-
   let Some((index, rest)) = path.split_first() else {
-    return Err(EvalError::ArgumentError(
-      "wrong number of arguments, expects: lset listVar ?index ...? newValue".to_string(),
-    ));
+    return Ok(value.clone());
   };
 
   let mut current_list = current.repr_list()?.as_ref().clone();

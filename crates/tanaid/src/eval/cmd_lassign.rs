@@ -11,18 +11,16 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
 
   let list_val_list = list_val.repr_list()?;
 
-  let mut result = vec![];
-
-  let assign_vars_len = assign_vars.len();
-  for (i, assign_var) in assign_vars.iter_mut().enumerate() {
-    let list_index = 0.max(list_val_list.len() - assign_vars_len) + i;
-    let val = list_val_list
-      .get(list_index)
-      .cloned()
-      .unwrap_or(Value::none());
-    result.push(val.clone());
-    context.set_variable(frame, assign_var.repr_str()?, val.clone());
+  let mut list_iter = list_val_list.iter();
+  for assign_var in assign_vars {
+    context.set_variable(
+      frame,
+      assign_var.repr_str()?,
+      list_iter.next().cloned().unwrap_or(Value::none()),
+    );
   }
 
-  Ok(Value::from(result))
+  let rest = list_iter.cloned().collect::<Vec<_>>();
+
+  Ok(Value::from(rest))
 }
