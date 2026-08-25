@@ -67,6 +67,7 @@ impl CanvasWidget {
 
 impl CanvasWidget {
   pub fn redraw(&self, buffer: &mut Buffer<'_, OwnedDisplayHandle, Rc<Window>>) {
+    buffer.fill(0xFF000000);
     for item in self.items.borrow().values() {
       item.redraw(buffer);
     }
@@ -107,7 +108,7 @@ impl Rect {
         }
 
         let i = y * buffer.width().get() as i64 + x;
-        buffer[i as usize] = 0xFFFF0000;
+        buffer[i as usize] = 0xFFFFFFFF;
       }
     }
   }
