@@ -19,34 +19,33 @@ proc random {{a 1} {b "none"}} {
   return [expr {[randint] / 2147483648.0 * ($b - $a) + $a}]
 }
 
-set part [list]
-set rect [list]
+set particles [list]
 
 proc frame {} {
   after 16 frame
-  global part rect
+  global particles
+  
   set i 0
-  while {$i < [llength $part]} {
-    lassign [lindex $part $i] x y vx vy
-    set r [lindex $rect $i]
+  while {$i < [llength $particles]} {
+    lassign [lindex $particles $i] rect x y vx vy
 
     set x [expr {$x + $vx}]
     set y [expr {$y + $vy}]
     set vy [expr {$vy + 0.25}]
     set vx [expr {$vx * 0.99}]
     set vy [expr {$vy * 0.99}]
-    lset part $i 0 $x
-    lset part $i 1 $y
-    lset part $i 2 $vx
-    lset part $i 3 $vy
+    lset particles $i 1 $x
+    lset particles $i 2 $y
+    lset particles $i 3 $vx
+    lset particles $i 4 $vy
 
-    .c coords $r $x $y [expr {$x + 8}] [expr {$y + 8}]
+    .c coords $rect $x $y [expr {$x + 8}] [expr {$y + 8}]
     incr i
   }
 }
 
 proc launch {} {
-  global part rect w h
+  global particles w h
   after [expr {[randint] % 1500 + 500}] launch
 
   set x [random $w]
@@ -54,12 +53,12 @@ proc launch {} {
 
   set i 0
   while {$i < 20} {
-    lappend part [list $x $y [expr {[random -5 5]}] [expr {[random -5 5]}]]
-    lappend rect [.c create rectangle 0 0 0 0]
+    set vx [expr {[random -5 5]}]
+    set vy [expr {[random -5 5]}]
+    lappend particles [list [.c create rectangle 0 0 0 0] $x $y $vx $vy]
     incr i
   }
 }
 
 launch
 frame
-
