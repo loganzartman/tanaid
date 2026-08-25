@@ -1167,6 +1167,149 @@ fn eval_lappend_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn eval_lassign_assigns_in_order_and_returns_rest() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lassign {a b c d} x y")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "c d");
+  let mut vars = eval(&parser::parse("list $x $y")?, &mut ctx)?;
+  assert_eq!(vars.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lassign_more_vars_than_elements() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lassign {a} x y z")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "");
+  let mut vars = eval(&parser::parse("list $x $y $z")?, &mut ctx)?;
+  assert_eq!(vars.repr_str()?, "a {} {}");
+  Ok(())
+}
+
+#[test]
+fn eval_lassign_nested_element() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("lassign {{a b} c} x; set x")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a b");
+  Ok(())
+}
+
+#[test]
+fn eval_lassign_assigns_in_local_frame() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set x outer; proc f {} {lassign {inner} x; return $x}; list [f] $x")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "inner outer");
+  Ok(())
+}
+
+#[test]
+fn eval_lassign_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lassign")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lset_simple() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs {a b c}; lset xs 1 Z")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "a Z c");
+  let mut var = eval(&parser::parse("set xs")?, &mut ctx)?;
+  assert_eq!(var.repr_str()?, "a Z c");
+  Ok(())
+}
+
+#[test]
+fn eval_lset_no_indices_replaces_value() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set xs {a b c}; lset xs {d e}; set xs")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "d e");
+  Ok(())
+}
+
+#[test]
+fn eval_lset_nested_index_args() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set xs {{a b} {c d}}; lset xs 1 0 Z")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "{a b} {Z d}");
+  Ok(())
+}
+
+#[test]
+fn eval_lset_nested_index_list() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set xs {{a b} {c d}}; lset xs {1 0} Z")?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "{a b} {Z d}");
+  Ok(())
+}
+
+#[test]
+fn eval_lset_replaces_element_with_list() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&parser::parse("set xs {a b}; lset xs 0 {x y}")?, &mut ctx)?;
+  assert_eq!(result.repr_str()?, "{x y} b");
+  Ok(())
+}
+
+#[test]
+fn eval_lset_mutates_in_local_frame() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse(
+      "set xs {a b}; proc f {} {set xs {c d}; lset xs 0 Z; return $xs}; list [f] $xs",
+    )?,
+    &mut ctx,
+  )?;
+  assert_eq!(result.repr_str()?, "{Z d} {a b}");
+  Ok(())
+}
+
+#[test]
+fn eval_lset_index_out_of_range() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("set xs {a b}; lset xs 2 Z")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lset_negative_index() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("set xs {a b}; lset xs -1 Z")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lset_index_into_undefined_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lset xs 0 Z")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
+fn eval_lset_wrong_arity() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("lset xs")?, &mut ctx);
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[test]
 fn eval_incr_simple() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let mut result = eval(&parser::parse("set x 1; incr x")?, &mut ctx)?;
