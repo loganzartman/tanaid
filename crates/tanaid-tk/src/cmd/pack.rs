@@ -3,7 +3,7 @@ use tanaid::eval::EvalCmdResult;
 use tanaid::eval::{EvalContext, FrameId};
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
-use winit::dpi::LogicalSize;
+use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 pub(super) fn eval(
@@ -28,7 +28,7 @@ pub(super) fn eval(
           tk.window_attributes.replace(Some(
             Window::default_attributes()
               .with_title("tanaid-tk")
-              .with_inner_size(LogicalSize::new(
+              .with_inner_size(PhysicalSize::new(
                 f64::from(widget.attrs.borrow().width.unwrap_or(256)),
                 f64::from(widget.attrs.borrow().height.unwrap_or(256)),
               )),
