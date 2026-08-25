@@ -102,6 +102,10 @@ impl Rect {
   pub fn redraw(&self, buffer: &mut Buffer<'_, OwnedDisplayHandle, Rc<Window>>) {
     for x in (self.x.round() as i64)..(self.x + self.width).round() as i64 {
       for y in (self.y.round() as i64)..(self.y + self.height).round() as i64 {
+        if x < 0 || x >= buffer.width().get() as i64 || y < 0 || y >= buffer.height().get() as i64 {
+          continue;
+        }
+
         let i = y * buffer.width().get() as i64 + x;
         buffer[i as usize] = 0xFFFF0000;
       }
