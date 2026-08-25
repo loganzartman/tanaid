@@ -20,6 +20,7 @@ mod cmd_list;
 mod cmd_llength;
 mod cmd_lreverse;
 mod cmd_lset;
+mod cmd_package;
 mod cmd_proc;
 mod cmd_puts;
 mod cmd_return;
