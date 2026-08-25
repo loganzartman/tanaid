@@ -74,6 +74,11 @@ impl TkContext {
     let _ = buffer.present();
   }
 
+  /// Whether a window is open (or is requested and pending creation).
+  pub fn has_window(&self) -> bool {
+    self.window_attributes.borrow().is_some() || self.surface.borrow().is_some()
+  }
+
   pub fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.ensure_window(event_loop);
   }
