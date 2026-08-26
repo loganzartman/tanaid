@@ -6,6 +6,7 @@ pub(super) fn eval(
   _context: &mut EvalContext,
   _frame: FrameId,
 ) -> EvalCmdResult {
+  // TODO: Let extensions register package availability instead of hard-coding Tk in core.
   match args {
     [subcommand, arg] if subcommand.to_string() == "require" && arg.to_string() == "Tk" => {
       Ok(Value::none())

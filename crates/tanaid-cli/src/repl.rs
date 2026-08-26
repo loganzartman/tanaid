@@ -149,11 +149,11 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.tk.context.handle_about_to_wait(event_loop);
-
     if let Err(err) = self.tcl_event_loop.poll(self.context) {
       println!("Error: {}", err);
     }
+
+    self.tk.context.handle_about_to_wait(event_loop);
 
     match self.tcl_event_loop.next_deadline() {
       Some(deadline) => {

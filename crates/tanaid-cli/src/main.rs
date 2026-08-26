@@ -119,13 +119,13 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.tk.context.handle_about_to_wait(event_loop);
-
     if let Err(err) = self.tcl_event_loop.poll(self.context) {
       self.error = Some(Box::new(err));
       event_loop.exit();
       return;
     }
+
+    self.tk.context.handle_about_to_wait(event_loop);
 
     // like wish: once a window has been opened, it alone holds the loop open
     if self.tk.context.has_window() {

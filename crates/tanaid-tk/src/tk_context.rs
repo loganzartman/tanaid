@@ -65,6 +65,7 @@ impl TkContext {
     };
     buffer.fill(0xFF808080);
 
+    // TODO: Track packed widgets and layout instead of drawing every registered widget.
     for widget in self.widgets.borrow().values() {
       match widget {
         Widget::Canvas(widget) => widget.redraw(&mut buffer),
