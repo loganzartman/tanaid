@@ -1,15 +1,14 @@
 use super::{
   EvalContext, cmd_after, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_global,
   cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lassign, cmd_lindex, cmd_list, cmd_llength,
-  cmd_lreverse, cmd_lset, cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string, cmd_uplevel,
-  cmd_upvar, cmd_while,
+  cmd_lreverse, cmd_lset, cmd_package, cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string,
+  cmd_unknown, cmd_uplevel, cmd_upvar, cmd_while,
 };
-use crate::eval::cmd_unknown;
 use crate::eval_error::EvalError;
 use crate::value::Value;
 use std::rc::Rc;
 
-pub(super) type EvalCmdResult = Result<Value, EvalError>;
+pub type EvalCmdResult = Result<Value, EvalError>;
 
 pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_command("after", Rc::new(cmd_after::eval));
@@ -29,6 +28,7 @@ pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_command("llength", Rc::new(cmd_llength::eval));
   context.register_command("lreverse", Rc::new(cmd_lreverse::eval));
   context.register_command("lset", Rc::new(cmd_lset::eval));
+  context.register_command("package", Rc::new(cmd_package::eval));
   context.register_command("proc", Rc::new(cmd_proc::eval));
   context.register_command("puts", Rc::new(cmd_puts::eval));
   context.register_command("return", Rc::new(cmd_return::eval));

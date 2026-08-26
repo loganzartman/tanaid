@@ -20,6 +20,7 @@ mod cmd_list;
 mod cmd_llength;
 mod cmd_lreverse;
 mod cmd_lset;
+mod cmd_package;
 mod cmd_proc;
 mod cmd_puts;
 mod cmd_return;
@@ -37,7 +38,7 @@ mod script;
 mod tests;
 mod word;
 
-pub use cmd::register_builtin_commands;
+pub use cmd::{EvalCmdResult, register_builtin_commands};
 use context::GLOBAL_FRAME;
 pub use context::{Binding, EvalContext, EvalFrame, FrameId, TimerAction};
 pub use expr::{eval_expr, eval_expr_binary_op};

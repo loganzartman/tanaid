@@ -372,11 +372,11 @@ impl From<Dict> for Value {
   }
 }
 
-impl From<List> for Value {
-  fn from(value: List) -> Self {
+impl<T: Into<Value>> From<Vec<T>> for Value {
+  fn from(value: Vec<T>) -> Self {
     Value {
       string: None,
-      repr: Repr::List(Rc::new(value)),
+      repr: Repr::List(Rc::new(value.into_iter().map(Into::into).collect())),
     }
   }
 }
