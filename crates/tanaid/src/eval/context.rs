@@ -20,7 +20,8 @@ pub type CommandHandler =
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
   commands: HashMap<String, CommandHandler>,
-  frames: Vec<EvalFrame>,
+  frame_id: usize,
+  frames: HashMap<FrameId, EvalFrame>,
 
   timer_id: usize,
   pending_timers: HashMap<usize, ScriptNode>,
@@ -34,7 +35,6 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub struct EvalFrame {
-  #[expect(dead_code, reason = "populated by push_frame; not read back yet")]
   caller: Option<FrameId>,
   variables: HashMap<String, Binding>,
 }
@@ -68,7 +68,8 @@ impl EvalContext {
     let mut context = EvalContext {
       procs: HashMap::new(),
       commands: HashMap::new(),
-      frames: vec![EvalFrame::new()],
+      frame_id: GLOBAL_FRAME,
+      frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
 
       timer_id: 0,
       pending_timers: HashMap::new(),
@@ -95,11 +96,55 @@ impl EvalContext {
   }
 
   pub fn frame(&self, id: FrameId) -> &EvalFrame {
-    self.frames.get(id).unwrap()
+    self.frames.get(&id).unwrap()
   }
 
   pub fn frame_mut(&mut self, id: FrameId) -> &mut EvalFrame {
-    self.frames.get_mut(id).unwrap()
+    self.frames.get_mut(&id).unwrap()
+  }
+
+  pub fn frameid_relative(&self, id: FrameId, up: usize) -> Option<FrameId> {
+    let mut id = id;
+    let mut up = up;
+
+    while up > 0 {
+      let Some(frame) = self.frames.get(&id) else {
+        return None;
+      };
+      let Some(next) = frame.caller else {
+        return None;
+      };
+      id = next;
+      up -= 1;
+    }
+
+    Some(id)
+  }
+
+  pub fn frameid_absolute(&self, id: FrameId, depth: usize) -> Option<FrameId> {
+    let mut id = id;
+    let mut frames: Vec<FrameId> = vec![];
+
+    loop {
+      frames.push(id);
+      if id == GLOBAL_FRAME {
+        break;
+      }
+
+      let Some(frame) = self.frames.get(&id) else {
+        return None;
+      };
+      let Some(next) = frame.caller else {
+        return None;
+      };
+      id = next;
+    }
+
+    if let Some(frameid) = frames.iter().rev().nth(depth) {
+      Some(*frameid)
+    } else {
+      None
+    }
   }
 
   pub fn run_with_frame<R>(
@@ -107,10 +152,17 @@ impl EvalContext {
     calling_frame: FrameId,
     f: impl FnOnce(&mut EvalContext, FrameId) -> R,
   ) -> R {
-    let next_id = self.frames.len();
-    self.frames.push(EvalFrame::new_from(calling_frame));
-    let result = f(self, next_id);
-    self.frames.pop();
+    let frame_id = self.frame_id + 1;
+    self.frame_id = frame_id;
+
+    self
+      .frames
+      .insert(frame_id, EvalFrame::new_from(calling_frame));
+
+    let result = f(self, frame_id);
+
+    self.frames.remove(&frame_id);
+
     result
   }
 
