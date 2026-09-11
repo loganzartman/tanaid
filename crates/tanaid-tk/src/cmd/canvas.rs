@@ -194,29 +194,26 @@ pub(super) fn eval(
     let tk = tk.clone();
     let widget = widget.clone();
     let path_name_string = path_name_str.to_string();
-    ctx.register_command(
-      path_name_str,
-      Rc::new(move |args, ctx, frame| {
-        let (subcommand, rest) = match args {
-          [subcommand, rest @ ..] => (subcommand.repr_str()?, rest),
-          _ => {
-            return Err(EvalError::ArgumentError(format!(
-              "wrong number of args; should be: {} option ...",
-              path_name_string
-            )));
-          }
-        };
-
-        match subcommand {
-          "coords" => cmd::canvas_coords::eval(rest, ctx, frame, &tk, &widget),
-          "create" => cmd::canvas_create::eval(rest, ctx, frame, &tk, &widget),
-          _ => Err(EvalError::ArgumentError(format!(
-            "canvas: invalid subcommand: {}",
-            subcommand
-          ))),
+    ctx.register_command(path_name_str, move |args, ctx, frame| {
+      let (subcommand, rest) = match args {
+        [subcommand, rest @ ..] => (subcommand.repr_str()?, rest),
+        _ => {
+          return Err(EvalError::ArgumentError(format!(
+            "wrong number of args; should be: {} option ...",
+            path_name_string
+          )));
         }
-      }),
-    );
+      };
+
+      match subcommand {
+        "coords" => cmd::canvas_coords::eval(rest, ctx, frame, &tk, &widget),
+        "create" => cmd::canvas_create::eval(rest, ctx, frame, &tk, &widget),
+        _ => Err(EvalError::ArgumentError(format!(
+          "canvas: invalid subcommand: {}",
+          subcommand
+        ))),
+      }
+    });
   }
 
   Ok(Value::from(path_name_str))

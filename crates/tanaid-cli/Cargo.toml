@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+pollster = "1.0.1"
 reedline = "0.48.0"
 tanaid = { workspace = true }
 tanaid-tk = { workspace = true }
