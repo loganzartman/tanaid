@@ -1,4 +1,4 @@
-use super::{EvalContext, FrameId, cmd::EvalCmdResult, context::GLOBAL_FRAME};
+use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::eval::eval_script;
 use crate::eval_error::EvalError;
 use crate::value::Value;
@@ -37,11 +37,11 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
   let target_frame = match level {
     Level::Abs(i) => usize::try_from(i)
       .ok()
-      .and_then(|u| GLOBAL_FRAME.checked_add(u))
+      .and_then(|u| context.frameid_absolute(frame, u))
       .ok_or_else(|| EvalError::ArgumentError(format!("invalid level: {}", i))),
     Level::Rel(i) => usize::try_from(i)
       .ok()
-      .and_then(|u| frame.checked_sub(u))
+      .and_then(|u| context.frameid_relative(frame, u))
       .ok_or_else(|| EvalError::ArgumentError(format!("invalid level: {}", i))),
   }?;
 

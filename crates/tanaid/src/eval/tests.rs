@@ -470,6 +470,32 @@ fn eval_global_does_not_overwrite_local_variable() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+fn context_resolves_relative_frame_ids() {
+  let mut ctx = EvalContext::new();
+  ctx.run_with_frame(GLOBAL_FRAME, |ctx, outer| {
+    ctx.run_with_frame(outer, |ctx, inner| {
+      assert_eq!(ctx.frameid_relative(inner, 0), Some(inner));
+      assert_eq!(ctx.frameid_relative(inner, 1), Some(outer));
+      assert_eq!(ctx.frameid_relative(inner, 2), Some(GLOBAL_FRAME));
+      assert_eq!(ctx.frameid_relative(inner, 3), None);
+    });
+  });
+}
+
+#[test]
+fn context_resolves_absolute_frame_ids() {
+  let mut ctx = EvalContext::new();
+  ctx.run_with_frame(GLOBAL_FRAME, |ctx, outer| {
+    ctx.run_with_frame(outer, |ctx, inner| {
+      assert_eq!(ctx.frameid_absolute(inner, 0), Some(GLOBAL_FRAME));
+      assert_eq!(ctx.frameid_absolute(inner, 1), Some(outer));
+      assert_eq!(ctx.frameid_absolute(inner, 2), Some(inner));
+      assert_eq!(ctx.frameid_absolute(inner, 3), None);
+    });
+  });
+}
+
+#[test]
 fn eval_uplevel_relative_writes_caller_variable() -> Result<(), Box<dyn std::error::Error>> {
   let ast = parser::parse("proc f {} {uplevel 1 {set x 2}}; f; expr $x")?;
   let mut ctx = EvalContext::new();
