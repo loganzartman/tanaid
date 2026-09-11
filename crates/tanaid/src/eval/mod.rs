@@ -29,8 +29,10 @@ mod cmd_string;
 mod cmd_unknown;
 mod cmd_uplevel;
 mod cmd_upvar;
+mod cmd_vwait;
 mod cmd_while;
 mod context;
+pub mod event_loop;
 mod expr;
 mod proc;
 mod script;
@@ -39,12 +41,13 @@ mod tests;
 mod word;
 
 pub use cmd::{EvalCmdResult, register_builtin_commands};
-use context::GLOBAL_FRAME;
-pub use context::{Binding, EvalContext, EvalFrame, FrameId, TimerAction};
+pub use context::{Binding, EvalContext, EvalFrame, FrameId};
 pub use expr::{eval_expr, eval_expr_binary_op};
 pub use proc::{Proc, eval_proc};
 pub use script::{eval_command, eval_returnable_script, eval_script};
 pub use word::{eval_word, eval_wordpart};
+
+use context::GLOBAL_FRAME;
 
 pub fn eval(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
   eval_returnable_script(script, context, GLOBAL_FRAME)

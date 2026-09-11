@@ -2,7 +2,7 @@ use super::{
   EvalContext, cmd_after, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_global,
   cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lassign, cmd_lindex, cmd_list, cmd_llength,
   cmd_lreverse, cmd_lset, cmd_package, cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string,
-  cmd_unknown, cmd_uplevel, cmd_upvar, cmd_while,
+  cmd_unknown, cmd_uplevel, cmd_upvar, cmd_vwait, cmd_while,
 };
 use crate::eval_error::EvalError;
 use crate::value::Value;
@@ -37,5 +37,6 @@ pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_command("unknown", Rc::new(cmd_unknown::eval));
   context.register_command("uplevel", Rc::new(cmd_uplevel::eval));
   context.register_command("upvar", Rc::new(cmd_upvar::eval));
+  context.register_command("vwait", Rc::new(cmd_vwait::eval));
   context.register_command("while", Rc::new(cmd_while::eval));
 }

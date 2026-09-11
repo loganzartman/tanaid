@@ -2,7 +2,7 @@ use js_sys::Function;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use tanaid::{
-  eval::{EvalContext, TimerAction, eval},
+  eval::{EvalContext, eval},
   eval_error::EvalError,
   parser::parse,
 };
@@ -12,6 +12,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 #[derive(Clone)]
+#[expect(dead_code)]
 pub struct Interpreter {
   context: Rc<RefCell<EvalContext>>,
   timeout_ids: Rc<RefCell<HashMap<usize, JsValue>>>,
@@ -48,6 +49,7 @@ fn js_error_message(value: JsValue) -> String {
     .unwrap_or_else(|| format!("{value:?}"))
 }
 
+#[expect(dead_code)]
 fn js_value_to_error(value: JsValue) -> JsError {
   JsError::new(&js_error_message(value))
 }
@@ -94,14 +96,16 @@ impl Interpreter {
   }
 
   fn run_event_loop(&self) -> Result<(), JsError> {
+    /*
     let timer_actions = self.context.borrow_mut().take_timer_actions();
     apply_timer_actions(self, timer_actions)?;
     notify_if_event_loop_empty(self)?;
-
+    */
     Ok(())
   }
 }
 
+/*
 fn apply_timer_actions(
   interpreter: &Interpreter,
   timer_actions: Vec<TimerAction>,
@@ -193,3 +197,4 @@ fn notify_if_event_loop_empty(interpreter: &Interpreter) -> Result<(), JsError> 
 
   Ok(())
 }
+*/

@@ -81,11 +81,8 @@ fn run_source(
 
   println!("{}", result.repr_str()?);
 
-  let mut tcl_event_loop = tanaid::event_loop::EventLoop::new();
-  tcl_event_loop.apply_actions(context.take_timer_actions());
-
   // nothing left to do: no pending timers and no window to service
-  if tcl_event_loop.count_pending() == 0 && !tk.context.has_window() {
+  if context.count_pending_events() == 0 && !tk.context.has_window() {
     return Ok(());
   }
 
@@ -93,7 +90,6 @@ fn run_source(
   let mut app = SourceApp {
     tk,
     context,
-    tcl_event_loop,
     had_window: false,
     error: None,
   };
@@ -108,7 +104,6 @@ fn run_source(
 struct SourceApp<'a> {
   tk: &'a mut Tk,
   context: &'a mut eval::EvalContext,
-  tcl_event_loop: tanaid::event_loop::EventLoop,
   had_window: bool,
   error: Option<Box<dyn std::error::Error>>,
 }
@@ -119,7 +114,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if let Err(err) = self.tcl_event_loop.poll(self.context) {
+    if let Err(err) = self.context.poll_events() {
       self.error = Some(Box::new(err));
       event_loop.exit();
       return;
@@ -135,7 +130,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       return;
     }
 
-    let next_deadline = self.tcl_event_loop.next_deadline();
+    let next_deadline = self.context.next_event_deadline();
     if next_deadline.is_none() && !self.had_window {
       event_loop.exit();
       return;

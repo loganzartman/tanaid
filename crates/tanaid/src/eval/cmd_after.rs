@@ -70,6 +70,6 @@ fn eval_ms(ms: &mut Value, args: &mut [Value], context: &mut EvalContext) -> Eva
 
   Ok(Value::from(
     // TODO: cast
-    context.start_timer(&timer_script, delay_ms)? as i64,
+    context.start_timer(timer_script, delay_ms)? as i64,
   ))
 }

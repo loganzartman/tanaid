@@ -1,13 +1,16 @@
 use super::Proc;
 use crate::eval::eval_returnable_script;
 use crate::eval_error::EvalError;
+use super::event_loop::EventLoop;
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
 use lru::LruCache;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::rc::Rc;
+use std::time::Instant;
 
 pub type FrameId = usize;
 pub(crate) const GLOBAL_FRAME: FrameId = 0;
@@ -22,10 +25,7 @@ pub struct EvalContext {
   commands: HashMap<String, CommandHandler>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
-
-  timer_id: usize,
-  pending_timers: HashMap<usize, ScriptNode>,
-  queued_timer_actions: Vec<TimerAction>,
+  event_loop: Rc<RefCell<EventLoop>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -43,12 +43,6 @@ pub struct EvalFrame {
 pub enum Binding {
   Val(Value),
   Ref(FrameId, String),
-}
-
-#[derive(Clone, Debug)]
-pub enum TimerAction {
-  Start { timer_id: usize, delay_ms: u64 },
-  Cancel { timer_id: usize },
 }
 
 impl std::fmt::Debug for EvalContext {
@@ -70,10 +64,7 @@ impl EvalContext {
       commands: HashMap::new(),
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
-
-      timer_id: 0,
-      pending_timers: HashMap::new(),
-      queued_timer_actions: Vec::new(),
+      event_loop: Rc::new(RefCell::new(EventLoop::new())),
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -186,43 +177,39 @@ impl EvalContext {
     self.procs.insert(name.to_string(), Rc::new(proc));
   }
 
-  pub fn take_timer_actions(&mut self) -> Vec<TimerAction> {
-    return std::mem::take(&mut self.queued_timer_actions);
-  }
-
   pub fn start_timer(
     &mut self,
-    timer_script: &ScriptNode,
+    timer_script: ScriptNode,
     delay_ms: u64,
   ) -> Result<usize, EvalError> {
-    let timer_id = self.timer_id;
-    self.timer_id = self.timer_id.strict_add(1);
-    self.pending_timers.insert(timer_id, timer_script.clone());
-    self
-      .queued_timer_actions
-      .push(TimerAction::Start { timer_id, delay_ms });
-    return Ok(timer_id);
+    return Ok(
+      self
+        .event_loop
+        .borrow_mut()
+        .start_timer(timer_script, delay_ms),
+    );
   }
 
   pub fn cancel_timer(&mut self, timer_id: usize) -> Result<bool, EvalError> {
-    if self.pending_timers.remove(&timer_id).is_none() {
-      return Ok(false);
-    }
-    self
-      .queued_timer_actions
-      .push(TimerAction::Cancel { timer_id });
+    self.event_loop.borrow_mut().cancel_timer(timer_id);
     Ok(true)
   }
 
-  pub fn fire_timer(&mut self, timer_id: usize) -> Result<Value, EvalError> {
-    let Some(timer_script) = self.pending_timers.remove(&timer_id) else {
-      return Err(EvalError::Generic(format!(
-        "internal error: tried to fire nonexistent timer: {}",
-        timer_id
-      )));
+  pub fn count_pending_events(&self) -> usize {
+    self.event_loop.borrow().count_pending()
+  }
+
+  pub fn next_event_deadline(&self) -> Option<Instant> {
+    self.event_loop.borrow_mut().next_deadline()
+  }
+
+  pub fn poll_events(&mut self) -> Result<(), EvalError> {
+    let Some((_, script)) = self.event_loop.borrow_mut().take_elapsed()? else {
+      return Ok(());
     };
 
-    eval_returnable_script(&timer_script, self, GLOBAL_FRAME)
+    eval_returnable_script(&script, self, GLOBAL_FRAME)?;
+    Ok(())
   }
 
   pub fn parse_script_caching(
