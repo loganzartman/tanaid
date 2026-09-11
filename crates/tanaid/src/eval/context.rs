@@ -1,7 +1,7 @@
 use super::Proc;
-use crate::eval::eval_returnable_script;
-use crate::eval_error::EvalError;
 use super::event_loop::EventLoop;
+use crate::eval::{EvalCmdResult, eval_returnable_script};
+use crate::eval_error::EvalError;
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
@@ -9,6 +9,7 @@ use lru::LruCache;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -16,16 +17,25 @@ pub type FrameId = usize;
 pub(crate) const GLOBAL_FRAME: FrameId = 0;
 
 pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
-pub type CommandHandler =
-  Rc<dyn Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError>>;
+pub type CommandHandler = dyn for<'a> Fn(
+  &'a mut [Value],
+  &'a mut EvalContext,
+  FrameId,
+) -> Pin<Box<dyn Future<Output = EvalCmdResult> + 'a>>;
 
 #[derive(Clone)]
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
-  commands: HashMap<String, CommandHandler>,
+  commands: HashMap<String, Rc<CommandHandler>>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
   event_loop: Rc<RefCell<EventLoop>>,
+
+  pub(crate) callback_set_timeout:
+    Option<Rc<RefCell<dyn Fn(u64) -> Pin<Box<dyn Future<Output = usize>>>>>>,
+  #[expect(dead_code)]
+  pub(crate) callback_cancel_timeout:
+    Option<Rc<RefCell<dyn Fn(usize) -> Pin<Box<dyn Future<Output = ()>>>>>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -65,6 +75,9 @@ impl EvalContext {
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
       event_loop: Rc::new(RefCell::new(EventLoop::new())),
+
+      callback_set_timeout: None,
+      callback_cancel_timeout: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -138,10 +151,10 @@ impl EvalContext {
     }
   }
 
-  pub fn run_with_frame<R>(
+  pub async fn run_with_frame<R>(
     &mut self,
     calling_frame: FrameId,
-    f: impl FnOnce(&mut EvalContext, FrameId) -> R,
+    f: impl AsyncFnOnce(&mut EvalContext, FrameId) -> R,
   ) -> R {
     let frame_id = self.frame_id + 1;
     self.frame_id = frame_id;
@@ -150,19 +163,42 @@ impl EvalContext {
       .frames
       .insert(frame_id, EvalFrame::new_from(calling_frame));
 
-    let result = f(self, frame_id);
+    let result = f(self, frame_id).await;
 
     self.frames.remove(&frame_id);
 
     result
   }
 
-  pub fn get_command(&self, name: &str) -> Option<CommandHandler> {
+  pub fn get_command(&self, name: &str) -> Option<Rc<CommandHandler>> {
     self.commands.get(name).cloned()
   }
 
-  pub fn register_command(&mut self, name: &str, handler: CommandHandler) {
-    self.commands.insert(name.to_string(), handler.clone());
+  pub fn register_command(
+    &mut self,
+    name: &str,
+    handler: impl for<'a> Fn(&'a mut [Value], &'a mut EvalContext, FrameId) -> EvalCmdResult + 'static,
+  ) {
+    let handler = Rc::new(handler);
+    let wrapped: Rc<CommandHandler> = Rc::new(move |values, context, frame_id| {
+      let handler = handler.clone();
+      Box::pin(async move { handler(values, context, frame_id) })
+    });
+    self.commands.insert(name.to_string(), wrapped);
+  }
+
+  pub fn register_async_command(
+    &mut self,
+    name: &str,
+    handler: impl for<'a> AsyncFn(&'a mut [Value], &'a mut EvalContext, FrameId) -> EvalCmdResult
+    + 'static,
+  ) {
+    let handler = Rc::new(handler);
+    let wrapped: Rc<CommandHandler> = Rc::new(move |values, context, frame_id| {
+      let handler = handler.clone();
+      Box::pin(async move { handler(values, context, frame_id).await })
+    });
+    self.commands.insert(name.to_string(), wrapped);
   }
 
   pub fn unregister_command(&mut self, name: &str) {
@@ -203,12 +239,12 @@ impl EvalContext {
     self.event_loop.borrow_mut().next_deadline()
   }
 
-  pub fn poll_events(&mut self) -> Result<(), EvalError> {
+  pub async fn poll_event(&mut self) -> Result<(), EvalError> {
     let Some((_, script)) = self.event_loop.borrow_mut().take_elapsed()? else {
       return Ok(());
     };
 
-    eval_returnable_script(&script, self, GLOBAL_FRAME)?;
+    eval_returnable_script(&script, self, GLOBAL_FRAME).await?;
     Ok(())
   }
 

@@ -73,7 +73,7 @@ fn run_source(
     println!("{:#?}", parsed)
   }
 
-  let mut result = eval::eval(&parsed, context)?;
+  let mut result = eval::eval_blocking(&parsed, context)?;
   if opts.debug {
     println!("=== result ===");
     println!("{:#?}", result);
@@ -114,7 +114,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if let Err(err) = self.context.poll_events() {
+    if let Err(err) = self.context.poll_event() {
       self.error = Some(Box::new(err));
       event_loop.exit();
       return;

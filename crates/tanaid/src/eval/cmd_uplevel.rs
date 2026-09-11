@@ -10,7 +10,11 @@ enum Level {
   Rel(i64),
 }
 
-pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+pub(super) async fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
   let Some(first) = args.first_mut() else {
     return Err(EvalError::ArgumentError(WRONG_ARGS_MSG.to_string()));
   };
@@ -63,5 +67,5 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
   };
   let (script, _) = script_result.as_ref();
 
-  eval_script(script, context, target_frame)
+  eval_script(script, context, target_frame).await
 }

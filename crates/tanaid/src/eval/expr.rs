@@ -3,28 +3,37 @@ use crate::eval_error::EvalError;
 use crate::parser_expr::{BinaryOp, ExprNode, UnaryOp};
 use crate::value::Value;
 
-pub fn eval_expr(
+pub async fn eval_expr(
   node: &ExprNode,
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   use ExprNode::*;
   match node {
-    Word(w) => eval_word(w, context, frame),
-    UnaryOp(o, x) => eval_expr_unary_op(o, x.as_ref(), context, frame),
-    BinaryOp(o, a, b) => eval_expr_binary_op(o, a.as_ref(), b.as_ref(), context, frame),
+    Word(w) => eval_word(w, context, frame).await,
+    UnaryOp(o, x) => Box::pin(eval_expr_unary_op(o, x.as_ref(), context, frame)).await,
+    BinaryOp(o, a, b) => {
+      Box::pin(eval_expr_binary_op(
+        o,
+        a.as_ref(),
+        b.as_ref(),
+        context,
+        frame,
+      ))
+      .await
+    }
     Ternary(_c, _i, _e) => todo!(),
   }
 }
 
-pub fn eval_expr_unary_op(
+pub async fn eval_expr_unary_op(
   o: &UnaryOp,
   x: &ExprNode,
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   use UnaryOp::*;
-  let mut x = eval_expr(x, context, frame)?;
+  let mut x = eval_expr(x, context, frame).await?;
   match o {
     Plus => x.unary_plus(),
     Minus => -x,
@@ -33,7 +42,7 @@ pub fn eval_expr_unary_op(
   }
 }
 
-pub fn eval_expr_binary_op(
+pub async fn eval_expr_binary_op(
   o: &BinaryOp,
   a: &ExprNode,
   b: &ExprNode,
@@ -44,26 +53,26 @@ pub fn eval_expr_binary_op(
 
   match o {
     And => {
-      let mut a = eval_expr(a, context, frame)?;
+      let mut a = eval_expr(a, context, frame).await?;
       if !a.repr_bool()? {
         return Ok(Value::from(false));
       }
-      let mut b = eval_expr(b, context, frame)?;
+      let mut b = eval_expr(b, context, frame).await?;
       return Ok(Value::from(b.repr_bool()?));
     }
     Or => {
-      let mut a = eval_expr(a, context, frame)?;
+      let mut a = eval_expr(a, context, frame).await?;
       if a.repr_bool()? {
         return Ok(Value::from(true));
       }
-      let mut b = eval_expr(b, context, frame)?;
+      let mut b = eval_expr(b, context, frame).await?;
       return Ok(Value::from(b.repr_bool()?));
     }
     _ => {}
   }
 
-  let mut a = eval_expr(a, context, frame)?;
-  let mut b = eval_expr(b, context, frame)?;
+  let mut a = eval_expr(a, context, frame).await?;
+  let mut b = eval_expr(b, context, frame).await?;
   match o {
     Lt => a.lt(&mut b),
     Le => a.le(&mut b),

@@ -147,7 +147,7 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if let Err(err) = self.context.poll_events() {
+    if let Err(err) = self.context.poll_event() {
       println!("Error: {}", err);
     }
 
@@ -178,8 +178,8 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
 
 fn run_line(line: &str, context: &mut EvalContext) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(line)?;
-  let mut result = eval::eval(&parsed, context)?;
+  let mut result = eval::eval_blocking(&parsed, context)?;
   println!("{}", result.repr_str()?);
-  context.poll_events()?;
+  context.poll_event()?;
   Ok(())
 }

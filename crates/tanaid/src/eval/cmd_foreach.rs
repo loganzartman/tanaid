@@ -6,7 +6,11 @@ use crate::value::{List, Value};
 const WRONG_ARGS_MSG: &str =
   "wrong number of arguments; expects: foreach varlist1 list1 ?varlist2 list2 ...? body";
 
-pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+pub(super) async fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
   let [varlists_lists_args @ .., body] = args else {
     return Err(EvalError::ArgumentError(WRONG_ARGS_MSG.to_string()));
   };
@@ -64,7 +68,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     }
 
     // execute body
-    match eval_script(&body_script, context, frame) {
+    match eval_script(&body_script, context, frame).await {
       Ok(_) => Ok(()),
       Err(EvalError::BreakError) => break,
       Err(EvalError::ContinueError) => Ok(()),

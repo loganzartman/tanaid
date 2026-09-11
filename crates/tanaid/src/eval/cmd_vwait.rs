@@ -1,11 +1,18 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
+use crate::eval::EvalError;
 use crate::value::Value;
+use std::collections::HashMap;
+use std::time::Instant;
 
 struct VwaitOptions<'a> {
   vars: Vec<&'a str>,
 }
 
-pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+pub(super) async fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
   let opts = match args {
     [var] => VwaitOptions {
       vars: vec![var.repr_str()?],
@@ -13,16 +20,54 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     _ => todo!("vwait with options not supported"),
   };
 
-  eval_vwait(opts, context, frame)
+  eval_vwait(opts, context, frame).await
 }
 
-// 1. record the value of all vars
-// 2. run the event loop
-// 2a. take next event
-// 2b. check variables
-// 2c. if changed, resume.
-// 2d. else, continue 2a.
-fn eval_vwait(opts: VwaitOptions, _context: &mut EvalContext, _frame: FrameId) -> EvalCmdResult {
-  println!("vwait {}", opts.vars.join(" "));
+async fn eval_vwait<'a>(
+  opts: VwaitOptions<'a>,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
+  let mut values: HashMap<String, Value> = HashMap::new();
+  for var in opts.vars.iter() {
+    values.insert(
+      var.to_string(),
+      context
+        .get_variable(frame, var)
+        .cloned()
+        .unwrap_or(Value::none()),
+    );
+  }
+
+  loop {
+    match context.next_event_deadline() {
+      Some(deadline) => {
+        let delay = deadline.saturating_duration_since(Instant::now());
+
+        let callback = context
+          .callback_set_timeout
+          .as_ref()
+          .ok_or_else(|| EvalError::Generic("interpreter does not support timeouts".to_string()))?
+          .borrow();
+
+        callback(delay.as_micros() as u64).await;
+      }
+      None => break,
+    }
+
+    context.poll_event().await?;
+
+    for var in opts.vars.iter() {
+      let mut old_val = values.get(*var).cloned().unwrap_or(Value::none());
+      let mut new_val = context
+        .get_variable(frame, var)
+        .cloned()
+        .unwrap_or(Value::none());
+      if new_val.ne(&mut old_val)?.repr_bool()? {
+        break;
+      }
+    }
+  }
+
   Ok(Value::none())
 }

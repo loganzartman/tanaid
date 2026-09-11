@@ -2,7 +2,11 @@ use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_expr, eval_script};
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
-pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+pub(super) async fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
   let [test, body] = args else {
     return Err(EvalError::Generic(
       "while requires two arguments: test and body".to_string(),
@@ -19,8 +23,8 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
   let (body_script, _) = body_parsed.as_ref();
 
-  while eval_expr(&test_expr, context, frame)?.repr_int()? != 0 {
-    match eval_script(&body_script, context, frame) {
+  while eval_expr(&test_expr, context, frame).await?.repr_int()? != 0 {
+    match eval_script(&body_script, context, frame).await {
       Err(EvalError::BreakError) => break,
       Err(EvalError::ContinueError) => {}
       Err(e) => return Err(e),

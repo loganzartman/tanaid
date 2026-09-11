@@ -74,7 +74,7 @@ impl EventLoop {
 
 #[cfg(test)]
 mod tests {
-  use crate::eval::EvalContext;
+  use crate::eval::{EvalCmdResult, EvalContext};
   use crate::{eval, parser};
   use std::{cell::RefCell, rc::Rc};
 
@@ -88,32 +88,36 @@ mod tests {
     (context, output)
   }
 
-  fn eval_source(source: &str, context: &mut EvalContext) {
-    eval::eval(&parser::parse(source).unwrap(), context).unwrap();
+  async fn eval_source(source: &str, context: &mut EvalContext) -> EvalCmdResult {
+    eval::eval(&parser::parse(source).unwrap(), context).await
   }
 
-  #[test]
-  fn poll_yields_before_newly_scheduled_timer() {
+  #[pollster::test]
+  async fn poll_yields_before_newly_scheduled_timer() {
     let (mut context, output) = context_with_output();
-    eval_source("after 0 {puts first; after 0 {puts second}}", &mut context);
+    eval_source("after 0 {puts first; after 0 {puts second}}", &mut context)
+      .await
+      .unwrap();
 
-    context.poll_events().unwrap();
+    context.poll_event().await.unwrap();
     assert_eq!(*output.borrow(), "first\n");
 
-    context.poll_events().unwrap();
+    context.poll_event().await.unwrap();
     assert_eq!(*output.borrow(), "first\nsecond\n");
   }
 
-  #[test]
-  fn poll_preserves_other_timers_after_error() {
+  #[pollster::test]
+  async fn poll_preserves_other_timers_after_error() {
     let (mut context, output) = context_with_output();
     eval_source(
       "after 0 {undefined_command}; after 0 {puts second}",
       &mut context,
-    );
+    )
+    .await
+    .unwrap();
 
-    assert!(context.poll_events().is_err());
-    context.poll_events().unwrap();
+    assert!(context.poll_event().await.is_err());
+    context.poll_event().await.unwrap();
 
     assert_eq!(*output.borrow(), "second\n");
   }

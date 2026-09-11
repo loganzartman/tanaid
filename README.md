@@ -30,7 +30,7 @@ cargo add tanaid
 fn run_tcl() -> Result<(), Box<dyn std::error::Error>> {
   let parsed = tanaid::parser::parse("expr {2 + 2}")?;
   let mut ctx = tanaid::eval::EvalContext::new();
-  let result = tanaid::eval::eval(&parsed, &mut ctx)?;
+  let result = tanaid::eval::eval_blocking(&parsed, &mut ctx)?;
   println!("result: {}", result);
   Ok(())
 }

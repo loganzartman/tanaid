@@ -1,11 +1,7 @@
 use js_sys::Function;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use tanaid::{
-  eval::{EvalContext, eval},
-  eval_error::EvalError,
-  parser::parse,
-};
+use tanaid::{eval::EvalContext, eval::eval_blocking, eval_error::EvalError, parser::parse};
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
@@ -84,7 +80,8 @@ impl Interpreter {
 
     let mut result = {
       let mut context = self.context.borrow_mut();
-      eval(&parsed, &mut *context).map_err(|e| JsError::new(e.to_string().as_str()))
+      // TODO
+      eval_blocking(&parsed, &mut *context).map_err(|e| JsError::new(e.to_string().as_str()))
     }?;
 
     self.run_event_loop()?;
