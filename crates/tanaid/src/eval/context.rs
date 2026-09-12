@@ -23,13 +23,12 @@ pub type CommandHandler = dyn for<'a> Fn(
   FrameId,
 ) -> Pin<Box<dyn Future<Output = EvalCmdResult> + 'a>>;
 
-#[derive(Clone)]
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
   commands: HashMap<String, Rc<CommandHandler>>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
-  event_loop: Rc<RefCell<EventLoop>>,
+  event_loop: RefCell<EventLoop>,
   sleep_ms:
     Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = Result<(), EvalError>>>> + 'static>>,
 
@@ -71,7 +70,7 @@ impl EvalContext {
       commands: HashMap::new(),
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
-      event_loop: Rc::new(RefCell::new(EventLoop::new())),
+      event_loop: RefCell::new(EventLoop::new()),
       sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
