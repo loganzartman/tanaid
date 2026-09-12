@@ -1,5 +1,4 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
-use crate::eval::EvalError;
 use crate::value::Value;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -43,14 +42,7 @@ async fn eval_vwait<'a>(
     match context.next_event_deadline() {
       Some(deadline) => {
         let delay = deadline.saturating_duration_since(Instant::now());
-
-        let callback = context
-          .callback_set_timeout
-          .as_ref()
-          .ok_or_else(|| EvalError::Generic("interpreter does not support timeouts".to_string()))?
-          .borrow();
-
-        callback(delay.as_micros() as u64).await;
+        context.sleep_ms(delay.as_millis() as u64).await?;
       }
       None => break,
     }

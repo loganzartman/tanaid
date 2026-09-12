@@ -30,12 +30,7 @@ pub struct EvalContext {
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
   event_loop: Rc<RefCell<EventLoop>>,
-
-  pub(crate) callback_set_timeout:
-    Option<Rc<RefCell<dyn Fn(u64) -> Pin<Box<dyn Future<Output = usize>>>>>>,
-  #[expect(dead_code)]
-  pub(crate) callback_cancel_timeout:
-    Option<Rc<RefCell<dyn Fn(usize) -> Pin<Box<dyn Future<Output = ()>>>>>>,
+  callback_sleep_ms: Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = ()>>> + 'static>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -75,9 +70,7 @@ impl EvalContext {
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
       event_loop: Rc::new(RefCell::new(EventLoop::new())),
-
-      callback_set_timeout: None,
-      callback_cancel_timeout: None,
+      callback_sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -88,6 +81,22 @@ impl EvalContext {
     };
     super::cmd::register_builtin_commands(&mut context);
     context
+  }
+
+  pub fn with_callback_sleep_ms<F, Fut>(mut self, callback: F) -> Self
+  where
+    F: Fn(u64) -> Fut + 'static,
+    Fut: Future<Output = ()> + 'static,
+  {
+    self.callback_sleep_ms = Some(Rc::new(move |ms: u64| Box::pin(callback(ms))));
+    self
+  }
+
+  #[cfg(not(target_family = "wasm"))]
+  pub fn with_blocking_sleep(self) -> Self {
+    self.with_callback_sleep_ms(async |ms| {
+      std::thread::sleep(std::time::Duration::from_millis(ms));
+    })
   }
 
   pub fn with_stdout(mut self, stdout: OutputSink) -> Self {
@@ -229,6 +238,16 @@ impl EvalContext {
   pub fn cancel_timer(&mut self, timer_id: usize) -> Result<bool, EvalError> {
     self.event_loop.borrow_mut().cancel_timer(timer_id);
     Ok(true)
+  }
+
+  pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
+    let sleep_ms = self.callback_sleep_ms.as_ref().ok_or_else(|| {
+      EvalError::Generic(
+        "environment does not support timers (missing callback_sleep_ms)".to_string(),
+      )
+    })?;
+    sleep_ms(ms).await;
+    Ok(())
   }
 
   pub fn count_pending_events(&self) -> usize {

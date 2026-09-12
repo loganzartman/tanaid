@@ -10,7 +10,7 @@ use crate::value::Value;
 pub type EvalCmdResult = Result<Value, EvalError>;
 
 pub fn register_builtin_commands(context: &mut EvalContext) {
-  context.register_command("after", cmd_after::eval);
+  context.register_async_command("after", cmd_after::eval);
   context.register_command("break", cmd_break::eval);
   context.register_command("continue", cmd_continue::eval);
   context.register_command("dict", cmd_dict::eval);

@@ -1,7 +1,7 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::{eval_error::EvalError, parser, value::Value};
 
-pub(super) fn eval(
+pub(super) async fn eval(
   args: &mut [Value],
   context: &mut EvalContext,
   _frame: FrameId,
@@ -9,7 +9,7 @@ pub(super) fn eval(
   match args {
     [subcommand, rest @ ..] if subcommand.to_string() == "cancel" => eval_cancel(rest, context),
     [subcommand, rest @ ..] if subcommand.to_string() == "idle" => eval_idle(rest, context),
-    [ms, rest @ ..] => eval_ms(ms, rest, context),
+    [ms, rest @ ..] => eval_ms(ms, rest, context).await,
     _ => Err(EvalError::ArgumentError(
       "wrong number of args: expected \"after option ?arg ...?\"".to_string(),
     )),
@@ -39,24 +39,15 @@ fn eval_idle(_args: &mut [Value], _context: &mut EvalContext) -> EvalCmdResult {
   ))
 }
 
-fn eval_ms(ms: &mut Value, args: &mut [Value], context: &mut EvalContext) -> EvalCmdResult {
+async fn eval_ms(ms: &mut Value, args: &mut [Value], context: &mut EvalContext) -> EvalCmdResult {
   let delay_ms: u64 = ms
     .repr_int()?
     .try_into()
     .map_err(|_| EvalError::ArgumentError("\"after\" duration must be positive".to_string()))?;
 
   if args.is_empty() {
-    #[cfg(not(target_family = "wasm"))]
-    {
-      std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-      return Ok(Value::none());
-    }
-    #[cfg(target_family = "wasm")]
-    {
-      return Err(EvalError::Generic(
-        "blocking \"after ms\" is unsupported in WASM".into(),
-      ));
-    }
+    context.sleep_ms(delay_ms).await?;
+    return Ok(Value::none());
   }
 
   let script_src: String = args

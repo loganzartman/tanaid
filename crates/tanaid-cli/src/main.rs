@@ -35,7 +35,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
-  let mut context = eval::EvalContext::new();
+  let mut context = eval::EvalContext::new().with_blocking_sleep();
 
   let mut tk = Tk::new();
   tk.install(&mut context)?;
