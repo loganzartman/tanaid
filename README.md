@@ -67,6 +67,7 @@ implements a small subset of Tcl. the supported subset is Tcl-compatible (runs i
   - `after ms ?script script script ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/after.html#M6)
   - `after cancel id` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/after.html#M7)
   - `break` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/break.html)
+  - `clock monotonic`
   - `continue` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/continue.html)
   - `dict create ?key value ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M6)
   - `dict get dictValue ?key ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M13)
@@ -92,8 +93,10 @@ implements a small subset of Tcl. the supported subset is Tcl-compatible (runs i
   - `string index string charIndex` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/string.html#M9)
   - `string length string` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/string.html#M35)
   - `unknown cmdName ?arg arg ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/unknown.html)
+  - `update` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/update.html)
   - `uplevel ?level? arg ?arg ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/uplevel.html)
   - `upvar ?level? otherVar myVar ?otherVar myVar ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/upvar.html)
+  - `vwait varName` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/vwait.html)
   - `while test body` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/while.html)
 
 this is enough to write simple scripts like:
