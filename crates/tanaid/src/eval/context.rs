@@ -42,6 +42,7 @@ pub struct EvalContext {
 pub struct EvalFrame {
   caller: Option<FrameId>,
   variables: HashMap<String, Binding>,
+  variable_revs: HashMap<String, u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -318,6 +319,24 @@ impl EvalContext {
     }
   }
 
+  pub fn get_variable_rev(&self, frame: FrameId, name: &str) -> u64 {
+    let mut cur_frame = frame;
+    let mut cur_name = name;
+    loop {
+      match self.frame(cur_frame).get_binding(cur_name) {
+        Some(Binding::Ref(ref_frame, ref_name)) => {
+          if *ref_frame == frame && ref_name == name {
+            panic!("circular reference to {}", ref_name);
+          }
+          cur_frame = *ref_frame;
+          cur_name = ref_name;
+        }
+        Some(Binding::Val(_)) => return self.frame(cur_frame).get_rev(cur_name),
+        None => return 0,
+      }
+    }
+  }
+
   pub fn set_variable(&mut self, frame: FrameId, name: &str, value: Value) {
     let mut cur_frame = frame;
     let mut cur_name = name;
@@ -360,6 +379,7 @@ impl EvalFrame {
     EvalFrame {
       caller: None,
       variables: HashMap::new(),
+      variable_revs: HashMap::new(),
     }
   }
 
@@ -367,6 +387,7 @@ impl EvalFrame {
     EvalFrame {
       caller: Some(frame),
       variables: HashMap::new(),
+      variable_revs: HashMap::new(),
     }
   }
 
@@ -380,5 +401,16 @@ impl EvalFrame {
 
   pub fn set_binding(&mut self, name: &str, binding: Binding) {
     self.variables.insert(name.to_string(), binding);
+
+    self
+      .variable_revs
+      .entry(name.to_string())
+      .and_modify(|v| *v += 1)
+      .or_insert(1);
+  }
+
+  /// monotonically increasing counter that increases when variable is written
+  pub fn get_rev(&self, name: &str) -> u64 {
+    *self.variable_revs.get(name).unwrap_or(&0)
   }
 }

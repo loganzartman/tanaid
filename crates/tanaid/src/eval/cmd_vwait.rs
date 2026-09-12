@@ -1,5 +1,5 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
-use crate::value::Value;
+use crate::{eval::context::GLOBAL_FRAME, value::Value};
 use std::collections::HashMap;
 
 struct VwaitOptions<'a> {
@@ -9,7 +9,7 @@ struct VwaitOptions<'a> {
 pub(super) async fn eval(
   args: &mut [Value],
   context: &mut EvalContext,
-  frame: FrameId,
+  _frame: FrameId,
 ) -> EvalCmdResult {
   let opts = match args {
     [var] => VwaitOptions {
@@ -18,26 +18,17 @@ pub(super) async fn eval(
     _ => todo!("vwait with options not supported"),
   };
 
-  eval_vwait(opts, context, frame).await
+  eval_vwait(opts, context).await
 }
 
-async fn eval_vwait<'a>(
-  opts: VwaitOptions<'a>,
-  context: &mut EvalContext,
-  frame: FrameId,
-) -> EvalCmdResult {
-  let mut values: HashMap<String, Value> = HashMap::new();
+async fn eval_vwait<'a>(opts: VwaitOptions<'a>, context: &mut EvalContext) -> EvalCmdResult {
+  let mut revs: HashMap<String, u64> = HashMap::new();
   for var in opts.vars.iter() {
-    values.insert(
-      var.to_string(),
-      context
-        .get_variable(frame, var)
-        .cloned()
-        .unwrap_or(Value::none()),
-    );
+    revs.insert(var.to_string(), context.get_variable_rev(GLOBAL_FRAME, var));
   }
 
   'outer: loop {
+    // TODO: wait for future events when no timers pending
     let Some(delay) = context.next_event_delay() else {
       break;
     };
@@ -46,12 +37,9 @@ async fn eval_vwait<'a>(
     context.poll_event().await?;
 
     for var in opts.vars.iter() {
-      let mut old_val = values.get(*var).cloned().unwrap_or(Value::none());
-      let mut new_val = context
-        .get_variable(frame, var)
-        .cloned()
-        .unwrap_or(Value::none());
-      if new_val.ne(&mut old_val)?.repr_bool()? {
+      let old_rev = *revs.get(*var).unwrap_or(&0);
+      let new_rev = context.get_variable_rev(GLOBAL_FRAME, var);
+      if new_rev != old_rev {
         break 'outer;
       }
     }

@@ -1652,6 +1652,40 @@ async fn eval_vwait_leaves_later_events_pending() -> Result<(), Box<dyn std::err
 }
 
 #[pollster::test]
+async fn eval_vwait_detects_same_value_write_through_alias() -> Result<(), Box<dyn std::error::Error>>
+{
+  let mut ctx = context_with_test_clock();
+  eval(
+    &parser::parse(
+      "set watched 0; upvar #0 watched alias; after 10 {set watched 0}; after 20 {set later 1}; vwait alias",
+    )?,
+    &mut ctx,
+  )
+  .await?;
+
+  assert!(ctx.get_variable(GLOBAL_FRAME, "later").is_none());
+  assert_eq!(ctx.count_pending_events(), 1);
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_vwait_watches_global_variable_from_proc() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = context_with_test_clock();
+  let mut result = eval(
+    &parser::parse(
+      "proc wait {} {set watched local; after 10 {set watched global}; after 20 {set later 1}; vwait watched; return $watched}; wait",
+    )?,
+    &mut ctx,
+  )
+  .await?;
+
+  assert_eq!(result.repr_str()?, "local");
+  assert!(ctx.get_variable(GLOBAL_FRAME, "later").is_none());
+  assert_eq!(ctx.count_pending_events(), 1);
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_undefined_command() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(&parser::parse("bogus 1 2")?, &mut ctx).await;
