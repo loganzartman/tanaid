@@ -38,13 +38,11 @@ async fn eval_vwait<'a>(
   }
 
   'outer: loop {
-    match context.next_event_delay() {
-      Some(delay) => {
-        context.sleep_ms(delay.as_millis() as u64).await?;
-      }
-      None => break,
-    }
+    let Some(delay) = context.next_event_delay() else {
+      break;
+    };
 
+    context.sleep_ms(delay.as_millis() as u64).await?;
     context.poll_event().await?;
 
     for var in opts.vars.iter() {

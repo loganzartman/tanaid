@@ -4,6 +4,7 @@ use super::{
   cmd_lreverse, cmd_lset, cmd_package, cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string,
   cmd_unknown, cmd_uplevel, cmd_upvar, cmd_vwait, cmd_while,
 };
+use crate::eval::cmd_update;
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
@@ -34,6 +35,7 @@ pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_command("set", cmd_set::eval);
   context.register_command("string", cmd_string::eval);
   context.register_command("unknown", cmd_unknown::eval);
+  context.register_async_command("update", cmd_update::eval);
   context.register_async_command("uplevel", cmd_uplevel::eval);
   context.register_command("upvar", cmd_upvar::eval);
   context.register_async_command("vwait", cmd_vwait::eval);
