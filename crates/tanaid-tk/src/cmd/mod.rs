@@ -10,16 +10,14 @@ use tanaid::eval::EvalContext;
 pub fn register_commands(context: &mut EvalContext, tk: Rc<TkContext>) {
   {
     let tk = tk.clone();
-    context.register_command(
-      "canvas",
-      Rc::new(move |args, ctx, frame| canvas::eval(args, ctx, frame, &tk)),
-    );
+    context.register_command("canvas", move |args, ctx, frame| {
+      canvas::eval(args, ctx, frame, &tk)
+    });
   }
   {
     let tk = tk.clone();
-    context.register_command(
-      "pack",
-      Rc::new(move |args, ctx, frame| pack::eval(args, ctx, frame, &tk)),
-    );
+    context.register_command("pack", move |args, ctx, frame| {
+      pack::eval(args, ctx, frame, &tk)
+    });
   }
 }

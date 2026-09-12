@@ -8,6 +8,7 @@ publish = true
 
 [dependencies]
 lru = "0.18.0"
+pollster = { workspace = true, features = ["macro"] }
 regex = "1.12.4"
 
 [lints]

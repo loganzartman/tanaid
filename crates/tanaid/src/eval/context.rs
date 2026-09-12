@@ -1,31 +1,39 @@
 use super::Proc;
-use crate::eval::eval_returnable_script;
+use super::event_loop::EventLoop;
+use crate::eval::{EvalCmdResult, eval_returnable_script};
 use crate::eval_error::EvalError;
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
 use lru::LruCache;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::pin::Pin;
 use std::rc::Rc;
+use std::time::Duration;
 
 pub type FrameId = usize;
 pub(crate) const GLOBAL_FRAME: FrameId = 0;
 
 pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
-pub type CommandHandler =
-  Rc<dyn Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError>>;
+pub type CommandHandler = dyn for<'a> Fn(
+  &'a mut [Value],
+  &'a mut EvalContext,
+  FrameId,
+) -> Pin<Box<dyn Future<Output = EvalCmdResult> + 'a>>;
 
-#[derive(Clone)]
 pub struct EvalContext {
   procs: HashMap<String, Rc<Proc>>,
-  commands: HashMap<String, CommandHandler>,
+  commands: HashMap<String, Rc<CommandHandler>>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
+  event_loop: RefCell<EventLoop>,
 
-  timer_id: usize,
-  pending_timers: HashMap<usize, ScriptNode>,
-  queued_timer_actions: Vec<TimerAction>,
+  clock_monotonic_us: Option<Box<dyn Fn() -> u64>>,
+  clock_unixtime_ms: Option<Box<dyn Fn() -> i64>>,
+  sleep_ms:
+    Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = Result<(), EvalError>>>> + 'static>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -37,18 +45,13 @@ pub struct EvalContext {
 pub struct EvalFrame {
   caller: Option<FrameId>,
   variables: HashMap<String, Binding>,
+  variable_revs: HashMap<String, u64>,
 }
 
 #[derive(Clone, Debug)]
 pub enum Binding {
   Val(Value),
   Ref(FrameId, String),
-}
-
-#[derive(Clone, Debug)]
-pub enum TimerAction {
-  Start { timer_id: usize, delay_ms: u64 },
-  Cancel { timer_id: usize },
 }
 
 impl std::fmt::Debug for EvalContext {
@@ -70,10 +73,11 @@ impl EvalContext {
       commands: HashMap::new(),
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
+      event_loop: RefCell::new(EventLoop::new()),
 
-      timer_id: 0,
-      pending_timers: HashMap::new(),
-      queued_timer_actions: Vec::new(),
+      clock_monotonic_us: None,
+      clock_unixtime_ms: None,
+      sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -84,6 +88,48 @@ impl EvalContext {
     };
     super::cmd::register_builtin_commands(&mut context);
     context
+  }
+
+  pub fn with_sleep_ms<F, Fut>(mut self, f: F) -> Self
+  where
+    F: Fn(u64) -> Fut + 'static,
+    Fut: Future<Output = Result<(), EvalError>> + 'static,
+  {
+    self.sleep_ms = Some(Rc::new(move |ms: u64| Box::pin(f(ms))));
+    self
+  }
+
+  pub fn with_clock_monotonic_us(mut self, f: impl Fn() -> u64 + 'static) -> Self {
+    self.clock_monotonic_us = Some(Box::new(f));
+    self
+  }
+
+  pub fn with_clock_unixtime_ms(mut self, f: impl Fn() -> i64 + 'static) -> Self {
+    self.clock_unixtime_ms = Some(Box::new(f));
+    self
+  }
+
+  #[cfg(not(target_family = "wasm"))]
+  pub fn with_std_time(self) -> Self {
+    let start = std::time::Instant::now();
+    self
+      .with_sleep_ms(async |ms| {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+        Ok(())
+      })
+      .with_clock_monotonic_us(move || {
+        std::time::Instant::now()
+          .duration_since(start)
+          .as_micros()
+          .saturating_cast::<u64>()
+      })
+      .with_clock_unixtime_ms(|| {
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .expect("system clock set before UNIX_EPOCH")
+          .as_millis()
+          .saturating_cast::<i64>()
+      })
   }
 
   pub fn with_stdout(mut self, stdout: OutputSink) -> Self {
@@ -147,10 +193,10 @@ impl EvalContext {
     }
   }
 
-  pub fn run_with_frame<R>(
+  pub async fn run_with_frame<R>(
     &mut self,
     calling_frame: FrameId,
-    f: impl FnOnce(&mut EvalContext, FrameId) -> R,
+    f: impl AsyncFnOnce(&mut EvalContext, FrameId) -> R,
   ) -> R {
     let frame_id = self.frame_id + 1;
     self.frame_id = frame_id;
@@ -159,19 +205,42 @@ impl EvalContext {
       .frames
       .insert(frame_id, EvalFrame::new_from(calling_frame));
 
-    let result = f(self, frame_id);
+    let result = f(self, frame_id).await;
 
     self.frames.remove(&frame_id);
 
     result
   }
 
-  pub fn get_command(&self, name: &str) -> Option<CommandHandler> {
+  pub fn get_command(&self, name: &str) -> Option<Rc<CommandHandler>> {
     self.commands.get(name).cloned()
   }
 
-  pub fn register_command(&mut self, name: &str, handler: CommandHandler) {
-    self.commands.insert(name.to_string(), handler.clone());
+  pub fn register_command(
+    &mut self,
+    name: &str,
+    handler: impl for<'a> Fn(&'a mut [Value], &'a mut EvalContext, FrameId) -> EvalCmdResult + 'static,
+  ) {
+    let handler = Rc::new(handler);
+    let wrapped: Rc<CommandHandler> = Rc::new(move |values, context, frame_id| {
+      let handler = handler.clone();
+      Box::pin(async move { handler(values, context, frame_id) })
+    });
+    self.commands.insert(name.to_string(), wrapped);
+  }
+
+  pub fn register_async_command(
+    &mut self,
+    name: &str,
+    handler: impl for<'a> AsyncFn(&'a mut [Value], &'a mut EvalContext, FrameId) -> EvalCmdResult
+    + 'static,
+  ) {
+    let handler = Rc::new(handler);
+    let wrapped: Rc<CommandHandler> = Rc::new(move |values, context, frame_id| {
+      let handler = handler.clone();
+      Box::pin(async move { handler(values, context, frame_id).await })
+    });
+    self.commands.insert(name.to_string(), wrapped);
   }
 
   pub fn unregister_command(&mut self, name: &str) {
@@ -186,43 +255,69 @@ impl EvalContext {
     self.procs.insert(name.to_string(), Rc::new(proc));
   }
 
-  pub fn take_timer_actions(&mut self) -> Vec<TimerAction> {
-    return std::mem::take(&mut self.queued_timer_actions);
-  }
-
   pub fn start_timer(
     &mut self,
-    timer_script: &ScriptNode,
+    timer_script: ScriptNode,
     delay_ms: u64,
   ) -> Result<usize, EvalError> {
-    let timer_id = self.timer_id;
-    self.timer_id = self.timer_id.strict_add(1);
-    self.pending_timers.insert(timer_id, timer_script.clone());
-    self
-      .queued_timer_actions
-      .push(TimerAction::Start { timer_id, delay_ms });
-    return Ok(timer_id);
+    return Ok(self.event_loop.borrow_mut().start_timer(
+      Duration::from_micros(self.clock_monotonic()?),
+      timer_script,
+      Duration::from_millis(delay_ms),
+    ));
   }
 
-  pub fn cancel_timer(&mut self, timer_id: usize) -> Result<bool, EvalError> {
-    if self.pending_timers.remove(&timer_id).is_none() {
+  pub fn cancel_timer(&mut self, timer_id: usize) -> Result<(), EvalError> {
+    self.event_loop.borrow_mut().cancel_timer(timer_id);
+    Ok(())
+  }
+
+  pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
+    let sleep_ms = self.sleep_ms.as_ref().ok_or_else(|| {
+      EvalError::Generic(
+        "environment does not support timers (missing callback_sleep_ms)".to_string(),
+      )
+    })?;
+    sleep_ms(ms).await
+  }
+
+  pub fn count_pending_events(&self) -> usize {
+    self.event_loop.borrow().count_pending()
+  }
+
+  pub fn next_event_delay(&self) -> Result<Option<Duration>, EvalError> {
+    Ok(
+      self
+        .event_loop
+        .borrow_mut()
+        .next_delay(Duration::from_micros(self.clock_monotonic()?)),
+    )
+  }
+
+  pub fn clock_monotonic(&self) -> Result<u64, EvalError> {
+    Ok(self.clock_monotonic_us.as_ref().ok_or_else(|| {
+      EvalError::Generic("Context missing clock_monotonic".to_string())
+    })?())
+  }
+
+  pub fn clock_unixtime(&self) -> Result<i64, EvalError> {
+    Ok(self.clock_unixtime_ms.as_ref().ok_or_else(|| {
+      EvalError::Generic("Context missing clock_unixtime".to_string())
+    })?())
+  }
+
+  pub async fn poll_event(&mut self) -> Result<bool, EvalError> {
+    let Some((_, script)) = self
+      .event_loop
+      .borrow_mut()
+      .take_elapsed(Duration::from_micros(self.clock_monotonic()?))
+    else {
       return Ok(false);
-    }
-    self
-      .queued_timer_actions
-      .push(TimerAction::Cancel { timer_id });
-    Ok(true)
-  }
-
-  pub fn fire_timer(&mut self, timer_id: usize) -> Result<Value, EvalError> {
-    let Some(timer_script) = self.pending_timers.remove(&timer_id) else {
-      return Err(EvalError::Generic(format!(
-        "internal error: tried to fire nonexistent timer: {}",
-        timer_id
-      )));
     };
 
-    eval_returnable_script(&timer_script, self, GLOBAL_FRAME)
+    // TODO: bgerror (don't abort event loops)
+    eval_returnable_script(&script, self, GLOBAL_FRAME).await?;
+    Ok(true)
   }
 
   pub fn parse_script_caching(
@@ -261,6 +356,24 @@ impl EvalContext {
           cur_name = ref_name;
         }
         Binding::Val(v) => return Some(v),
+      }
+    }
+  }
+
+  pub fn get_variable_rev(&self, frame: FrameId, name: &str) -> u64 {
+    let mut cur_frame = frame;
+    let mut cur_name = name;
+    loop {
+      match self.frame(cur_frame).get_binding(cur_name) {
+        Some(Binding::Ref(ref_frame, ref_name)) => {
+          if *ref_frame == frame && ref_name == name {
+            panic!("circular reference to {}", ref_name);
+          }
+          cur_frame = *ref_frame;
+          cur_name = ref_name;
+        }
+        Some(Binding::Val(_)) => return self.frame(cur_frame).get_rev(cur_name),
+        None => return 0,
       }
     }
   }
@@ -307,6 +420,7 @@ impl EvalFrame {
     EvalFrame {
       caller: None,
       variables: HashMap::new(),
+      variable_revs: HashMap::new(),
     }
   }
 
@@ -314,6 +428,7 @@ impl EvalFrame {
     EvalFrame {
       caller: Some(frame),
       variables: HashMap::new(),
+      variable_revs: HashMap::new(),
     }
   }
 
@@ -327,5 +442,16 @@ impl EvalFrame {
 
   pub fn set_binding(&mut self, name: &str, binding: Binding) {
     self.variables.insert(name.to_string(), binding);
+
+    self
+      .variable_revs
+      .entry(name.to_string())
+      .and_modify(|v| *v += 1)
+      .or_insert(1);
+  }
+
+  /// monotonically increasing counter that increases when variable is written
+  pub fn get_rev(&self, name: &str) -> u64 {
+    *self.variable_revs.get(name).unwrap_or(&0)
   }
 }

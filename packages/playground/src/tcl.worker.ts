@@ -12,8 +12,6 @@ self.onmessage = async ({ data: { source } }) => {
   };
 
   try {
-    let eventLoop = Promise.withResolvers<void>();
-
     interp = Interpreter.create({
       handleStdout(value) {
         stdoutBuffer.push(value);
@@ -26,7 +24,7 @@ self.onmessage = async ({ data: { source } }) => {
           try {
             callback();
           } catch (error) {
-            eventLoop.reject(error);
+            self.postMessage({ type: "error", error: String(error) });
           }
         }, delayMs);
       },
@@ -35,20 +33,17 @@ self.onmessage = async ({ data: { source } }) => {
       },
       handleEventLoopStatus(nPending: number) {
         self.postMessage({ type: "pending-timers", value: nPending });
-        if (nPending === 0) {
-          eventLoop.resolve();
-        }
       },
     });
 
-    const value = interp.run(source);
+    const value = await interp.run(source);
     flushStdout();
     self.postMessage({
       type: "result",
       value,
     });
 
-    await eventLoop.promise;
+    await interp.runEventLoop();
     flushStdout();
 
     self.postMessage({ type: "done" });

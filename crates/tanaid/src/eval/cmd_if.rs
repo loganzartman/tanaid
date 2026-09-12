@@ -2,7 +2,11 @@ use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_expr, eval_script};
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
-pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+pub(super) async fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
   let mut args = args.iter().peekable();
 
   let mut cond_body: Vec<(Value, Value)> = vec![];
@@ -56,8 +60,8 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
     let (body_parsed, _) = body_parse_result.as_ref();
 
-    if eval_expr(&cond_parsed, context, frame)?.repr_int()? != 0 {
-      return eval_script(&body_parsed, context, frame);
+    if eval_expr(&cond_parsed, context, frame).await?.repr_int()? != 0 {
+      return eval_script(&body_parsed, context, frame).await;
     }
   }
 

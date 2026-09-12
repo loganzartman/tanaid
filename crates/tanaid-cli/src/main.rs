@@ -3,6 +3,7 @@ use std::{
   fs,
   io::{self, IsTerminal},
   process::ExitCode,
+  time::Instant,
 };
 use tanaid::{eval, parser};
 use tanaid_cli::repl::run_repl;
@@ -35,7 +36,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
-  let mut context = eval::EvalContext::new();
+  let mut context = eval::EvalContext::new().with_std_time();
 
   let mut tk = Tk::new();
   tk.install(&mut context)?;
@@ -73,7 +74,7 @@ fn run_source(
     println!("{:#?}", parsed)
   }
 
-  let mut result = eval::eval(&parsed, context)?;
+  let mut result = eval::eval_blocking(&parsed, context)?;
   if opts.debug {
     println!("=== result ===");
     println!("{:#?}", result);
@@ -81,11 +82,8 @@ fn run_source(
 
   println!("{}", result.repr_str()?);
 
-  let mut tcl_event_loop = tanaid::event_loop::EventLoop::new();
-  tcl_event_loop.apply_actions(context.take_timer_actions());
-
   // nothing left to do: no pending timers and no window to service
-  if tcl_event_loop.count_pending() == 0 && !tk.context.has_window() {
+  if context.count_pending_events() == 0 && !tk.context.has_window() {
     return Ok(());
   }
 
@@ -93,7 +91,6 @@ fn run_source(
   let mut app = SourceApp {
     tk,
     context,
-    tcl_event_loop,
     had_window: false,
     error: None,
   };
@@ -108,7 +105,6 @@ fn run_source(
 struct SourceApp<'a> {
   tk: &'a mut Tk,
   context: &'a mut eval::EvalContext,
-  tcl_event_loop: tanaid::event_loop::EventLoop,
   had_window: bool,
   error: Option<Box<dyn std::error::Error>>,
 }
@@ -119,7 +115,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if let Err(err) = self.tcl_event_loop.poll(self.context) {
+    if let Err(err) = pollster::block_on(self.context.poll_event()) {
       self.error = Some(Box::new(err));
       event_loop.exit();
       return;
@@ -135,14 +131,17 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       return;
     }
 
-    let next_deadline = self.tcl_event_loop.next_deadline();
-    if next_deadline.is_none() && !self.had_window {
+    let next_delay = self
+      .context
+      .next_event_delay()
+      .expect("clock should be configured");
+    if next_delay.is_none() && !self.had_window {
       event_loop.exit();
       return;
     }
 
-    match next_deadline {
-      Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
+    match next_delay {
+      Some(delay) => event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay)),
       None => event_loop.set_control_flow(ControlFlow::Wait),
     }
   }

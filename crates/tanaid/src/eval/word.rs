@@ -3,25 +3,25 @@ use crate::eval_error::EvalError;
 use crate::parser::{WordNode, WordPart};
 use crate::value::Value;
 
-pub fn eval_word(
+pub async fn eval_word(
   word: &WordNode,
   context: &mut EvalContext,
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   // optimization for single-part words
   if let [part] = word.parts.as_slice() {
-    return eval_wordpart(part, context, frame);
+    return eval_wordpart(part, context, frame).await;
   }
 
   let mut joined = String::new();
   for part in &word.parts {
-    let mut value = eval_wordpart(part, context, frame)?;
+    let mut value = eval_wordpart(part, context, frame).await?;
     joined.push_str(value.repr_str()?);
   }
   Ok(Value::new(joined))
 }
 
-pub fn eval_wordpart(
+pub async fn eval_wordpart(
   part: &WordPart,
   context: &mut EvalContext,
   frame: FrameId,
@@ -33,11 +33,11 @@ pub fn eval_wordpart(
       .get_variable(frame, &v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
       .cloned(),
-    WordPart::CommandSub(script) => eval_script(script, context, frame),
+    WordPart::CommandSub(script) => eval_script(script, context, frame).await,
     WordPart::Quoted(parts) => {
       let mut result: String = "".to_string();
       for part in parts {
-        let mut string = eval_wordpart(part, context, frame)?;
+        let mut string = Box::pin(eval_wordpart(part, context, frame)).await?;
         result.push_str(string.repr_str()?);
       }
       Ok(Value::new(result))

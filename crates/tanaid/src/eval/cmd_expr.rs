@@ -2,7 +2,11 @@ use super::{EvalContext, FrameId, cmd::EvalCmdResult, eval_expr};
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
-pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
+pub(super) async fn eval(
+  args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> EvalCmdResult {
   let expr_src = if let [arg] = args {
     // optimization: no allocation for idiomatic single (braced) argument
     arg.repr_str()?
@@ -16,5 +20,5 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
   let (node, _) = expr_parsed.as_ref();
 
-  eval_expr(&node, context, frame)
+  eval_expr(&node, context, frame).await
 }
