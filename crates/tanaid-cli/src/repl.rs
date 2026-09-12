@@ -6,6 +6,7 @@ use reedline::{
 use std::borrow::Cow;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Instant;
 use tanaid::eval::EvalContext;
 use tanaid::parser::ParseError;
 use tanaid::{eval, parser};
@@ -153,9 +154,9 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
 
     self.tk.context.handle_about_to_wait(event_loop);
 
-    match self.context.next_event_deadline() {
+    match self.context.next_event_delay() {
       Some(deadline) => {
-        event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + deadline));
       }
       None => {
         event_loop.set_control_flow(ControlFlow::Wait);

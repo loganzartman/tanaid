@@ -1,7 +1,7 @@
-use js_sys::Function;
+use js_sys::{Function, Promise};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use tanaid::{eval::EvalContext, eval::eval_blocking, eval_error::EvalError, parser::parse};
+use tanaid::{eval::EvalContext, eval::eval, eval_error::EvalError, parser::parse};
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
@@ -45,7 +45,6 @@ fn js_error_message(value: JsValue) -> String {
     .unwrap_or_else(|| format!("{value:?}"))
 }
 
-#[expect(dead_code)]
 fn js_value_to_error(value: JsValue) -> JsError {
   JsError::new(&js_error_message(value))
 }
@@ -53,6 +52,8 @@ fn js_value_to_error(value: JsValue) -> JsError {
 #[wasm_bindgen]
 impl Interpreter {
   pub fn create(options: Ts<InterpreterOptions>) -> Result<Interpreter, JsError> {
+    console_error_panic_hook::set_once();
+
     let opts = options
       .to_rust()
       .map_err(|e| JsError::new(format!("failed to parse options: {}", e).as_str()))?;
@@ -64,7 +65,32 @@ impl Interpreter {
         .map_err(|e| EvalError::Generic(js_error_message(e)))?;
       Ok(())
     });
-    let context = EvalContext::new().with_stdout(stdout);
+
+    let set_timeout = opts.set_timeout.clone();
+    let sleep_ms = move |ms: u64| {
+      let set_timeout = set_timeout.clone();
+      async move {
+        let done = Promise::new(&mut |res, _rej| {
+          set_timeout
+            .call2(
+              &JsValue::UNDEFINED,
+              &ScopedClosure::<dyn FnMut()>::own_aborting(move || {
+                res
+                  .call1(&JsValue::UNDEFINED, &JsValue::from(true))
+                  .expect("failed to sleep");
+              })
+              .into_js_value(),
+              &JsValue::from(ms as i32),
+            )
+            .expect("failed to sleep");
+        });
+        done.await.expect("failed to sleep");
+      }
+    };
+
+    let context = EvalContext::new()
+      .with_stdout(stdout)
+      .with_sleep_ms(sleep_ms);
 
     Ok(Interpreter {
       context: Rc::new(RefCell::new(context)),
@@ -75,16 +101,17 @@ impl Interpreter {
     })
   }
 
-  pub fn run(&mut self, src: &str) -> Result<JsValue, JsError> {
+  pub async fn run(&mut self, src: &str) -> Result<JsValue, JsError> {
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
     let mut result = {
       let mut context = self.context.borrow_mut();
-      // TODO
-      eval_blocking(&parsed, &mut *context).map_err(|e| JsError::new(e.to_string().as_str()))
+      eval(&parsed, &mut *context)
+        .await
+        .map_err(|e| JsError::new(e.to_string().as_str()))
     }?;
 
-    self.run_event_loop()?;
+    self.run_event_loop().await?;
 
     match result.repr_str() {
       Ok(result_str) => Ok(JsValue::from_str(result_str)),
@@ -92,12 +119,23 @@ impl Interpreter {
     }
   }
 
-  fn run_event_loop(&self) -> Result<(), JsError> {
-    /*
-    let timer_actions = self.context.borrow_mut().take_timer_actions();
-    apply_timer_actions(self, timer_actions)?;
-    notify_if_event_loop_empty(self)?;
-    */
+  async fn run_event_loop(&self) -> Result<(), JsError> {
+    while self.context.borrow().count_pending_events() > 0 {
+      let Some(delay) = self.context.borrow().next_event_delay() else {
+        break;
+      };
+
+      notify_event_loop_status(self)?;
+
+      self
+        .context
+        .borrow()
+        .sleep_ms(delay.as_millis() as u64)
+        .await?;
+
+      self.context.borrow_mut().poll_event().await?;
+    }
+    notify_event_loop_status(self)?;
     Ok(())
   }
 }
@@ -183,9 +221,10 @@ fn apply_timer_actions(
 
   Ok(())
 }
+*/
 
-fn notify_if_event_loop_empty(interpreter: &Interpreter) -> Result<(), JsError> {
-  let n_pending = interpreter.timeout_ids.borrow().len();
+fn notify_event_loop_status(interpreter: &Interpreter) -> Result<(), JsError> {
+  let n_pending = interpreter.context.borrow().count_pending_events();
 
   interpreter
     .handle_event_loop_status
@@ -194,4 +233,3 @@ fn notify_if_event_loop_empty(interpreter: &Interpreter) -> Result<(), JsError> 
 
   Ok(())
 }
-*/

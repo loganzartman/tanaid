@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::Duration;
 
 pub type FrameId = usize;
 pub(crate) const GLOBAL_FRAME: FrameId = 0;
@@ -30,7 +30,7 @@ pub struct EvalContext {
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
   event_loop: Rc<RefCell<EventLoop>>,
-  callback_sleep_ms: Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = ()>>> + 'static>>,
+  sleep_ms: Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = ()>>> + 'static>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -70,7 +70,7 @@ impl EvalContext {
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
       event_loop: Rc::new(RefCell::new(EventLoop::new())),
-      callback_sleep_ms: None,
+      sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -83,20 +83,27 @@ impl EvalContext {
     context
   }
 
-  pub fn with_callback_sleep_ms<F, Fut>(mut self, callback: F) -> Self
+  pub fn with_sleep_ms<F, Fut>(mut self, f: F) -> Self
   where
     F: Fn(u64) -> Fut + 'static,
     Fut: Future<Output = ()> + 'static,
   {
-    self.callback_sleep_ms = Some(Rc::new(move |ms: u64| Box::pin(callback(ms))));
+    self.sleep_ms = Some(Rc::new(move |ms: u64| Box::pin(f(ms))));
+    self
+  }
+
+  pub fn with_event_loop(self, event_loop: EventLoop) -> Self {
+    self.event_loop.replace(event_loop);
     self
   }
 
   #[cfg(not(target_family = "wasm"))]
-  pub fn with_blocking_sleep(self) -> Self {
-    self.with_callback_sleep_ms(async |ms| {
-      std::thread::sleep(std::time::Duration::from_millis(ms));
-    })
+  pub fn with_std_time(self) -> Self {
+    self
+      .with_event_loop(EventLoop::new().with_std_time())
+      .with_sleep_ms(async |ms| {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+      })
   }
 
   pub fn with_stdout(mut self, stdout: OutputSink) -> Self {
@@ -241,7 +248,7 @@ impl EvalContext {
   }
 
   pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
-    let sleep_ms = self.callback_sleep_ms.as_ref().ok_or_else(|| {
+    let sleep_ms = self.sleep_ms.as_ref().ok_or_else(|| {
       EvalError::Generic(
         "environment does not support timers (missing callback_sleep_ms)".to_string(),
       )
@@ -254,8 +261,8 @@ impl EvalContext {
     self.event_loop.borrow().count_pending()
   }
 
-  pub fn next_event_deadline(&self) -> Option<Instant> {
-    self.event_loop.borrow_mut().next_deadline()
+  pub fn next_event_delay(&self) -> Option<Duration> {
+    self.event_loop.borrow_mut().next_delay()
   }
 
   pub async fn poll_event(&mut self) -> Result<(), EvalError> {

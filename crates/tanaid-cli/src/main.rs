@@ -3,6 +3,7 @@ use std::{
   fs,
   io::{self, IsTerminal},
   process::ExitCode,
+  time::Instant,
 };
 use tanaid::{eval, parser};
 use tanaid_cli::repl::run_repl;
@@ -35,7 +36,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
   let args = Args::parse();
-  let mut context = eval::EvalContext::new().with_blocking_sleep();
+  let mut context = eval::EvalContext::new().with_std_time();
 
   let mut tk = Tk::new();
   tk.install(&mut context)?;
@@ -130,14 +131,14 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       return;
     }
 
-    let next_deadline = self.context.next_event_deadline();
-    if next_deadline.is_none() && !self.had_window {
+    let next_delay = self.context.next_event_delay();
+    if next_delay.is_none() && !self.had_window {
       event_loop.exit();
       return;
     }
 
-    match next_deadline {
-      Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
+    match next_delay {
+      Some(delay) => event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay)),
       None => event_loop.set_control_flow(ControlFlow::Wait),
     }
   }

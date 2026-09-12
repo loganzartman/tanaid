@@ -41,7 +41,7 @@ self.onmessage = async ({ data: { source } }) => {
       },
     });
 
-    const value = interp.run(source);
+    const value = await interp.run(source);
     flushStdout();
     self.postMessage({
       type: "result",

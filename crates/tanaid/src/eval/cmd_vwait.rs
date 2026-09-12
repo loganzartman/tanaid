@@ -1,7 +1,6 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::value::Value;
 use std::collections::HashMap;
-use std::time::Instant;
 
 struct VwaitOptions<'a> {
   vars: Vec<&'a str>,
@@ -39,9 +38,8 @@ async fn eval_vwait<'a>(
   }
 
   loop {
-    match context.next_event_deadline() {
-      Some(deadline) => {
-        let delay = deadline.saturating_duration_since(Instant::now());
+    match context.next_event_delay() {
+      Some(delay) => {
         context.sleep_ms(delay.as_millis() as u64).await?;
       }
       None => break,
