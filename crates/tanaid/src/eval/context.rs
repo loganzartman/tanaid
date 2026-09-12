@@ -239,7 +239,7 @@ impl EvalContext {
       self
         .event_loop
         .borrow_mut()
-        .start_timer(timer_script, delay_ms),
+        .start_timer(timer_script, delay_ms)?,
     );
   }
 
@@ -262,12 +262,12 @@ impl EvalContext {
     self.event_loop.borrow().count_pending()
   }
 
-  pub fn next_event_delay(&self) -> Option<Duration> {
-    self.event_loop.borrow_mut().next_delay()
+  pub fn next_event_delay(&self) -> Result<Option<Duration>, EvalError> {
+    Ok(self.event_loop.borrow_mut().next_delay()?)
   }
 
-  pub fn clock_monotonic(&self) -> Duration {
-    self.event_loop.borrow().clock_monotonic()
+  pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
+    Ok(self.event_loop.borrow().clock_monotonic()?)
   }
 
   pub async fn poll_event(&mut self) -> Result<bool, EvalError> {

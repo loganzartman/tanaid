@@ -35,22 +35,22 @@ impl EventLoop {
     self.with_clock_monotonic(move || std::time::Instant::now().duration_since(start))
   }
 
-  pub fn clock_monotonic(&self) -> Duration {
-    self
-      .clock_monotonic
-      .as_ref()
-      .expect("EventLoop missing clock_monotonic function")()
+  pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
+    let clock_monotonic = self.clock_monotonic.as_ref().ok_or_else(|| {
+      EvalError::Generic("EventLoop missing clock_monotonic callback".to_string())
+    })?;
+    Ok(clock_monotonic())
   }
 
-  pub fn start_timer(&mut self, callback: ScriptNode, delay_ms: u64) -> TimerId {
+  pub fn start_timer(&mut self, callback: ScriptNode, delay_ms: u64) -> Result<TimerId, EvalError> {
     let timer_id = self.timer_id;
     self.timer_id = self.timer_id.strict_add(1);
     self.timer_queue.push(Reverse((
-      self.clock_monotonic() + Duration::from_millis(delay_ms),
+      self.clock_monotonic()? + Duration::from_millis(delay_ms),
       timer_id,
     )));
     self.pending_timers.insert(timer_id, callback);
-    timer_id
+    Ok(timer_id)
   }
 
   pub fn cancel_timer(&mut self, timer_id: TimerId) {
@@ -63,11 +63,14 @@ impl EventLoop {
 
   /// Take the next elapsed timer, if any.
   pub fn take_elapsed(&mut self) -> Result<Option<(TimerId, ScriptNode)>, EvalError> {
-    while self
-      .timer_queue
-      .peek()
-      .is_some_and(|Reverse((fires_at, _))| *fires_at <= self.clock_monotonic())
-    {
+    loop {
+      let Some(Reverse((next_fires_at, _))) = self.timer_queue.peek() else {
+        break;
+      };
+      if *next_fires_at > self.clock_monotonic()? {
+        break;
+      }
+
       let Reverse((_, timer_id)) = self.timer_queue.pop().unwrap();
       if !self.pending_timers.contains_key(&timer_id) {
         // cancelled
@@ -79,15 +82,15 @@ impl EventLoop {
   }
 
   /// Compute the delay for the next pending timer.
-  pub fn next_delay(&mut self) -> Option<Duration> {
+  pub fn next_delay(&mut self) -> Result<Option<Duration>, EvalError> {
     while let Some(Reverse((fires_at, timer_id))) = self.timer_queue.peek() {
       if self.pending_timers.contains_key(&timer_id) {
-        return Some(fires_at.saturating_sub(self.clock_monotonic()));
+        return Ok(Some(fires_at.saturating_sub(self.clock_monotonic()?)));
       }
       self.timer_queue.pop();
     }
 
-    None
+    Ok(None)
   }
 }
 

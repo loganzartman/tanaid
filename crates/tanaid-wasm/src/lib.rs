@@ -135,7 +135,7 @@ impl Interpreter {
 
   async fn run_event_loop(&self) -> Result<(), JsError> {
     while self.context.borrow().count_pending_events() > 0 {
-      let Some(delay) = self.context.borrow().next_event_delay() else {
+      let Some(delay) = self.context.borrow().next_event_delay()? else {
         break;
       };
 

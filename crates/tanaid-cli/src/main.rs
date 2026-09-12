@@ -131,7 +131,10 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       return;
     }
 
-    let next_delay = self.context.next_event_delay();
+    let next_delay = self
+      .context
+      .next_event_delay()
+      .expect("clock should be configured");
     if next_delay.is_none() && !self.had_window {
       event_loop.exit();
       return;

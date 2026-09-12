@@ -1,4 +1,5 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
+use crate::eval_error::EvalError;
 use crate::{eval::context::GLOBAL_FRAME, value::Value};
 use std::collections::HashMap;
 
@@ -15,7 +16,11 @@ pub(super) async fn eval(
     [var] => VwaitOptions {
       vars: vec![var.repr_str()?],
     },
-    _ => todo!("vwait with options not supported"),
+    _ => {
+      return Err(EvalError::ArgumentError(
+        "vwait with options not supported; expected: vwait variable".to_string(),
+      ));
+    }
   };
 
   eval_vwait(opts, context).await
@@ -29,7 +34,7 @@ async fn eval_vwait<'a>(opts: VwaitOptions<'a>, context: &mut EvalContext) -> Ev
 
   'outer: loop {
     // TODO: wait for future events when no timers pending
-    let Some(delay) = context.next_event_delay() else {
+    let Some(delay) = context.next_event_delay()? else {
       break;
     };
 

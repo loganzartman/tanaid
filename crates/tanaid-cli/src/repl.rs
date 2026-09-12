@@ -154,7 +154,11 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
 
     self.tk.context.handle_about_to_wait(event_loop);
 
-    match self.context.next_event_delay() {
+    match self
+      .context
+      .next_event_delay()
+      .expect("clock should be configured")
+    {
       Some(delay) => {
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
       }

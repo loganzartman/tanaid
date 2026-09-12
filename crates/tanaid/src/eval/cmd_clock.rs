@@ -8,7 +8,7 @@ pub(super) fn eval(
 ) -> EvalCmdResult {
   match args {
     [arg] if arg.to_string() == "monotonic" => {
-      Ok(Value::from(context.clock_monotonic().as_millis() as i64))
+      Ok(Value::from(context.clock_monotonic()?.as_millis() as i64))
     }
     _ => Err(EvalError::ArgumentError(
       "unsupported clock subcommand; expects: clock monotonic".to_string(),
