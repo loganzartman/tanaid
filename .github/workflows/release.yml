@@ -32,10 +32,16 @@ jobs:
         run: cargo publish --locked -p tanaid
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish tanaid-tk
+        run: cargo publish --locked -p tanaid-tk
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE: allow
       - name: Publish tanaid-cli
         run: cargo publish --locked -p tanaid-cli
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE: allow
 
   publish-npm:
     needs: verify-version

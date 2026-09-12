@@ -1,7 +1,12 @@
 {
   "name": "tanaid-tcl",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/loganzartman/tanaid.git",
+    "directory": "packages/tanaid"
+  },
   "files": [
     "dist"
   ],

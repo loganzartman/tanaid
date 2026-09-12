@@ -4,12 +4,12 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
-version = "0.2.0"
+version = "0.2.1"
 
 [workspace.dependencies]
 pollster = "1.0.1"
-tanaid = { path = "crates/tanaid", version = "0.2.0" }
-tanaid-tk = { path = "crates/tanaid-tk", version = "0.2.0" }
+tanaid = { path = "crates/tanaid", version = "0.2.1" }
+tanaid-tk = { path = "crates/tanaid-tk", version = "0.2.1" }
 winit = "0.30"
 
 [workspace.lints.rust]

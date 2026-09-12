@@ -1918,7 +1918,7 @@ dependencies = [
 
 [[package]]
 name = "tanaid"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "lru",
  "pollster",
@@ -1927,7 +1927,7 @@ dependencies = [
 
 [[package]]
 name = "tanaid-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "pollster",
@@ -1939,7 +1939,7 @@ dependencies = [
 
 [[package]]
 name = "tanaid-tk"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "indexmap",
  "softbuffer",
@@ -1949,7 +1949,7 @@ dependencies = [
 
 [[package]]
 name = "tanaid-wasm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
