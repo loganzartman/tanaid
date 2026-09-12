@@ -15,7 +15,7 @@ pub(super) fn eval(
       context.clock_monotonic()?.saturating_cast::<i64>(),
     )),
     _ => Err(EvalError::ArgumentError(
-      "unsupported clock subcommand; expects: clock monotonic".to_string(),
+      "unsupported clock subcommand".to_string(),
     )),
   }
 }

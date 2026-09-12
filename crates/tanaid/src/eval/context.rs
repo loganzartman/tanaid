@@ -126,7 +126,7 @@ impl EvalContext {
       .with_clock_unixtime_ms(|| {
         std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
-          .expect("system time error")
+          .expect("system clock set before UNIX_EPOCH")
           .as_millis()
           .saturating_cast::<i64>()
       })
