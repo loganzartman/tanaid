@@ -37,7 +37,7 @@ async fn eval_vwait<'a>(
     );
   }
 
-  loop {
+  'outer: loop {
     match context.next_event_delay() {
       Some(delay) => {
         context.sleep_ms(delay.as_millis() as u64).await?;
@@ -54,7 +54,7 @@ async fn eval_vwait<'a>(
         .cloned()
         .unwrap_or(Value::none());
       if new_val.ne(&mut old_val)?.repr_bool()? {
-        break;
+        break 'outer;
       }
     }
   }
