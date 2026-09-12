@@ -13,7 +13,7 @@ pub(super) async fn eval(
 ) -> EvalCmdResult {
   match args {
     [] => eval_update(context, Tasks::All).await,
-    [arg] if arg.to_string() == "idle" => eval_update(context, Tasks::Idle).await,
+    [arg] if arg.to_string() == "idletasks" => eval_update(context, Tasks::Idle).await,
     _ => Err(EvalError::ArgumentError(
       "wrong arguments, expects: update ?idletasks?".to_string(),
     )),

@@ -124,8 +124,7 @@ impl Interpreter {
         .await
         .map_err(|e| JsError::new(e.to_string().as_str()))
     }?;
-
-    self.run_event_loop().await?;
+    notify_event_loop_status(self)?;
 
     match result.repr_str() {
       Ok(result_str) => Ok(JsValue::from_str(result_str)),
@@ -133,7 +132,8 @@ impl Interpreter {
     }
   }
 
-  async fn run_event_loop(&self) -> Result<(), JsError> {
+  #[wasm_bindgen(js_name = "runEventLoop")]
+  pub async fn run_event_loop(&self) -> Result<(), JsError> {
     while self.context.borrow().count_pending_events() > 0 {
       let Some(delay) = self.context.borrow().next_event_delay()? else {
         break;
@@ -153,89 +153,6 @@ impl Interpreter {
     Ok(())
   }
 }
-
-/*
-fn apply_timer_actions(
-  interpreter: &Interpreter,
-  timer_actions: Vec<TimerAction>,
-) -> Result<(), JsError> {
-  for action in timer_actions {
-    match action {
-      TimerAction::Start { timer_id, delay_ms } => {
-        let Ok(delay_ms_i32) = i32::try_from(delay_ms) else {
-          wasm_bindgen::throw_val(JsError::new("invalid delay").into())
-        };
-
-        let callback_interpreter = interpreter.clone();
-
-        let callback = ScopedClosure::<dyn FnMut()>::own_aborting(move || {
-          let fire_result = callback_interpreter
-            .context
-            .borrow_mut()
-            .fire_timer(timer_id);
-
-          callback_interpreter
-            .timeout_ids
-            .borrow_mut()
-            .remove(&timer_id);
-
-          let timer_actions = callback_interpreter
-            .context
-            .borrow_mut()
-            .take_timer_actions();
-
-          match apply_timer_actions(&callback_interpreter, timer_actions) {
-            Err(e) => wasm_bindgen::throw_val(e.into()),
-            Ok(()) => {}
-          }
-
-          if let Err(e) = fire_result {
-            wasm_bindgen::throw_val(JsError::new(e.to_string().as_str()).into())
-          }
-
-          if let Err(e) = notify_if_event_loop_empty(&callback_interpreter) {
-            wasm_bindgen::throw_val(e.into())
-          }
-        })
-        .into_js_value();
-
-        let timeout_id: JsValue = interpreter
-          .set_timeout
-          .call2(
-            &JsValue::UNDEFINED,
-            callback.as_ref(),
-            &JsValue::from(delay_ms_i32),
-          )
-          .map_err(js_value_to_error)?;
-
-        interpreter
-          .timeout_ids
-          .borrow_mut()
-          .insert(timer_id, timeout_id);
-      }
-      TimerAction::Cancel { timer_id } => {
-        let timeout_ids = interpreter.timeout_ids.clone();
-
-        {
-          let timeout_ids = timeout_ids.borrow();
-          let timeout_id = timeout_ids.get(&timer_id);
-
-          if let Some(timeout_id) = timeout_id {
-            interpreter
-              .clear_timeout
-              .call1(&JsValue::UNDEFINED, timeout_id)
-              .map_err(js_value_to_error)?;
-          }
-        }
-
-        timeout_ids.borrow_mut().remove(&timer_id);
-      }
-    }
-  }
-
-  Ok(())
-}
-*/
 
 fn notify_event_loop_status(interpreter: &Interpreter) -> Result<(), JsError> {
   let n_pending = interpreter.context.borrow().count_pending_events();
