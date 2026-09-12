@@ -14,6 +14,7 @@ pub(super) fn eval(
     [arg] if arg.to_string() == "monotonic" => Ok(Value::from(
       context.clock_monotonic()?.saturating_cast::<i64>(),
     )),
+    [arg] if arg.to_string() == "seconds" => Ok(Value::from(context.clock_unixtime()? / 1000)),
     _ => Err(EvalError::ArgumentError(
       "unsupported clock subcommand".to_string(),
     )),

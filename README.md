@@ -67,7 +67,10 @@ implements a small subset of Tcl. the supported subset is Tcl-compatible (runs i
   - `after ms ?script script script ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/after.html#M6)
   - `after cancel id` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/after.html#M7)
   - `break` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/break.html)
-  - `clock monotonic`
+  - `clock clicks` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/clock.html)
+  - `clock milliseconds` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/clock.html)
+  - `clock monotonic` [[ref]](https://www.tcl-lang.org/man/tcl9.1/TclCmd/clock.html)
+  - `clock seconds` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/clock.html)
   - `continue` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/continue.html)
   - `dict create ?key value ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M6)
   - `dict get dictValue ?key ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M13)
