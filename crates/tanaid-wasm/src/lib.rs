@@ -96,7 +96,7 @@ impl Interpreter {
       .dyn_into::<web_sys::Performance>()
       .expect("globalThis.performance should be a Performance object");
 
-    let now = move || {
+    let clock_monotonic = move || {
       let now = performance.now();
       Duration::from_millis(now.ceil() as u64)
     };
@@ -104,7 +104,7 @@ impl Interpreter {
     let context = EvalContext::new()
       .with_stdout(stdout)
       .with_sleep_ms(sleep_ms)
-      .with_event_loop(EventLoop::new().with_now(now));
+      .with_event_loop(EventLoop::new().with_clock_monotonic(clock_monotonic));
 
     Ok(Interpreter {
       context: Rc::new(RefCell::new(context)),

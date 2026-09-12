@@ -9,7 +9,7 @@ use crate::{eval_error::EvalError, parser::ScriptNode};
 type TimerId = usize;
 
 pub struct EventLoop {
-  now: Option<Box<dyn Fn() -> Duration>>,
+  clock_monotonic: Option<Box<dyn Fn() -> Duration>>,
   timer_id: TimerId,
   pending_timers: HashMap<TimerId, ScriptNode>,
   timer_queue: BinaryHeap<Reverse<(Duration, TimerId)>>,
@@ -18,32 +18,35 @@ pub struct EventLoop {
 impl EventLoop {
   pub fn new() -> EventLoop {
     EventLoop {
-      now: None,
+      clock_monotonic: None,
       timer_id: 1,
       pending_timers: HashMap::new(),
       timer_queue: BinaryHeap::new(),
     }
   }
 
-  pub fn with_now(mut self, now: impl Fn() -> Duration + 'static) -> Self {
-    self.now = Some(Box::new(now));
+  pub fn with_clock_monotonic(mut self, clock_monotonic: impl Fn() -> Duration + 'static) -> Self {
+    self.clock_monotonic = Some(Box::new(clock_monotonic));
     self
   }
 
   pub fn with_std_time(self) -> Self {
     let start = std::time::Instant::now();
-    self.with_now(move || std::time::Instant::now().duration_since(start))
+    self.with_clock_monotonic(move || std::time::Instant::now().duration_since(start))
   }
 
-  pub fn now(&self) -> Duration {
-    self.now.as_ref().expect("EventLoop missing now function")()
+  pub fn clock_monotonic(&self) -> Duration {
+    self
+      .clock_monotonic
+      .as_ref()
+      .expect("EventLoop missing clock_monotonic function")()
   }
 
   pub fn start_timer(&mut self, callback: ScriptNode, delay_ms: u64) -> TimerId {
     let timer_id = self.timer_id;
     self.timer_id = self.timer_id.strict_add(1);
     self.timer_queue.push(Reverse((
-      self.now() + Duration::from_millis(delay_ms),
+      self.clock_monotonic() + Duration::from_millis(delay_ms),
       timer_id,
     )));
     self.pending_timers.insert(timer_id, callback);
@@ -63,7 +66,7 @@ impl EventLoop {
     while self
       .timer_queue
       .peek()
-      .is_some_and(|Reverse((fires_at, _))| *fires_at <= self.now())
+      .is_some_and(|Reverse((fires_at, _))| *fires_at <= self.clock_monotonic())
     {
       let Reverse((_, timer_id)) = self.timer_queue.pop().unwrap();
       if !self.pending_timers.contains_key(&timer_id) {
@@ -79,7 +82,7 @@ impl EventLoop {
   pub fn next_delay(&mut self) -> Option<Duration> {
     while let Some(Reverse((fires_at, timer_id))) = self.timer_queue.peek() {
       if self.pending_timers.contains_key(&timer_id) {
-        return Some(fires_at.saturating_sub(self.now()));
+        return Some(fires_at.saturating_sub(self.clock_monotonic()));
       }
       self.timer_queue.pop();
     }

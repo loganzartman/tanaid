@@ -1587,12 +1587,12 @@ async fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn context_with_test_clock() -> EvalContext {
-  let now = Rc::new(Cell::new(Duration::ZERO));
-  let event_clock = now.clone();
-  let sleep_clock = now.clone();
+  let clock_monotonic = Rc::new(Cell::new(Duration::ZERO));
+  let event_clock = clock_monotonic.clone();
+  let sleep_clock = clock_monotonic.clone();
 
   EvalContext::new()
-    .with_event_loop(EventLoop::new().with_now(move || event_clock.get()))
+    .with_event_loop(EventLoop::new().with_clock_monotonic(move || event_clock.get()))
     .with_sleep_ms(move |ms| {
       sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
       async {}
