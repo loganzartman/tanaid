@@ -1,9 +1,13 @@
 use super::*;
 use crate::eval::context::GLOBAL_FRAME;
+use crate::eval::event_loop::EventLoop;
 use crate::eval_error::EvalError;
 use crate::parser::{self, CommandNode, ScriptNode, WordNode, WordPart};
 use crate::value::Value;
 use std::assert_matches;
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::Duration;
 
 #[pollster::test]
 async fn eval_set_var_name() -> Result<(), Box<dyn std::error::Error>> {
@@ -1579,6 +1583,57 @@ async fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
   )
   .await?;
   assert_eq!(result.repr_str()?, "12 3");
+  Ok(())
+}
+
+fn context_with_test_clock() -> EvalContext {
+  let now = Rc::new(Cell::new(Duration::ZERO));
+  let event_clock = now.clone();
+  let sleep_clock = now.clone();
+
+  EvalContext::new()
+    .with_event_loop(EventLoop::new().with_now(move || event_clock.get()))
+    .with_sleep_ms(move |ms| {
+      sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
+      async {}
+    })
+}
+
+#[pollster::test]
+async fn eval_vwait_ignores_unrelated_events() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = context_with_test_clock();
+  eval(
+    &parser::parse(
+      "set watched 0; after 10 {set other 1}; after 20 {set watched 1}; vwait watched",
+    )?,
+    &mut ctx,
+  )
+  .await?;
+
+  assert_eq!(
+    ctx
+      .get_variable(GLOBAL_FRAME, "other")
+      .unwrap()
+      .clone()
+      .repr_int()?,
+    1
+  );
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_vwait_leaves_later_events_pending() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = context_with_test_clock();
+  eval(
+    &parser::parse(
+      "set watched 0; after 10 {set watched 1}; after 20 {set later 1}; vwait watched",
+    )?,
+    &mut ctx,
+  )
+  .await?;
+
+  assert!(ctx.get_variable(GLOBAL_FRAME, "later").is_none());
+  assert_eq!(ctx.count_pending_events(), 1);
   Ok(())
 }
 
