@@ -1,6 +1,9 @@
 packages:
   - "packages/*"
 
+catalog:
+  typescript: ^7.0.2
+
 # wasm-pack ships a postinstall that fetches its binary from the upstream GitHub release
 allowBuilds:
   wasm-pack: true
