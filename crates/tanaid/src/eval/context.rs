@@ -265,6 +265,10 @@ impl EvalContext {
     self.event_loop.borrow_mut().next_delay()
   }
 
+  pub fn clock_monotonic(&self) -> Duration {
+    self.event_loop.borrow().clock_monotonic()
+  }
+
   pub async fn poll_event(&mut self) -> Result<(), EvalError> {
     let Some((_, script)) = self.event_loop.borrow_mut().take_elapsed()? else {
       return Ok(());

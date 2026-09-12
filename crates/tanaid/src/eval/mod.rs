@@ -5,6 +5,7 @@ use crate::value::Value;
 mod cmd;
 mod cmd_after;
 mod cmd_break;
+mod cmd_clock;
 mod cmd_continue;
 mod cmd_dict;
 mod cmd_expr;

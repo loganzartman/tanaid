@@ -4,7 +4,7 @@ use super::{
   cmd_lreverse, cmd_lset, cmd_package, cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string,
   cmd_unknown, cmd_uplevel, cmd_upvar, cmd_vwait, cmd_while,
 };
-use crate::eval::cmd_update;
+use crate::eval::{cmd_clock, cmd_update};
 use crate::eval_error::EvalError;
 use crate::value::Value;
 
@@ -13,6 +13,7 @@ pub type EvalCmdResult = Result<Value, EvalError>;
 pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_async_command("after", cmd_after::eval);
   context.register_command("break", cmd_break::eval);
+  context.register_command("clock", cmd_clock::eval);
   context.register_command("continue", cmd_continue::eval);
   context.register_command("dict", cmd_dict::eval);
   context.register_async_command("expr", cmd_expr::eval);
