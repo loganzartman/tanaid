@@ -269,13 +269,13 @@ impl EvalContext {
     self.event_loop.borrow().clock_monotonic()
   }
 
-  pub async fn poll_event(&mut self) -> Result<(), EvalError> {
+  pub async fn poll_event(&mut self) -> Result<bool, EvalError> {
     let Some((_, script)) = self.event_loop.borrow_mut().take_elapsed()? else {
-      return Ok(());
+      return Ok(false);
     };
 
     eval_returnable_script(&script, self, GLOBAL_FRAME).await?;
-    Ok(())
+    Ok(true)
   }
 
   pub fn parse_script_caching(

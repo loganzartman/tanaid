@@ -26,13 +26,10 @@ async fn eval_update(context: &mut EvalContext, tasks: Tasks) -> EvalCmdResult {
     _ => return Err(EvalError::NotImplemented),
   }
 
-  while context.count_pending_events() > 0 {
-    let Some(delay) = context.next_event_delay() else {
+  loop {
+    if !context.poll_event().await? {
       break;
-    };
-
-    context.sleep_ms(delay.as_millis() as u64).await?;
-    context.poll_event().await?;
+    }
   }
 
   Ok(Value::none())

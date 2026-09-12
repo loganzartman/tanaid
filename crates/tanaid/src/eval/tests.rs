@@ -1600,6 +1600,20 @@ fn context_with_test_clock() -> EvalContext {
 }
 
 #[pollster::test]
+async fn eval_update_does_not_fire_future_timer() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = context_with_test_clock();
+  eval(
+    &parser::parse("after 10 {set future 1}; update")?,
+    &mut ctx,
+  )
+  .await?;
+
+  assert!(ctx.get_variable(GLOBAL_FRAME, "future").is_none());
+  assert_eq!(ctx.count_pending_events(), 1);
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_vwait_ignores_unrelated_events() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = context_with_test_clock();
   eval(
