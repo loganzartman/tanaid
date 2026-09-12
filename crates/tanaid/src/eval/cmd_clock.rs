@@ -7,9 +7,13 @@ pub(super) fn eval(
   _frame: FrameId,
 ) -> EvalCmdResult {
   match args {
-    [arg] if arg.to_string() == "monotonic" => {
-      Ok(Value::from(context.clock_monotonic()?.as_millis() as i64))
-    }
+    [arg] if arg.to_string() == "clicks" => Ok(Value::from(
+      context.clock_monotonic()?.saturating_cast::<i64>(),
+    )),
+    [arg] if arg.to_string() == "milliseconds" => Ok(Value::from(context.clock_unixtime()?)),
+    [arg] if arg.to_string() == "monotonic" => Ok(Value::from(
+      context.clock_monotonic()?.saturating_cast::<i64>(),
+    )),
     _ => Err(EvalError::ArgumentError(
       "unsupported clock subcommand; expects: clock monotonic".to_string(),
     )),

@@ -1,6 +1,5 @@
 use super::*;
 use crate::eval::context::GLOBAL_FRAME;
-use crate::eval::event_loop::EventLoop;
 use crate::eval_error::EvalError;
 use crate::parser::{self, CommandNode, ScriptNode, WordNode, WordPart};
 use crate::value::Value;
@@ -1592,7 +1591,7 @@ fn context_with_test_clock() -> EvalContext {
   let sleep_clock = clock_monotonic.clone();
 
   EvalContext::new()
-    .with_event_loop(EventLoop::new().with_clock_monotonic(move || event_clock.get()))
+    .with_clock_monotonic_us(move || event_clock.get().as_micros().saturating_cast::<u64>())
     .with_sleep_ms(move |ms| {
       sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
       async { Ok(()) }

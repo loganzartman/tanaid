@@ -4,12 +4,11 @@ use std::{
   time::Duration,
 };
 
-use crate::{eval_error::EvalError, parser::ScriptNode};
+use crate::parser::ScriptNode;
 
 type TimerId = usize;
 
 pub struct EventLoop {
-  clock_monotonic: Option<Box<dyn Fn() -> Duration>>,
   timer_id: TimerId,
   pending_timers: HashMap<TimerId, ScriptNode>,
   timer_queue: BinaryHeap<Reverse<(Duration, TimerId)>>,
@@ -18,39 +17,18 @@ pub struct EventLoop {
 impl EventLoop {
   pub fn new() -> EventLoop {
     EventLoop {
-      clock_monotonic: None,
       timer_id: 1,
       pending_timers: HashMap::new(),
       timer_queue: BinaryHeap::new(),
     }
   }
 
-  pub fn with_clock_monotonic(mut self, clock_monotonic: impl Fn() -> Duration + 'static) -> Self {
-    self.clock_monotonic = Some(Box::new(clock_monotonic));
-    self
-  }
-
-  pub fn with_std_time(self) -> Self {
-    let start = std::time::Instant::now();
-    self.with_clock_monotonic(move || std::time::Instant::now().duration_since(start))
-  }
-
-  pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
-    let clock_monotonic = self.clock_monotonic.as_ref().ok_or_else(|| {
-      EvalError::Generic("EventLoop missing clock_monotonic callback".to_string())
-    })?;
-    Ok(clock_monotonic())
-  }
-
-  pub fn start_timer(&mut self, callback: ScriptNode, delay_ms: u64) -> Result<TimerId, EvalError> {
+  pub fn start_timer(&mut self, now: Duration, callback: ScriptNode, delay: Duration) -> TimerId {
     let timer_id = self.timer_id;
     self.timer_id = self.timer_id.strict_add(1);
-    self.timer_queue.push(Reverse((
-      self.clock_monotonic()? + Duration::from_millis(delay_ms),
-      timer_id,
-    )));
+    self.timer_queue.push(Reverse((now + delay, timer_id)));
     self.pending_timers.insert(timer_id, callback);
-    Ok(timer_id)
+    timer_id
   }
 
   pub fn cancel_timer(&mut self, timer_id: TimerId) {
@@ -62,12 +40,12 @@ impl EventLoop {
   }
 
   /// Take the next elapsed timer, if any.
-  pub fn take_elapsed(&mut self) -> Result<Option<(TimerId, ScriptNode)>, EvalError> {
+  pub fn take_elapsed(&mut self, now: Duration) -> Option<(TimerId, ScriptNode)> {
     loop {
       let Some(Reverse((next_fires_at, _))) = self.timer_queue.peek() else {
         break;
       };
-      if *next_fires_at > self.clock_monotonic()? {
+      if *next_fires_at > now {
         break;
       }
 
@@ -76,21 +54,20 @@ impl EventLoop {
         // cancelled
         continue;
       }
-      return Ok(Some(self.pending_timers.remove_entry(&timer_id).unwrap()));
+      return Some(self.pending_timers.remove_entry(&timer_id).unwrap());
     }
-    Ok(None)
+    None
   }
 
   /// Compute the delay for the next pending timer.
-  pub fn next_delay(&mut self) -> Result<Option<Duration>, EvalError> {
+  pub fn next_delay(&mut self, now: Duration) -> Option<Duration> {
     while let Some(Reverse((fires_at, timer_id))) = self.timer_queue.peek() {
       if self.pending_timers.contains_key(&timer_id) {
-        return Ok(Some(fires_at.saturating_sub(self.clock_monotonic()?)));
+        return Some(fires_at.saturating_sub(now));
       }
       self.timer_queue.pop();
     }
-
-    Ok(None)
+    None
   }
 }
 

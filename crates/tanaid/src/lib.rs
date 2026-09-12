@@ -1,3 +1,5 @@
+#![feature(integer_casts)]
+
 pub mod eval;
 pub mod eval_error;
 pub mod parser;

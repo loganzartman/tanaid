@@ -29,6 +29,9 @@ pub struct EvalContext {
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
   event_loop: RefCell<EventLoop>,
+
+  clock_monotonic_us: Option<Box<dyn Fn() -> u64>>,
+  clock_unixtime_ms: Option<Box<dyn Fn() -> i64>>,
   sleep_ms:
     Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = Result<(), EvalError>>>> + 'static>>,
 
@@ -71,6 +74,9 @@ impl EvalContext {
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
       event_loop: RefCell::new(EventLoop::new()),
+
+      clock_monotonic_us: None,
+      clock_unixtime_ms: None,
       sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -93,18 +99,36 @@ impl EvalContext {
     self
   }
 
-  pub fn with_event_loop(self, event_loop: EventLoop) -> Self {
-    self.event_loop.replace(event_loop);
+  pub fn with_clock_monotonic_us(mut self, f: impl Fn() -> u64 + 'static) -> Self {
+    self.clock_monotonic_us = Some(Box::new(f));
+    self
+  }
+
+  pub fn with_clock_unixtime_ms(mut self, f: impl Fn() -> i64 + 'static) -> Self {
+    self.clock_unixtime_ms = Some(Box::new(f));
     self
   }
 
   #[cfg(not(target_family = "wasm"))]
   pub fn with_std_time(self) -> Self {
+    let start = std::time::Instant::now();
     self
-      .with_event_loop(EventLoop::new().with_std_time())
       .with_sleep_ms(async |ms| {
         std::thread::sleep(std::time::Duration::from_millis(ms));
         Ok(())
+      })
+      .with_clock_monotonic_us(move || {
+        std::time::Instant::now()
+          .duration_since(start)
+          .as_micros()
+          .saturating_cast::<u64>()
+      })
+      .with_clock_unixtime_ms(|| {
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .expect("system time error")
+          .as_millis()
+          .saturating_cast::<i64>()
       })
   }
 
@@ -236,12 +260,11 @@ impl EvalContext {
     timer_script: ScriptNode,
     delay_ms: u64,
   ) -> Result<usize, EvalError> {
-    return Ok(
-      self
-        .event_loop
-        .borrow_mut()
-        .start_timer(timer_script, delay_ms)?,
-    );
+    return Ok(self.event_loop.borrow_mut().start_timer(
+      Duration::from_micros(self.clock_monotonic()?),
+      timer_script,
+      Duration::from_millis(delay_ms),
+    ));
   }
 
   pub fn cancel_timer(&mut self, timer_id: usize) -> Result<(), EvalError> {
@@ -263,15 +286,32 @@ impl EvalContext {
   }
 
   pub fn next_event_delay(&self) -> Result<Option<Duration>, EvalError> {
-    Ok(self.event_loop.borrow_mut().next_delay()?)
+    Ok(
+      self
+        .event_loop
+        .borrow_mut()
+        .next_delay(Duration::from_micros(self.clock_monotonic()?)),
+    )
   }
 
-  pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
-    Ok(self.event_loop.borrow().clock_monotonic()?)
+  pub fn clock_monotonic(&self) -> Result<u64, EvalError> {
+    Ok(self.clock_monotonic_us.as_ref().ok_or_else(|| {
+      EvalError::Generic("Context missing clock_monotonic".to_string())
+    })?())
+  }
+
+  pub fn clock_unixtime(&self) -> Result<i64, EvalError> {
+    Ok(self.clock_unixtime_ms.as_ref().ok_or_else(|| {
+      EvalError::Generic("Context missing clock_unixtime".to_string())
+    })?())
   }
 
   pub async fn poll_event(&mut self) -> Result<bool, EvalError> {
-    let Some((_, script)) = self.event_loop.borrow_mut().take_elapsed()? else {
+    let Some((_, script)) = self
+      .event_loop
+      .borrow_mut()
+      .take_elapsed(Duration::from_micros(self.clock_monotonic()?))
+    else {
       return Ok(false);
     };
 
