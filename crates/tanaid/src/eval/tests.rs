@@ -1595,18 +1595,14 @@ fn context_with_test_clock() -> EvalContext {
     .with_event_loop(EventLoop::new().with_clock_monotonic(move || event_clock.get()))
     .with_sleep_ms(move |ms| {
       sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
-      async {}
+      async { Ok(()) }
     })
 }
 
 #[pollster::test]
 async fn eval_update_does_not_fire_future_timer() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = context_with_test_clock();
-  eval(
-    &parser::parse("after 10 {set future 1}; update")?,
-    &mut ctx,
-  )
-  .await?;
+  eval(&parser::parse("after 10 {set future 1}; update")?, &mut ctx).await?;
 
   assert!(ctx.get_variable(GLOBAL_FRAME, "future").is_none());
   assert_eq!(ctx.count_pending_events(), 1);
@@ -1652,8 +1648,8 @@ async fn eval_vwait_leaves_later_events_pending() -> Result<(), Box<dyn std::err
 }
 
 #[pollster::test]
-async fn eval_vwait_detects_same_value_write_through_alias() -> Result<(), Box<dyn std::error::Error>>
-{
+async fn eval_vwait_detects_same_value_write_through_alias()
+-> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = context_with_test_clock();
   eval(
     &parser::parse(

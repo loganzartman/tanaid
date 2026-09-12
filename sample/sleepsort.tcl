@@ -21,4 +21,3 @@ proc sleepsort {l} {
 }
 
 puts "Sorted: [sleepsort [list 100 500 300 200 800]]"
-

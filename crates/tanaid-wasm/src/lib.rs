@@ -1,3 +1,5 @@
+#![feature(integer_casts)]
+
 use js_sys::{Function, Promise, Reflect, global};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -73,28 +75,35 @@ impl Interpreter {
     let sleep_ms = move |ms: u64| {
       let set_timeout = set_timeout.clone();
       async move {
-        let done = Promise::new(&mut |res, _rej| {
-          set_timeout
-            .call2(
-              &JsValue::UNDEFINED,
-              &ScopedClosure::<dyn FnMut()>::own_aborting(move || {
-                res
-                  .call1(&JsValue::UNDEFINED, &JsValue::from(true))
-                  .expect("failed to sleep");
-              })
-              .into_js_value(),
-              &JsValue::from(ms as i32),
-            )
-            .expect("failed to sleep");
+        let done = Promise::new(&mut |resolve, reject| {
+          let callback_reject = reject.clone();
+          let callback = ScopedClosure::<dyn FnMut()>::own_aborting(move || {
+            if let Err(error) = resolve.call1(&JsValue::UNDEFINED, &JsValue::TRUE) {
+              let _ = callback_reject.call1(&JsValue::UNDEFINED, &error);
+            }
+          })
+          .into_js_value();
+
+          if let Err(error) = set_timeout.call2(
+            &JsValue::UNDEFINED,
+            &callback,
+            &JsValue::from(ms.saturating_cast::<i32>()),
+          ) {
+            let _ = reject.call1(&JsValue::UNDEFINED, &error);
+          }
         });
-        done.await.expect("failed to sleep");
+
+        done
+          .await
+          .map(|_| ())
+          .map_err(|error| EvalError::Generic(js_error_message(error)))
       }
     };
 
     let performance = Reflect::get(&global(), &"performance".into())
-      .expect("globalThis.performance should exist")
+      .map_err(js_value_to_error)?
       .dyn_into::<web_sys::Performance>()
-      .expect("globalThis.performance should be a Performance object");
+      .map_err(js_value_to_error)?;
 
     let clock_monotonic = move || {
       let now = performance.now();

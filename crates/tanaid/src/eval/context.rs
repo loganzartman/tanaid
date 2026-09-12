@@ -30,7 +30,8 @@ pub struct EvalContext {
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
   event_loop: Rc<RefCell<EventLoop>>,
-  sleep_ms: Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = ()>>> + 'static>>,
+  sleep_ms:
+    Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = Result<(), EvalError>>>> + 'static>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -87,7 +88,7 @@ impl EvalContext {
   pub fn with_sleep_ms<F, Fut>(mut self, f: F) -> Self
   where
     F: Fn(u64) -> Fut + 'static,
-    Fut: Future<Output = ()> + 'static,
+    Fut: Future<Output = Result<(), EvalError>> + 'static,
   {
     self.sleep_ms = Some(Rc::new(move |ms: u64| Box::pin(f(ms))));
     self
@@ -104,6 +105,7 @@ impl EvalContext {
       .with_event_loop(EventLoop::new().with_std_time())
       .with_sleep_ms(async |ms| {
         std::thread::sleep(std::time::Duration::from_millis(ms));
+        Ok(())
       })
   }
 
@@ -243,9 +245,9 @@ impl EvalContext {
     );
   }
 
-  pub fn cancel_timer(&mut self, timer_id: usize) -> Result<bool, EvalError> {
+  pub fn cancel_timer(&mut self, timer_id: usize) -> Result<(), EvalError> {
     self.event_loop.borrow_mut().cancel_timer(timer_id);
-    Ok(true)
+    Ok(())
   }
 
   pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
@@ -254,8 +256,7 @@ impl EvalContext {
         "environment does not support timers (missing callback_sleep_ms)".to_string(),
       )
     })?;
-    sleep_ms(ms).await;
-    Ok(())
+    sleep_ms(ms).await
   }
 
   pub fn count_pending_events(&self) -> usize {
@@ -275,6 +276,7 @@ impl EvalContext {
       return Ok(false);
     };
 
+    // TODO: bgerror (don't abort event loops)
     eval_returnable_script(&script, self, GLOBAL_FRAME).await?;
     Ok(true)
   }
