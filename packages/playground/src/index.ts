@@ -185,7 +185,9 @@ const loadSrc = () => {
 };
 
 const storeSrc = (src: string) => {
-  window.location.hash = btoa(src);
+  const url = new URL(window.location.toString());
+  url.hash = btoa(src);
+  window.location.replace(url);
 };
 
 const view = new EditorView({
