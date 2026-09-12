@@ -7,4 +7,4 @@ pnpm exec wasm-pack build crates/tanaid-wasm \
   --target bundler \
   --out-dir pkg/bundler \
   --no-pack \
-  --release
+  --dev
