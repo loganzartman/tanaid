@@ -12,6 +12,7 @@ import { tcl } from "@sourcebot/codemirror-lang-tcl";
 import { emacsTheme } from "./theme.ts";
 import TclWorker from "./tcl.worker.ts?worker";
 import "./pixel-perfect.ts";
+import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 
 const exampleSelectEl = document.getElementById("example")! as HTMLSelectElement;
 const inputContainerEl = document.getElementById("input")! as HTMLElement;
@@ -112,7 +113,7 @@ function runTcl(
       ...(timeoutMs !== undefined
         ? [
             new Promise<void>((_, rej) => {
-              timeout = setTimeout(() => {
+              timeout = window.setTimeout(() => {
                 rej(new Error(`timeout: ${timeoutMs}ms`));
               }, timeoutMs);
             }),
@@ -215,41 +216,7 @@ const view = new EditorView({
 
 evaluate(view.state.doc.toString()).catch((e) => console.error(e));
 
-const examples = {
-  "hello world": `puts "Hello, World!"`,
-
-  fibonacci: `proc fib {x} {
-  if {$x <= 0} {
-    return 0
-  }
-  if {$x == 1} {
-    return 1
-  }
-  return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
-}
-
-fib 8`,
-
-  uplevel: `proc do {body while condition} {
-  if {$while != "while"} {
-    error "required word missing"
-  }
-  set conditionCmd [list expr $condition]
-  while {1} {
-    uplevel 1 $body
-    if {[uplevel 1 $conditionCmd]} then {
-    } else {
-      break
-    }
-  }
-}
-
-set i 0
-do {
-  puts $i
-  incr i
-} while {$i < 5}`,
-};
+const examples = loadExamples();
 
 for (const [name, src] of Object.entries(examples)) {
   const option = document.createElement("option");
