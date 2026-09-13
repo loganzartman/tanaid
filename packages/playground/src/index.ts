@@ -186,9 +186,7 @@ const loadSrc = () => {
 };
 
 const storeSrc = (src: string) => {
-  const url = new URL(window.location.toString());
-  url.hash = btoa(src);
-  window.location.replace(url);
+  window.history.replaceState(null, "", `#${btoa(src)}`);
 };
 
 const view = new EditorView({
