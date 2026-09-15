@@ -5,7 +5,7 @@ use std::{
   process::ExitCode,
   time::Instant,
 };
-use tanaid::{eval, parser};
+use tanaid::{eval, event_loop::EventWait, parser};
 use tanaid_cli::repl::run_repl;
 use tanaid_tk::Tk;
 use winit::application::ApplicationHandler;
@@ -131,18 +131,27 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       return;
     }
 
-    let next_delay = self
+    let wait = self
       .context
-      .next_event_delay()
+      .next_event_wait()
       .expect("clock should be configured");
-    if next_delay.is_none() && !self.had_window {
+
+    if matches!(wait, EventWait::Idle) && !self.had_window {
       event_loop.exit();
       return;
     }
 
-    match next_delay {
-      Some(delay) => event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay)),
-      None => event_loop.set_control_flow(ControlFlow::Wait),
+    match wait {
+      EventWait::Ready => event_loop.set_control_flow(ControlFlow::Poll),
+      EventWait::Until(deadline) => {
+        let delay = self
+          .context
+          .clock_monotonic()
+          .expect("clock should be configured")
+          .saturating_sub(deadline);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
+      }
+      EventWait::Idle => event_loop.set_control_flow(ControlFlow::Wait),
     }
   }
 

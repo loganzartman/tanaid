@@ -1591,7 +1591,7 @@ fn context_with_test_clock() -> EvalContext {
   let sleep_clock = clock_monotonic.clone();
 
   EvalContext::new()
-    .with_clock_monotonic_us(move || event_clock.get().as_micros().saturating_cast::<u64>())
+    .with_clock_monotonic(move || event_clock.get())
     .with_sleep_ms(move |ms| {
       sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
       async { Ok(()) }

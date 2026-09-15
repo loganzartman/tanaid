@@ -8,6 +8,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
 use tanaid::eval::EvalContext;
+use tanaid::event_loop::EventWait;
 use tanaid::parser::ParseError;
 use tanaid::{eval, parser};
 use tanaid_tk::Tk;
@@ -156,15 +157,19 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
 
     match self
       .context
-      .next_event_delay()
+      .next_event_wait()
       .expect("clock should be configured")
     {
-      Some(delay) => {
+      EventWait::Ready => event_loop.set_control_flow(ControlFlow::Poll),
+      EventWait::Until(deadline) => {
+        let delay = self
+          .context
+          .clock_monotonic()
+          .expect("clock should be configured")
+          .saturating_sub(deadline);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
       }
-      None => {
-        event_loop.set_control_flow(ControlFlow::Wait);
-      }
+      EventWait::Idle => event_loop.set_control_flow(ControlFlow::Wait),
     }
   }
 
