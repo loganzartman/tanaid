@@ -147,13 +147,13 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
 
   fn window_event(
     &mut self,
-    event_loop: &winit::event_loop::ActiveEventLoop,
+    _event_loop: &winit::event_loop::ActiveEventLoop,
     window_id: winit::window::WindowId,
     event: WindowEvent,
   ) {
     self
       .tk
       .context
-      .handle_window_event(event_loop, window_id, event);
+      .handle_window_event(window_id, event, self.context.event_loop.clone());
   }
 }

@@ -1,4 +1,5 @@
 mod cmd;
+mod events;
 pub mod tk;
 pub mod tk_context;
 

@@ -8,6 +8,7 @@ version = "0.2.1"
 
 [workspace.dependencies]
 pollster = "1.0.1"
+regex = "1.12.4"
 tanaid = { path = "crates/tanaid", version = "0.2.1" }
 tanaid-tk = { path = "crates/tanaid-tk", version = "0.2.1" }
 winit = "0.30"

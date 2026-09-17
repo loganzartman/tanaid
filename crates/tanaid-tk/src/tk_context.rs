@@ -1,4 +1,5 @@
 use crate::cmd::canvas::CanvasWidget;
+use crate::events::EventBindings;
 use softbuffer::Surface;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ pub struct TkContext {
   pub(crate) widgets: Rc<RefCell<HashMap<String, Widget>>>,
   pub(crate) window_attributes: Rc<RefCell<Option<WindowAttributes>>>,
   pub(crate) surface: Rc<RefCell<Option<Surface<OwnedDisplayHandle, Rc<Window>>>>>,
+  pub(crate) event_bindings: Rc<RefCell<EventBindings>>,
 }
 
 pub enum Widget {
@@ -25,6 +27,7 @@ impl TkContext {
       widgets: Rc::new(RefCell::new(HashMap::new())),
       window_attributes: Rc::new(RefCell::new(None)),
       surface: Rc::new(RefCell::new(None)),
+      event_bindings: Rc::new(RefCell::new(EventBindings::new())),
     }
   }
 
@@ -90,9 +93,9 @@ impl TkContext {
 
   pub fn handle_window_event(
     &self,
-    _event_loop: &winit::event_loop::ActiveEventLoop,
     _window_id: winit::window::WindowId,
     event: winit::event::WindowEvent,
+    tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
   ) {
     match event {
       WindowEvent::Resized(_) => {
@@ -109,6 +112,15 @@ impl TkContext {
       WindowEvent::CloseRequested => {
         self.window_attributes.replace(None);
         self.surface.replace(None);
+      }
+      WindowEvent::ModifiersChanged(mods) => {
+        self.event_bindings.borrow_mut().handle_modifiers(mods)
+      }
+      WindowEvent::KeyboardInput { event, .. } => {
+        self
+          .event_bindings
+          .borrow()
+          .handle_key_event(".".to_string(), event, tcl_event_loop);
       }
       _ => {}
     }

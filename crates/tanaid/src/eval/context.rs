@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 pub type FrameId = usize;
-pub(crate) const GLOBAL_FRAME: FrameId = 0;
+pub const GLOBAL_FRAME: FrameId = 0;
 
 pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
 pub type CommandHandler = dyn for<'a> Fn(
@@ -29,7 +29,7 @@ pub struct EvalContext {
   commands: HashMap<String, Rc<CommandHandler>>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
-  pub(crate) event_loop: Rc<RefCell<EventLoop>>,
+  pub event_loop: Rc<RefCell<EventLoop>>,
 
   clock_monotonic: Option<Rc<dyn Fn() -> Duration>>,
   clock_unixtime: Option<Rc<dyn Fn() -> Duration>>,

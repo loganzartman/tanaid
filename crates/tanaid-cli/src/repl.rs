@@ -4,6 +4,8 @@ use reedline::{
   default_emacs_keybindings,
 };
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
@@ -109,12 +111,14 @@ pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::
     }
   });
 
+  let tcl_event_loop = context.event_loop.clone();
   let mut interpreter = Interpreter::new();
   interpreter.configure(context);
 
   let mut app = ReplApp {
     tk,
     interpreter,
+    tcl_event_loop,
     next_tx,
   };
   event_loop.run_app(&mut app)?;
@@ -127,6 +131,7 @@ pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::
 struct ReplApp {
   tk: Tk,
   interpreter: Interpreter,
+  tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
   next_tx: mpsc::Sender<()>,
 }
 
@@ -165,14 +170,14 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
 
   fn window_event(
     &mut self,
-    event_loop: &winit::event_loop::ActiveEventLoop,
+    _event_loop: &winit::event_loop::ActiveEventLoop,
     window_id: winit::window::WindowId,
     event: WindowEvent,
   ) {
     self
       .tk
       .context
-      .handle_window_event(event_loop, window_id, event);
+      .handle_window_event(window_id, event, self.tcl_event_loop.clone());
   }
 }
 
