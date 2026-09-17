@@ -44,28 +44,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
   let opts = RunOpts { debug: args.debug };
 
   if let Some(file_path) = args.file_path {
-    return run_source(
-      fs::read_to_string(file_path)?.as_str(),
-      &mut context,
-      &mut tk,
-      &opts,
-    );
+    return run_source(fs::read_to_string(file_path)?.as_str(), context, tk, &opts);
   }
   if io::stdin().is_terminal() {
-    return run_repl(&mut context, &mut tk);
+    return run_repl(context, tk);
   }
   run_source(
     io::read_to_string(io::stdin())?.as_str(),
-    &mut context,
-    &mut tk,
+    context,
+    tk,
     &opts,
   )
 }
 
 fn run_source(
   src: &str,
-  context: &mut eval::EvalContext,
-  tk: &mut Tk,
+  mut context: eval::EvalContext,
+  mut tk: Tk,
   opts: &RunOpts,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
@@ -74,7 +69,7 @@ fn run_source(
     println!("{:#?}", parsed)
   }
 
-  let mut result = eval::eval_blocking(&parsed, context)?;
+  let mut result = eval::eval_blocking(&parsed, &mut context)?;
   if opts.debug {
     println!("=== result ===");
     println!("{:#?}", result);
@@ -89,8 +84,8 @@ fn run_source(
 
   let event_loop = winit::event_loop::EventLoop::new()?;
   let mut app = SourceApp {
-    tk,
-    context,
+    tk: &mut tk,
+    context: &mut context,
     had_window: false,
     error: None,
   };
@@ -143,12 +138,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
 
     match wait {
       EventWait::Ready => event_loop.set_control_flow(ControlFlow::Poll),
-      EventWait::Until(deadline) => {
-        let delay = self
-          .context
-          .clock_monotonic()
-          .expect("clock should be configured")
-          .saturating_sub(deadline);
+      EventWait::Delay(delay) => {
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
       }
       EventWait::Idle => event_loop.set_control_flow(ControlFlow::Wait),

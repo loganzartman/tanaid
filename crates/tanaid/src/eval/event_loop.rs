@@ -15,8 +15,8 @@ pub type EventId = usize;
 pub enum EventWait {
   /// An event is due to be dispatched
   Ready,
-  /// An event is scheduled at this offset time (suspend until then)
-  Until(Duration),
+  /// An event is scheduled after this delay (suspend for this long)
+  Delay(Duration),
   /// No events are pending; loop is idle (suspend indefinitely)
   Idle,
 }
@@ -101,7 +101,7 @@ impl EventLoop {
       if &self.clock_monotonic()? >= deadline {
         return Ok(EventWait::Ready);
       }
-      return Ok(EventWait::Until(
+      return Ok(EventWait::Delay(
         deadline.saturating_sub(self.clock_monotonic()?),
       ));
     }
@@ -152,7 +152,7 @@ impl Future for EventWaiter {
 
     match self.event_loop.borrow_mut().next_wait() {
       Ok(EventWait::Ready) => Poll::Ready(()),
-      Ok(EventWait::Until(_)) => Poll::Pending,
+      Ok(EventWait::Delay(_)) => Poll::Pending,
       Ok(EventWait::Idle) => Poll::Pending,
       Err(_) => panic!("aaaah"),
     }

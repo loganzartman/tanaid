@@ -1,7 +1,3 @@
-use crate::eval_error::EvalError;
-use crate::parser::ScriptNode;
-use crate::value::Value;
-
 mod cmd;
 mod cmd_after;
 mod cmd_break;
@@ -34,6 +30,7 @@ mod cmd_upvar;
 mod cmd_vwait;
 mod cmd_while;
 mod context;
+mod eval;
 pub mod event_loop;
 mod expr;
 mod proc;
@@ -44,17 +41,8 @@ mod word;
 
 pub use cmd::{EvalCmdResult, register_builtin_commands};
 pub use context::{Binding, EvalContext, EvalFrame, FrameId};
+pub use eval::{eval, eval_blocking};
 pub use expr::{eval_expr, eval_expr_binary_op};
 pub use proc::{Proc, eval_proc};
 pub use script::{eval_command, eval_returnable_script, eval_script};
 pub use word::{eval_word, eval_wordpart};
-
-use context::GLOBAL_FRAME;
-
-pub async fn eval(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  eval_returnable_script(script, context, GLOBAL_FRAME).await
-}
-
-pub fn eval_blocking(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
-  pollster::block_on(eval(script, context))
-}

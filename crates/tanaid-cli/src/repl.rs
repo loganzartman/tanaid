@@ -9,8 +9,9 @@ use std::thread;
 use std::time::Instant;
 use tanaid::eval::EvalContext;
 use tanaid::event_loop::EventWait;
+use tanaid::interpreter::Interpreter;
+use tanaid::parser;
 use tanaid::parser::ParseError;
-use tanaid::{eval, parser};
 use tanaid_tk::Tk;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -67,10 +68,7 @@ enum ReplEvent {
   Exit,
 }
 
-pub fn run_repl(
-  context: &mut eval::EvalContext,
-  tk: &mut Tk,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::Error>> {
   let (next_tx, next_rx) = mpsc::channel::<()>();
 
   let event_loop = winit::event_loop::EventLoop::<ReplEvent>::with_user_event().build()?;
@@ -111,9 +109,12 @@ pub fn run_repl(
     }
   });
 
+  let mut interpreter = Interpreter::new();
+  interpreter.configure(context);
+
   let mut app = ReplApp {
     tk,
-    context,
+    interpreter,
     next_tx,
   };
   event_loop.run_app(&mut app)?;
@@ -123,20 +124,20 @@ pub fn run_repl(
   Ok(())
 }
 
-struct ReplApp<'a> {
-  tk: &'a mut Tk,
-  context: &'a mut EvalContext,
+struct ReplApp {
+  tk: Tk,
+  interpreter: Interpreter,
   next_tx: mpsc::Sender<()>,
 }
 
-impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
+impl ApplicationHandler<ReplEvent> for ReplApp {
   fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: ReplEvent) {
     match event {
       ReplEvent::Exit => {
         event_loop.exit();
       }
       ReplEvent::Line(line) => {
-        if let Err(err) = pollster::block_on(run_line(&line, &mut self.context)) {
+        if let Err(err) = pollster::block_on(run_line(&line, &mut self.interpreter)) {
           println!("Error: {}", err);
         }
         self.next_tx.send(()).unwrap();
@@ -149,27 +150,16 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if let Err(err) = pollster::block_on(self.context.poll_event()) {
-      println!("Error: {}", err);
-    }
-
     self.tk.context.handle_about_to_wait(event_loop);
-
-    match self
-      .context
-      .next_event_wait()
-      .expect("clock should be configured")
-    {
-      EventWait::Ready => event_loop.set_control_flow(ControlFlow::Poll),
-      EventWait::Until(deadline) => {
-        let delay = self
-          .context
-          .clock_monotonic()
-          .expect("clock should be configured")
-          .saturating_sub(deadline);
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
+    match pollster::block_on(self.interpreter.step()) {
+      Err(error) => {
+        println!("Error: {}", error);
       }
-      EventWait::Idle => event_loop.set_control_flow(ControlFlow::Wait),
+      Ok(EventWait::Idle) => event_loop.set_control_flow(ControlFlow::Wait),
+      Ok(EventWait::Delay(delay)) => {
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay))
+      }
+      Ok(EventWait::Ready) => event_loop.set_control_flow(ControlFlow::Poll),
     }
   }
 
@@ -186,10 +176,12 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   }
 }
 
-async fn run_line(line: &str, context: &mut EvalContext) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_line(
+  line: &str,
+  interpreter: &mut Interpreter,
+) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(line)?;
-  let mut result = eval::eval(&parsed, context).await?;
+  let mut result = interpreter.run(&parsed).await?;
   println!("{}", result.repr_str()?);
-  context.poll_event().await?;
   Ok(())
 }

@@ -29,7 +29,7 @@ pub struct EvalContext {
   commands: HashMap<String, Rc<CommandHandler>>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
-  event_loop: Rc<RefCell<EventLoop>>,
+  pub(crate) event_loop: Rc<RefCell<EventLoop>>,
 
   clock_monotonic: Option<Rc<dyn Fn() -> Duration>>,
   clock_unixtime: Option<Rc<dyn Fn() -> Duration>>,
@@ -292,9 +292,8 @@ impl EvalContext {
     let wait = self.next_event_wait()?;
     match wait {
       EventWait::Ready => {}
-      EventWait::Until(deadline) => {
-        let delay = (deadline.saturating_sub(self.clock_monotonic()?)).as_millis();
-        self.sleep_ms(delay as u64).await?;
+      EventWait::Delay(delay) => {
+        self.sleep_ms(delay.as_millis() as u64).await?;
       }
       EventWait::Idle => EventWaiter::wait(Rc::clone(&self.event_loop)).await,
     }
