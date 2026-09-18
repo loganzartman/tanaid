@@ -2,6 +2,7 @@ pub(crate) mod bind;
 pub(crate) mod canvas;
 pub(crate) mod canvas_coords;
 pub(crate) mod canvas_create;
+pub(crate) mod canvas_delete;
 pub(crate) mod pack;
 
 use super::tk_context::TkContext;

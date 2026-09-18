@@ -208,6 +208,7 @@ pub(super) fn eval(
       match subcommand {
         "coords" => cmd::canvas_coords::eval(rest, ctx, frame, &tk, &widget),
         "create" => cmd::canvas_create::eval(rest, ctx, frame, &tk, &widget),
+        "delete" => cmd::canvas_delete::eval(rest, ctx, frame, &tk, &widget),
         _ => Err(EvalError::ArgumentError(format!(
           "canvas: invalid subcommand: {}",
           subcommand
