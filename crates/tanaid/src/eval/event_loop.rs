@@ -1,73 +1,161 @@
 use std::{
+  cell::RefCell,
   cmp::Reverse,
   collections::{BinaryHeap, HashMap},
+  pin::Pin,
+  rc::Rc,
+  task::{Poll, Waker},
   time::Duration,
 };
 
-use crate::parser::ScriptNode;
+use crate::{eval::EvalContext, eval_error::EvalError};
 
-type TimerId = usize;
+pub type EventId = usize;
+
+pub enum EventWait {
+  /// An event is due to be dispatched
+  Ready,
+  /// An event is scheduled after this delay (suspend for this long)
+  Delay(Duration),
+  /// No events are pending; loop is idle (suspend indefinitely)
+  Idle,
+}
+
+pub trait Event {
+  fn dispatch<'a>(
+    self: Box<Self>,
+    ctx: &'a mut EvalContext,
+  ) -> Pin<Box<dyn Future<Output = Result<(), EvalError>> + 'a>>;
+}
 
 pub struct EventLoop {
-  timer_id: TimerId,
-  pending_timers: HashMap<TimerId, ScriptNode>,
-  timer_queue: BinaryHeap<Reverse<(Duration, TimerId)>>,
+  pub(crate) clock_monotonic: Option<Rc<dyn Fn() -> Duration + 'static>>,
+  event_id: EventId,
+  pending_events: HashMap<EventId, Box<dyn Event>>,
+  event_queue: BinaryHeap<Reverse<(Duration, EventId)>>,
+  waker: Option<Waker>,
 }
 
 impl EventLoop {
   pub fn new() -> EventLoop {
     EventLoop {
-      timer_id: 1,
-      pending_timers: HashMap::new(),
-      timer_queue: BinaryHeap::new(),
+      clock_monotonic: None,
+      event_id: 1,
+      pending_events: HashMap::new(),
+      event_queue: BinaryHeap::new(),
+      waker: None,
     }
   }
 
-  pub fn start_timer(&mut self, now: Duration, callback: ScriptNode, delay: Duration) -> TimerId {
-    let timer_id = self.timer_id;
-    self.timer_id = self.timer_id.strict_add(1);
-    self.timer_queue.push(Reverse((now + delay, timer_id)));
-    self.pending_timers.insert(timer_id, callback);
-    timer_id
+  fn clock_monotonic(&self) -> Result<Duration, EvalError> {
+    let Some(clock_monotonic) = &self.clock_monotonic else {
+      return Err(EvalError::Generic(
+        "EventLoop missing clock_monotonic".to_string(),
+      ));
+    };
+
+    Ok(clock_monotonic())
   }
 
-  pub fn cancel_timer(&mut self, timer_id: TimerId) {
-    self.pending_timers.remove(&timer_id);
+  fn wake(&mut self) {
+    if let Some(waker) = self.waker.take() {
+      waker.wake();
+    }
   }
 
+  /// enqueue an event to dispatch at a given deadline
+  pub fn push_scheduled(&mut self, event: Box<dyn Event>, deadline: Duration) -> EventId {
+    let event_id = self.event_id;
+    self.event_id += 1;
+
+    self.pending_events.insert(event_id, event);
+    self.event_queue.push(Reverse((deadline, event_id)));
+    self.wake();
+    event_id
+  }
+
+  /// enqueue an event to dispatch ASAP, before any timers
+  pub fn push_immediate(&mut self, event: Box<dyn Event>) -> EventId {
+    self.push_scheduled(event, Duration::ZERO)
+  }
+
+  /// remove an event from the queue
+  pub fn remove(&mut self, event_id: EventId) {
+    self.pending_events.remove(&event_id);
+  }
+
+  /// get the number of queued events
   pub fn count_pending(&self) -> usize {
-    self.pending_timers.len()
+    self.pending_events.len()
   }
 
-  /// Take the next elapsed timer, if any.
-  pub fn take_elapsed(&mut self, now: Duration) -> Option<(TimerId, ScriptNode)> {
-    loop {
-      let Some(Reverse((next_fires_at, _))) = self.timer_queue.peek() else {
-        break;
-      };
-      if *next_fires_at > now {
-        break;
-      }
-
-      let Reverse((_, timer_id)) = self.timer_queue.pop().unwrap();
-      if !self.pending_timers.contains_key(&timer_id) {
+  /// determine whether an event is ready, or how long to wait for one
+  pub fn next_wait(&mut self) -> Result<EventWait, EvalError> {
+    while let Some(Reverse((deadline, event_id))) = self.event_queue.peek() {
+      if !self.pending_events.contains_key(&event_id) {
         // cancelled
+        self.event_queue.pop();
         continue;
       }
-      return Some(self.pending_timers.remove_entry(&timer_id).unwrap());
+
+      if &self.clock_monotonic()? >= deadline {
+        return Ok(EventWait::Ready);
+      }
+      return Ok(EventWait::Delay(
+        deadline.saturating_sub(self.clock_monotonic()?),
+      ));
     }
-    None
+    Ok(EventWait::Idle)
   }
 
-  /// Compute the delay for the next pending timer.
-  pub fn next_delay(&mut self, now: Duration) -> Option<Duration> {
-    while let Some(Reverse((fires_at, timer_id))) = self.timer_queue.peek() {
-      if self.pending_timers.contains_key(&timer_id) {
-        return Some(fires_at.saturating_sub(now));
+  /// take the next ready event, if any.
+  pub fn take_ready(&mut self) -> Result<Option<Box<dyn Event>>, EvalError> {
+    while let Some(Reverse((deadline, event_id))) = self.event_queue.peek() {
+      if !self.pending_events.contains_key(&event_id) {
+        // cancelled
+        self.event_queue.pop();
+        continue;
       }
-      self.timer_queue.pop();
+
+      if &self.clock_monotonic()? >= deadline {
+        let event = self
+          .pending_events
+          .remove(&event_id)
+          .expect("pending_events should contain the current event");
+        return Ok(Some(event));
+      }
+      return Ok(None);
     }
-    None
+    Ok(None)
+  }
+}
+
+pub struct EventWaiter {
+  event_loop: Rc<RefCell<EventLoop>>,
+}
+
+impl EventWaiter {
+  pub async fn wait(event_loop: Rc<RefCell<EventLoop>>) {
+    EventWaiter { event_loop }.await
+  }
+}
+
+impl Future for EventWaiter {
+  type Output = ();
+
+  fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+    self
+      .event_loop
+      .borrow_mut()
+      .waker
+      .replace(cx.waker().clone());
+
+    match self.event_loop.borrow_mut().next_wait() {
+      Ok(EventWait::Ready) => Poll::Ready(()),
+      Ok(EventWait::Delay(_)) => Poll::Pending,
+      Ok(EventWait::Idle) => Poll::Pending,
+      Err(_) => panic!("aaaah"),
+    }
   }
 }
 

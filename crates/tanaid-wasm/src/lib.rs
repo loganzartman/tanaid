@@ -2,6 +2,7 @@
 
 use js_sys::{Date, Function, Promise, Reflect, global};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use tanaid::{eval::EvalContext, eval::eval, eval_error::EvalError, parser::parse};
 use tsify::Ts;
@@ -103,21 +104,21 @@ impl Interpreter {
       .dyn_into::<web_sys::Performance>()
       .map_err(js_value_to_error)?;
 
-    let clock_monotonic_us = move || {
+    let clock_monotonic = move || {
       let now = performance.now();
-      (now * 1000.0).ceil() as u64
+      Duration::from_micros((now * 1000.0).ceil() as u64)
     };
 
-    let clock_unixtime_ms = move || {
+    let clock_unixtime = move || {
       let now = Date::now();
-      now as i64
+      Duration::from_millis(now as u64)
     };
 
     let context = EvalContext::new()
       .with_stdout(stdout)
       .with_sleep_ms(sleep_ms)
-      .with_clock_monotonic_us(clock_monotonic_us)
-      .with_clock_unixtime_ms(clock_unixtime_ms);
+      .with_clock_monotonic(clock_monotonic)
+      .with_clock_unixtime(clock_unixtime);
 
     Ok(Interpreter {
       context: Rc::new(RefCell::new(context)),

@@ -1,4 +1,4 @@
-use super::{EvalContext, FrameId, GLOBAL_FRAME, cmd::EvalCmdResult};
+use crate::eval::{EvalContext, FrameId, cmd::EvalCmdResult, context::GLOBAL_FRAME};
 use crate::eval_error::EvalError;
 use crate::value::Value;
 

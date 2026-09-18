@@ -5,7 +5,7 @@ use std::{
   process::ExitCode,
   time::Instant,
 };
-use tanaid::{eval, parser};
+use tanaid::{eval, event_loop::EventWait, parser};
 use tanaid_cli::repl::run_repl;
 use tanaid_tk::Tk;
 use winit::application::ApplicationHandler;
@@ -44,28 +44,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
   let opts = RunOpts { debug: args.debug };
 
   if let Some(file_path) = args.file_path {
-    return run_source(
-      fs::read_to_string(file_path)?.as_str(),
-      &mut context,
-      &mut tk,
-      &opts,
-    );
+    return run_source(fs::read_to_string(file_path)?.as_str(), context, tk, &opts);
   }
   if io::stdin().is_terminal() {
-    return run_repl(&mut context, &mut tk);
+    return run_repl(context, tk);
   }
   run_source(
     io::read_to_string(io::stdin())?.as_str(),
-    &mut context,
-    &mut tk,
+    context,
+    tk,
     &opts,
   )
 }
 
 fn run_source(
   src: &str,
-  context: &mut eval::EvalContext,
-  tk: &mut Tk,
+  mut context: eval::EvalContext,
+  mut tk: Tk,
   opts: &RunOpts,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
@@ -74,7 +69,7 @@ fn run_source(
     println!("{:#?}", parsed)
   }
 
-  let mut result = eval::eval_blocking(&parsed, context)?;
+  let mut result = eval::eval_blocking(&parsed, &mut context)?;
   if opts.debug {
     println!("=== result ===");
     println!("{:#?}", result);
@@ -89,8 +84,8 @@ fn run_source(
 
   let event_loop = winit::event_loop::EventLoop::new()?;
   let mut app = SourceApp {
-    tk,
-    context,
+    tk: &mut tk,
+    context: &mut context,
     had_window: false,
     error: None,
   };
@@ -131,30 +126,34 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       return;
     }
 
-    let next_delay = self
+    let wait = self
       .context
-      .next_event_delay()
+      .next_event_wait()
       .expect("clock should be configured");
-    if next_delay.is_none() && !self.had_window {
+
+    if matches!(wait, EventWait::Idle) && !self.had_window {
       event_loop.exit();
       return;
     }
 
-    match next_delay {
-      Some(delay) => event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay)),
-      None => event_loop.set_control_flow(ControlFlow::Wait),
+    match wait {
+      EventWait::Ready => event_loop.set_control_flow(ControlFlow::Poll),
+      EventWait::Delay(delay) => {
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
+      }
+      EventWait::Idle => event_loop.set_control_flow(ControlFlow::Wait),
     }
   }
 
   fn window_event(
     &mut self,
-    event_loop: &winit::event_loop::ActiveEventLoop,
+    _event_loop: &winit::event_loop::ActiveEventLoop,
     window_id: winit::window::WindowId,
     event: WindowEvent,
   ) {
     self
       .tk
       .context
-      .handle_window_event(event_loop, window_id, event);
+      .handle_window_event(window_id, event, self.context.event_loop.clone());
   }
 }

@@ -3,7 +3,6 @@
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
   "editor.defaultFormatter": "rust-lang.rust-analyzer",
-  "rust-analyzer.server.path": "rust-analyzer",
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
   },
