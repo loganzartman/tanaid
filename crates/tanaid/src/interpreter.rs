@@ -1,8 +1,9 @@
 use crate::eval::{self, EvalCmdResult, EvalContext};
 use crate::eval_error::EvalError;
-use crate::event_loop::EventWait;
+use crate::event_loop::{EventLoop, EventWait};
 use crate::parser::ScriptNode;
 use crate::value::Value;
+use std::cell::RefCell;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
@@ -24,7 +25,10 @@ pub struct Interpreter {
 enum InterpreterState {
   Init,
   Idle(EvalContext),
-  Running(Pin<Box<dyn Future<Output = (EvalContext, EvalCmdResult)>>>),
+  Running(
+    Rc<RefCell<EventLoop>>,
+    Pin<Box<dyn Future<Output = (EvalContext, EvalCmdResult)>>>,
+  ),
 }
 
 pub enum StepResult {
@@ -57,7 +61,7 @@ impl Interpreter {
           EventWait::Ready => self.dispatch_ready_event(),
         }
       }
-      InterpreterState::Running(_) => self.do_running_work(),
+      InterpreterState::Running(_, _) => self.do_running_work(),
     }
   }
 
@@ -69,7 +73,7 @@ impl Interpreter {
         ));
       }
       InterpreterState::Idle(context) => context,
-      InterpreterState::Running(_) => {
+      InterpreterState::Running(_, _) => {
         return Err(EvalError::Generic(
           "interpreter is busy running a script".to_string(),
         ));
@@ -81,10 +85,13 @@ impl Interpreter {
       return Err(EvalError::Generic("no event is ready".to_string()));
     };
 
-    self.state = InterpreterState::Running(Box::pin(async move {
-      let result = event.dispatch(&mut context).await.map(|_| Value::none());
-      (context, result)
-    }));
+    self.state = InterpreterState::Running(
+      Rc::clone(&event_loop),
+      Box::pin(async move {
+        let result = event.dispatch(&mut context).await.map(|_| Value::none());
+        (context, result)
+      }),
+    );
 
     Ok(StepResult::Again)
   }
@@ -101,11 +108,17 @@ impl Interpreter {
           "interpreter is not running anything".to_string(),
         ));
       }
-      InterpreterState::Running(result_future) => {
+      InterpreterState::Running(event_loop, result_future) => {
         let mut cx = Context::from_waker(Waker::noop());
         match result_future.as_mut().poll(&mut cx) {
           Poll::Ready(v) => v,
-          Poll::Pending => return Ok(StepResult::Wait),
+          Poll::Pending => {
+            return match event_loop.borrow_mut().next_wait()? {
+              EventWait::Ready => Ok(StepResult::Again),
+              EventWait::Delay(duration) => Ok(StepResult::WaitDuration(duration)),
+              EventWait::Idle => Ok(StepResult::Wait),
+            };
+          }
         }
       }
     };
@@ -121,11 +134,14 @@ impl Interpreter {
   pub fn start(&mut self, script: &ScriptNode) -> Result<(), EvalError> {
     let mut context = match std::mem::replace(&mut self.state, InterpreterState::Init) {
       InterpreterState::Init => {
+        self.state = InterpreterState::Init;
         return Err(EvalError::Generic(
           "interpreter not configured with EvalContext".to_string(),
         ));
       }
-      InterpreterState::Running(_) => {
+      InterpreterState::Running(event_loop, result_future) => {
+        // replace state with previous one to avoid breaking interpreter
+        self.state = InterpreterState::Running(event_loop, result_future);
         return Err(EvalError::Generic(
           "interpreter is busy running a script".to_string(),
         ));
@@ -134,10 +150,13 @@ impl Interpreter {
     };
 
     let script = script.clone();
-    self.state = InterpreterState::Running(Box::pin(async move {
-      let result = eval::eval(&script, &mut context).await;
-      (context, result)
-    }));
+    self.state = InterpreterState::Running(
+      Rc::clone(&context.event_loop),
+      Box::pin(async move {
+        let result = eval::eval(&script, &mut context).await;
+        (context, result)
+      }),
+    );
 
     Ok(())
   }
