@@ -135,13 +135,13 @@ pub struct EventWaiter {
 }
 
 impl EventWaiter {
-  pub async fn wait(event_loop: Rc<RefCell<EventLoop>>) {
+  pub async fn wait(event_loop: Rc<RefCell<EventLoop>>) -> Result<(), EvalError> {
     EventWaiter { event_loop }.await
   }
 }
 
 impl Future for EventWaiter {
-  type Output = ();
+  type Output = Result<(), EvalError>;
 
   fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
     self
@@ -151,10 +151,13 @@ impl Future for EventWaiter {
       .replace(cx.waker().clone());
 
     match self.event_loop.borrow_mut().next_wait() {
-      Ok(EventWait::Ready) => Poll::Ready(()),
+      Ok(EventWait::Ready) => Poll::Ready(Ok(())),
       Ok(EventWait::Delay(_)) => Poll::Pending,
       Ok(EventWait::Idle) => Poll::Pending,
-      Err(_) => panic!("aaaah"),
+      Err(err) => Poll::Ready(Err(EvalError::Generic(format!(
+        "Error while running event loop: {}",
+        err
+      )))),
     }
   }
 }

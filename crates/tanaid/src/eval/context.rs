@@ -289,7 +289,7 @@ impl EvalContext {
   }
 
   pub async fn wait_for_event(&self) -> Result<(), EvalError> {
-    Ok(EventWaiter::wait(Rc::clone(&self.event_loop)).await)
+    Ok(EventWaiter::wait(Rc::clone(&self.event_loop)).await?)
   }
 
   pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
