@@ -49,6 +49,11 @@ impl Interpreter {
     }
   }
 
+  /// Returns true if the interpreter is currently running a script.
+  pub fn is_busy(&self) -> bool {
+    matches!(self.state, InterpreterState::Running(_, _))
+  }
+
   /// Do work if there's work to be done, returning a result indicating what to do next.
   pub fn step(&mut self) -> Result<StepResult, EvalError> {
     match &self.state {
@@ -73,7 +78,9 @@ impl Interpreter {
         ));
       }
       InterpreterState::Idle(context) => context,
-      InterpreterState::Running(_, _) => {
+      InterpreterState::Running(event_loop, result_future) => {
+        // replace state with previous one to avoid breaking interpreter
+        self.state = InterpreterState::Running(event_loop, result_future);
         return Err(EvalError::Generic(
           "interpreter is busy running a script".to_string(),
         ));
@@ -127,10 +134,12 @@ impl Interpreter {
     Ok(StepResult::Done(result?))
   }
 
+  /// Consume an EvalContext and prepare the interpreter to run scripts.
   pub fn configure(&mut self, context: EvalContext) {
     self.state = InterpreterState::Idle(context);
   }
 
+  /// Start running a script. Errors if the interpreter is already running a script (see is_busy()).
   pub fn start(&mut self, script: &ScriptNode) -> Result<(), EvalError> {
     let mut context = match std::mem::replace(&mut self.state, InterpreterState::Init) {
       InterpreterState::Init => {

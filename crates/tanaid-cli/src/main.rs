@@ -121,9 +121,6 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
-    if self.tcl_event_loop.borrow().count_pending() == 0 && !self.tk.context.has_window() {
-      event_loop.exit();
-    }
 
     match self.interpreter.step() {
       Err(err) => {
@@ -136,6 +133,10 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       }
       Ok(StepResult::Wait) => event_loop.set_control_flow(ControlFlow::Wait),
       Ok(StepResult::Done(_)) => event_loop.set_control_flow(ControlFlow::Poll),
+    }
+
+    if !self.interpreter.is_busy() && !self.tk.context.has_window() {
+      event_loop.exit();
     }
   }
 
