@@ -4,26 +4,25 @@ use js_sys::{Date, Function, Promise, Reflect, global};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use tanaid::{eval::EvalContext, eval::eval, eval_error::EvalError, parser::parse};
+use tanaid::interpreter::{Interpreter, StepResult};
+use tanaid::{eval::EvalContext, eval_error::EvalError, parser::parse};
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 use web_sys;
 
 #[wasm_bindgen]
-#[derive(Clone)]
 #[expect(dead_code)]
-pub struct Interpreter {
-  context: Rc<RefCell<EvalContext>>,
+pub struct Tcl {
+  interpreter: Interpreter,
   timeout_ids: Rc<RefCell<HashMap<usize, JsValue>>>,
   set_timeout: Function,
   clear_timeout: Function,
-  handle_event_loop_status: Function,
 }
 
 #[derive(Tsify, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InterpreterOptions {
+pub struct TclOptions {
   #[serde(with = "serde_wasm_bindgen::preserve")]
   #[tsify(type = "(output: string) => void")]
   pub handle_stdout: Function,
@@ -35,9 +34,13 @@ pub struct InterpreterOptions {
   #[serde(with = "serde_wasm_bindgen::preserve")]
   #[tsify(type = "(timeoutId: unknown) => void")]
   pub clear_timeout: Function,
+}
 
+#[derive(Tsify, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOptions {
   #[serde(with = "serde_wasm_bindgen::preserve")]
-  #[tsify(type = "(pendingTimers: number) => void")]
+  #[tsify(type = "(countPending: number) => void")]
   pub handle_event_loop_status: Function,
 }
 
@@ -54,8 +57,8 @@ fn js_value_to_error(value: JsValue) -> JsError {
 }
 
 #[wasm_bindgen]
-impl Interpreter {
-  pub fn create(options: Ts<InterpreterOptions>) -> Result<Interpreter, JsError> {
+impl Tcl {
+  pub fn create(options: Ts<TclOptions>) -> Result<Tcl, JsError> {
     console_error_panic_hook::set_once();
 
     let opts = options
@@ -120,61 +123,67 @@ impl Interpreter {
       .with_clock_monotonic(clock_monotonic)
       .with_clock_unixtime(clock_unixtime);
 
-    Ok(Interpreter {
-      context: Rc::new(RefCell::new(context)),
+    let mut interpreter = Interpreter::new();
+    interpreter.configure(context);
+
+    Ok(Tcl {
+      interpreter,
       timeout_ids: Rc::new(RefCell::new(HashMap::new())),
       set_timeout: opts.set_timeout,
       clear_timeout: opts.clear_timeout,
-      handle_event_loop_status: opts.handle_event_loop_status,
     })
   }
 
-  pub async fn run(&mut self, src: &str) -> Result<JsValue, JsError> {
+  pub async fn run(&mut self, src: &str, _options: Ts<RunOptions>) -> Result<JsValue, JsError> {
+    if self.interpreter.is_busy() {
+      return Err(JsError::new("interpreter is already running a script"));
+    }
+
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
-    let mut result = {
-      let mut context = self.context.borrow_mut();
-      eval(&parsed, &mut *context)
-        .await
-        .map_err(|e| JsError::new(e.to_string().as_str()))
-    }?;
-    notify_event_loop_status(self)?;
+    self.interpreter.start(&parsed)?;
 
-    match result.repr_str() {
-      Ok(result_str) => Ok(JsValue::from_str(result_str)),
-      Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
-    }
-  }
+    let set_timeout = self.set_timeout.clone();
+    let sleep = move |duration: Duration| {
+      Promise::new(&mut |resolve, reject| {
+        if let Err(error) = set_timeout.call2(
+          &JsValue::UNDEFINED,
+          &resolve,
+          &JsValue::from(duration.as_millis().saturating_cast::<i32>()),
+        ) {
+          let _ = reject.call1(&JsValue::UNDEFINED, &error);
+        }
+      })
+    };
 
-  #[wasm_bindgen(js_name = "runEventLoop")]
-  pub async fn run_event_loop(&self) -> Result<(), JsError> {
-    while self.context.borrow().count_pending_events() > 0 {
-      let Some(delay) = self.context.borrow().next_event_delay()? else {
+    let mut result = None;
+    loop {
+      let step = self.interpreter.step()?;
+      match step {
+        StepResult::Again => continue,
+        StepResult::Done(value) => {
+          result = result.or(Some(value));
+          break;
+        }
+        StepResult::Wait => {
+          sleep(Duration::ZERO).await.map_err(js_value_to_error)?;
+        }
+        StepResult::WaitDuration(duration) => {
+          sleep(duration).await.map_err(js_value_to_error)?;
+        }
+      }
+
+      if !self.interpreter.is_busy() {
         break;
-      };
-
-      notify_event_loop_status(self)?;
-
-      self
-        .context
-        .borrow()
-        .sleep_ms(delay.as_millis() as u64)
-        .await?;
-
-      self.context.borrow_mut().poll_event().await?;
+      }
     }
-    notify_event_loop_status(self)?;
-    Ok(())
+
+    match result {
+      Some(mut v) => match v.repr_str() {
+        Ok(s) => Ok(JsValue::from_str(s)),
+        Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
+      },
+      None => Ok(JsValue::UNDEFINED),
+    }
   }
-}
-
-fn notify_event_loop_status(interpreter: &Interpreter) -> Result<(), JsError> {
-  let n_pending = interpreter.context.borrow().count_pending_events();
-
-  interpreter
-    .handle_event_loop_status
-    .call1(&JsValue::UNDEFINED, &JsValue::from(n_pending))
-    .map_err(js_value_to_error)?;
-
-  Ok(())
 }
