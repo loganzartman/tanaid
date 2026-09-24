@@ -289,15 +289,7 @@ impl EvalContext {
   }
 
   pub async fn wait_for_event(&self) -> Result<(), EvalError> {
-    let wait = self.next_event_wait()?;
-    match wait {
-      EventWait::Ready => {}
-      EventWait::Delay(delay) => {
-        self.sleep_ms(delay.as_millis() as u64).await?;
-      }
-      EventWait::Idle => EventWaiter::wait(Rc::clone(&self.event_loop)).await,
-    }
-    Ok(())
+    Ok(EventWaiter::wait(Rc::clone(&self.event_loop)).await)
   }
 
   pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
