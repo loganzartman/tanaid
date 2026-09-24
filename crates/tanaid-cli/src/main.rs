@@ -121,7 +121,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
-    if !self.tk.context.has_window() {
+    if self.tcl_event_loop.borrow().count_pending() == 0 && !self.tk.context.has_window() {
       event_loop.exit();
     }
 
