@@ -8,10 +8,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
 use tanaid::eval::EvalContext;
-use tanaid::event_loop::EventWait;
-use tanaid::interpreter::Interpreter;
+use tanaid::interpreter::{Interpreter, StepResult};
 use tanaid::parser;
 use tanaid::parser::ParseError;
 use tanaid_tk::Tk;
@@ -156,15 +154,16 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
-    match pollster::block_on(self.interpreter.step()) {
+    match self.interpreter.step() {
       Err(error) => {
         println!("Error: {}", error);
       }
-      Ok(EventWait::Idle) => event_loop.set_control_flow(ControlFlow::Wait),
-      Ok(EventWait::Delay(delay)) => {
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay))
+      Ok(StepResult::Again) => event_loop.set_control_flow(ControlFlow::Poll),
+      Ok(StepResult::Wait) => event_loop.set_control_flow(ControlFlow::Wait),
+      Ok(StepResult::WaitDuration(duration)) => {
+        event_loop.set_control_flow(ControlFlow::wait_duration(duration))
       }
-      Ok(EventWait::Ready) => event_loop.set_control_flow(ControlFlow::Poll),
+      Ok(StepResult::Done(_)) => event_loop.set_control_flow(ControlFlow::Poll),
     }
   }
 
@@ -186,7 +185,12 @@ async fn run_line(
   interpreter: &mut Interpreter,
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(line)?;
-  let mut result = interpreter.run(&parsed).await?;
-  println!("{}", result.repr_str()?);
+  interpreter.start(&parsed)?;
+
+  // pump once to print synchronous output
+  if let StepResult::Done(mut value) = interpreter.step()? {
+    println!("{}", value.repr_str()?);
+  }
+
   Ok(())
 }
