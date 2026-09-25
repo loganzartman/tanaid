@@ -1,3 +1,6 @@
+#![cfg_attr(target_family = "wasm", no_main)]
+#![cfg(not(target_family = "wasm"))]
+
 use clap::Parser;
 use std::{
   cell::RefCell,

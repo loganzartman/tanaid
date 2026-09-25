@@ -13,10 +13,12 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 pollster = { workspace = true }
-reedline = "0.48.0"
 tanaid = { workspace = true }
 tanaid-tk = { workspace = true }
 winit = { workspace = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+reedline = "0.48.0"
 
 [lints]
 workspace = true
