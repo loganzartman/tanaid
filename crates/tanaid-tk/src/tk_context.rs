@@ -117,10 +117,14 @@ impl TkContext {
         self.event_bindings.borrow_mut().handle_modifiers(mods)
       }
       WindowEvent::KeyboardInput { event, .. } => {
-        self
-          .event_bindings
-          .borrow()
-          .handle_key_event(".".to_string(), event, tcl_event_loop);
+        if let Err(r) =
+          self
+            .event_bindings
+            .borrow()
+            .handle_key_event(".".to_string(), event, tcl_event_loop)
+        {
+          println!("Error: {}", r);
+        }
       }
       _ => {}
     }

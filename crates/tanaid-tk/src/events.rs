@@ -4,7 +4,7 @@ use tanaid::{
   eval::{GLOBAL_FRAME, eval_returnable_script},
   eval_error::EvalError,
   event_loop,
-  parser::ScriptNode,
+  parser::{self, ScriptNode},
 };
 use winit::{
   event::{KeyEvent, Modifiers},
@@ -12,7 +12,8 @@ use winit::{
 };
 
 pub type Tag = String;
-pub type EventBindingsData = HashMap<Tag, HashMap<Vec<TclEvent>, ScriptNode>>;
+pub type ScriptStr = String;
+pub type EventBindingsData = HashMap<Tag, HashMap<Vec<TclEvent>, ScriptStr>>;
 
 pub struct EventBindings {
   bindings: EventBindingsData,
@@ -41,14 +42,14 @@ impl EventBindings {
     }
   }
 
-  pub fn get_binding(&self, tag: &Tag, sequence: Vec<TclEvent>) -> Option<&ScriptNode> {
+  pub fn get_binding(&self, tag: &Tag, sequence: Vec<TclEvent>) -> Option<&str> {
     self
       .bindings
       .get(tag)
-      .and_then(|by_tag| by_tag.get(&sequence))
+      .and_then(|by_tag| by_tag.get(&sequence).map(|s| s.as_str()))
   }
 
-  pub fn bind(&mut self, tag: Tag, sequence: Vec<TclEvent>, script: &ScriptNode, append: bool) {
+  pub fn bind(&mut self, tag: Tag, sequence: Vec<TclEvent>, script_str: &str, append: bool) {
     let binding = self
       .bindings
       .entry(tag)
@@ -58,12 +59,12 @@ impl EventBindings {
     binding
       .and_modify(|v| {
         *v = if append {
-          ScriptNode::concat(v, script)
+          format!("{};\n{}", v, script_str)
         } else {
-          script.clone()
+          script_str.to_string()
         };
       })
-      .or_insert(script.clone());
+      .or_insert(script_str.to_string());
   }
 
   pub fn handle_modifiers(&mut self, mods: Modifiers) {
@@ -75,7 +76,7 @@ impl EventBindings {
     tag: Tag,
     key_event: KeyEvent,
     event_loop: Rc<RefCell<event_loop::EventLoop>>,
-  ) {
+  ) -> Result<(), EvalError> {
     let detail = key_event.logical_key.to_text().unwrap_or("").to_string();
     let mods = self.modifiers.state();
     let event_type = match key_event.state {
@@ -119,14 +120,22 @@ impl EventBindings {
 
     for tag in tags {
       for specificity in specificities {
-        if let Some(script) = self.get_binding(tag, vec![specificity.clone()]) {
-          event_loop.borrow_mut().push_immediate(Box::new(TkEvent {
-            script: script.clone(),
-          }));
-          return;
+        // TODO: record and test against multi-key sequences
+        if let Some(script_str) = self.get_binding(tag, vec![specificity.clone()]) {
+          // TODO: template substitutions for key codes etc.
+          // TODO: parse with caching
+          let script =
+            parser::parse(script_str).map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
+
+          event_loop
+            .borrow_mut()
+            .push_immediate(Box::new(TkEvent { script }));
+          return Ok(());
         }
       }
     }
+
+    Ok(())
   }
 }
 
