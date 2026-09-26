@@ -9,7 +9,6 @@ use tanaid::{
 use winit::{
   event::{KeyEvent, Modifiers},
   keyboard::ModifiersState,
-  platform::modifier_supplement::KeyEventExtModifierSupplement,
 };
 
 pub type Tag = String;
@@ -77,11 +76,7 @@ impl EventBindings {
     key_event: KeyEvent,
     event_loop: Rc<RefCell<event_loop::EventLoop>>,
   ) {
-    let detail = key_event
-      .key_without_modifiers()
-      .to_text()
-      .unwrap_or("")
-      .to_string();
+    let detail = key_event.logical_key.to_text().unwrap_or("").to_string();
     let mods = self.modifiers.state();
     let event_type = match key_event.state {
       winit::event::ElementState::Pressed => Some(TclEventType::KeyPress),
