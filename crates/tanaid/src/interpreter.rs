@@ -89,7 +89,8 @@ impl Interpreter {
 
     let event_loop = Rc::clone(&context.event_loop);
     let Some(event) = event_loop.borrow_mut().take_ready()? else {
-      return Err(EvalError::Generic("no event is ready".to_string()));
+      // possible timer disagreement, try again
+      return Ok(StepResult::Again);
     };
 
     self.state = InterpreterState::Running(
