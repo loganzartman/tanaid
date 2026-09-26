@@ -1,5 +1,6 @@
 use super::Proc;
 use super::event_loop::EventLoop;
+use crate::eval::sleep::Sleep;
 use crate::eval::{EvalCmdResult, eval_returnable_script};
 use crate::eval_error::EvalError;
 use crate::event_loop::{Event, EventId, EventWait, EventWaiter};
@@ -33,8 +34,6 @@ pub struct EvalContext {
 
   clock_monotonic: Option<Rc<dyn Fn() -> Duration>>,
   clock_unixtime: Option<Rc<dyn Fn() -> Duration>>,
-  sleep_ms:
-    Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = Result<(), EvalError>>>> + 'static>>,
 
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
@@ -78,7 +77,6 @@ impl EvalContext {
 
       clock_monotonic: None,
       clock_unixtime: None,
-      sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -89,15 +87,6 @@ impl EvalContext {
     };
     super::cmd::register_builtin_commands(&mut context);
     context
-  }
-
-  pub fn with_sleep_ms<F, Fut>(mut self, f: F) -> Self
-  where
-    F: Fn(u64) -> Fut + 'static,
-    Fut: Future<Output = Result<(), EvalError>> + 'static,
-  {
-    self.sleep_ms = Some(Rc::new(move |ms: u64| Box::pin(f(ms))));
-    self
   }
 
   pub fn with_clock_monotonic(mut self, f: impl Fn() -> Duration + 'static) -> Self {
@@ -116,10 +105,6 @@ impl EvalContext {
   pub fn with_std_time(self) -> Self {
     let start = std::time::Instant::now();
     self
-      .with_sleep_ms(async |ms| {
-        std::thread::sleep(std::time::Duration::from_millis(ms));
-        Ok(())
-      })
       .with_clock_monotonic(move || std::time::Instant::now().duration_since(start))
       .with_clock_unixtime(|| {
         std::time::SystemTime::now()
@@ -272,12 +257,10 @@ impl EvalContext {
   }
 
   pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
-    let sleep_ms = self.sleep_ms.as_ref().ok_or_else(|| {
-      EvalError::Generic(
-        "environment does not support timers (missing callback_sleep_ms)".to_string(),
-      )
-    })?;
-    sleep_ms(ms).await
+    let deadline = self.clock_monotonic()? + Duration::from_millis(ms);
+    let event_id = self.event_loop.borrow_mut().wake_at(deadline);
+    Sleep::new(Rc::clone(&self.event_loop), event_id, deadline).await?;
+    Ok(())
   }
 
   pub fn count_pending_events(&self) -> usize {

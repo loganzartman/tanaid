@@ -76,33 +76,6 @@ impl Tcl {
     });
 
     let set_timeout = opts.set_timeout.clone();
-    let sleep_ms = move |ms: u64| {
-      let set_timeout = set_timeout.clone();
-      async move {
-        let done = Promise::new(&mut |resolve, reject| {
-          let callback_reject = reject.clone();
-          let callback = ScopedClosure::<dyn FnMut()>::own_aborting(move || {
-            if let Err(error) = resolve.call1(&JsValue::UNDEFINED, &JsValue::TRUE) {
-              let _ = callback_reject.call1(&JsValue::UNDEFINED, &error);
-            }
-          })
-          .into_js_value();
-
-          if let Err(error) = set_timeout.call2(
-            &JsValue::UNDEFINED,
-            &callback,
-            &JsValue::from(ms.saturating_cast::<i32>()),
-          ) {
-            let _ = reject.call1(&JsValue::UNDEFINED, &error);
-          }
-        });
-
-        done
-          .await
-          .map(|_| ())
-          .map_err(|error| EvalError::Generic(js_error_message(error)))
-      }
-    };
 
     let performance = Reflect::get(&global(), &"performance".into())
       .map_err(js_value_to_error)?
@@ -121,7 +94,6 @@ impl Tcl {
 
     let context = EvalContext::new()
       .with_stdout(stdout)
-      .with_sleep_ms(sleep_ms)
       .with_clock_monotonic(clock_monotonic)
       .with_clock_unixtime(clock_unixtime);
 

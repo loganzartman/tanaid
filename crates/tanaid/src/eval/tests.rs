@@ -1588,14 +1588,8 @@ async fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
 fn context_with_test_clock() -> EvalContext {
   let clock_monotonic = Rc::new(Cell::new(Duration::ZERO));
   let event_clock = clock_monotonic.clone();
-  let sleep_clock = clock_monotonic.clone();
 
-  EvalContext::new()
-    .with_clock_monotonic(move || event_clock.get())
-    .with_sleep_ms(move |ms| {
-      sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
-      async { Ok(()) }
-    })
+  EvalContext::new().with_clock_monotonic(move || event_clock.get())
 }
 
 #[pollster::test]

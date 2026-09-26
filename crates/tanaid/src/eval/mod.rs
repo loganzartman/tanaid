@@ -35,6 +35,7 @@ pub mod event_loop;
 mod expr;
 mod proc;
 mod script;
+mod sleep;
 #[cfg(test)]
 mod tests;
 mod word;

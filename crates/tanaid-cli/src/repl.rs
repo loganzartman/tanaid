@@ -6,7 +6,8 @@ use reedline::{
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, mpsc};
+use std::task::{Wake, Waker};
 use std::thread;
 use tanaid::eval::EvalContext;
 use tanaid::interpreter::{Interpreter, StepResult};
@@ -15,7 +16,7 @@ use tanaid::parser::ParseError;
 use tanaid_tk::Tk;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::ControlFlow;
+use winit::event_loop::{ControlFlow, EventLoopProxy};
 
 struct TclValidator;
 
@@ -66,12 +67,14 @@ impl Prompt for TclPrompt {
 enum ReplEvent {
   Line(String),
   Exit,
+  Wake,
 }
 
 pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::Error>> {
   let (next_tx, next_rx) = mpsc::channel::<()>();
 
   let event_loop = winit::event_loop::EventLoop::<ReplEvent>::with_user_event().build()?;
+  let waker = Waker::from(Arc::new(ProxyWaker(Mutex::new(event_loop.create_proxy()))));
   let send_proxy = event_loop.create_proxy();
 
   let rl_thread = thread::spawn(move || {
@@ -117,6 +120,8 @@ pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::
     tk,
     interpreter,
     tcl_event_loop,
+    waker,
+    line_started: false,
     next_tx,
   };
   event_loop.run_app(&mut app)?;
@@ -128,8 +133,10 @@ pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::
 
 struct ReplApp {
   tk: Tk,
+  waker: Waker,
   interpreter: Interpreter,
   tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
+  line_started: bool,
   next_tx: mpsc::Sender<()>,
 }
 
@@ -140,10 +147,23 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
         event_loop.exit();
       }
       ReplEvent::Line(line) => {
-        if let Err(err) = pollster::block_on(run_line(&line, &mut self.interpreter)) {
+        let script = match parser::parse(line.as_str()) {
+          Ok(script) => script,
+          Err(err) => {
+            println!("Error: {}", err);
+            return;
+          }
+        };
+
+        if let Err(err) = self.interpreter.start(&script) {
           println!("Error: {}", err);
+          return;
         }
-        self.next_tx.send(()).unwrap();
+
+        self.line_started = true;
+      }
+      ReplEvent::Wake => {
+        // no-op; sending this event already woke the event loop (and will trigger about_to_wait)
       }
     }
   }
@@ -154,16 +174,27 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
-    match self.interpreter.step() {
-      Err(error) => {
-        println!("Error: {}", error);
-      }
+    match self.interpreter.step(&self.waker) {
       Ok(StepResult::Again) => event_loop.set_control_flow(ControlFlow::Poll),
       Ok(StepResult::Wait) => event_loop.set_control_flow(ControlFlow::Wait),
       Ok(StepResult::WaitDuration(duration)) => {
         event_loop.set_control_flow(ControlFlow::wait_duration(duration))
       }
-      Ok(StepResult::Done(_)) => event_loop.set_control_flow(ControlFlow::Poll),
+      Ok(StepResult::Done(value)) => {
+        if self.line_started {
+          println!("{}", value);
+          self.line_started = false;
+          self.next_tx.send(()).unwrap();
+        }
+        event_loop.set_control_flow(ControlFlow::Poll);
+      }
+      Err(error) => {
+        println!("Error: {}", error);
+        if self.line_started {
+          self.line_started = false;
+          self.next_tx.send(()).unwrap();
+        }
+      }
     }
   }
 
@@ -180,17 +211,11 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
   }
 }
 
-async fn run_line(
-  line: &str,
-  interpreter: &mut Interpreter,
-) -> Result<(), Box<dyn std::error::Error>> {
-  let parsed = parser::parse(line)?;
-  interpreter.start(&parsed)?;
-
-  // pump once to print synchronous output
-  if let StepResult::Done(mut value) = interpreter.step()? {
-    println!("{}", value.repr_str()?);
+/// Wake by dispatching an event to the winit event loop
+struct ProxyWaker(Mutex<EventLoopProxy<ReplEvent>>);
+impl Wake for ProxyWaker {
+  fn wake(self: Arc<Self>) {
+    // if app is torn-down; this is an expected no-op
+    let _ = self.0.lock().unwrap().send_event(ReplEvent::Wake);
   }
-
-  Ok(())
 }

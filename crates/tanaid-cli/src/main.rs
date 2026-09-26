@@ -8,6 +8,8 @@ use std::{
   io::{self, IsTerminal},
   process::ExitCode,
   rc::Rc,
+  sync::{Arc, Mutex},
+  task::{Wake, Waker},
 };
 use tanaid::{
   eval,
@@ -16,9 +18,9 @@ use tanaid::{
 };
 use tanaid_cli::repl::run_repl;
 use tanaid_tk::Tk;
-use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ControlFlow;
+use winit::{application::ApplicationHandler, event_loop::EventLoopProxy};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -30,6 +32,10 @@ struct Args {
 
 struct RunOpts {
   debug: bool,
+}
+
+enum AppEvent {
+  Wake,
 }
 
 fn main() -> ExitCode {
@@ -77,6 +83,9 @@ fn run_source(
     println!("{:#?}", parsed)
   }
 
+  let event_loop = winit::event_loop::EventLoop::<AppEvent>::with_user_event().build()?;
+  let waker = Waker::from(Arc::new(ProxyWaker(Mutex::new(event_loop.create_proxy()))));
+
   let mut interpreter = Interpreter::new();
   let tcl_event_loop = Rc::clone(&context.event_loop);
   interpreter.configure(context);
@@ -85,7 +94,7 @@ fn run_source(
 
   // pump once to see if window is opened or events have been queued.
   // if script returns synchronously and there's no window open, we're done.
-  if let StepResult::Done(mut value) = interpreter.step()? {
+  if let StepResult::Done(mut value) = interpreter.step(&waker)? {
     println!("{}", value.repr_str()?);
     // by convention, we keep running if a window is open to generate events,
     // even if the script didn't include any explicit wait.
@@ -96,12 +105,12 @@ fn run_source(
 
   let mut app = SourceApp {
     tk: &mut tk,
+    waker,
     interpreter,
     tcl_event_loop,
     error: None,
   };
 
-  let event_loop = winit::event_loop::EventLoop::with_user_event().build()?;
   event_loop.run_app(&mut app)?;
 
   match app.error {
@@ -112,12 +121,21 @@ fn run_source(
 
 struct SourceApp<'a> {
   tk: &'a mut Tk,
+  waker: Waker,
   interpreter: Interpreter,
   tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
   error: Option<Box<dyn std::error::Error>>,
 }
 
-impl<'a> ApplicationHandler for SourceApp<'a> {
+impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
+  fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: AppEvent) {
+    match event {
+      AppEvent::Wake => {
+        // no-op; sending this event already woke the event loop (and will trigger about_to_wait)
+      }
+    }
+  }
+
   fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_resumed(event_loop);
   }
@@ -125,7 +143,7 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
 
-    match self.interpreter.step() {
+    match self.interpreter.step(&self.waker) {
       Err(err) => {
         println!("Error: {}", err);
         event_loop.exit();
@@ -153,5 +171,14 @@ impl<'a> ApplicationHandler for SourceApp<'a> {
       .tk
       .context
       .handle_window_event(window_id, event, self.tcl_event_loop.clone());
+  }
+}
+
+/// Wake by dispatching an event to the winit event loop
+struct ProxyWaker(Mutex<EventLoopProxy<AppEvent>>);
+impl Wake for ProxyWaker {
+  fn wake(self: Arc<Self>) {
+    // if app is torn-down; this is an expected no-op
+    let _ = self.0.lock().unwrap().send_event(AppEvent::Wake);
   }
 }

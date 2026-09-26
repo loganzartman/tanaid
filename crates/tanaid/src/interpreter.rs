@@ -9,15 +9,31 @@ use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
-// flow:
-// user creates an Interpreter
-// the Interpreter is a long-lived handle that allows for integration with the host event loop
-// user creates an EvalContext (can bind variables, register commands)
-// user hands over the EvalContext to Interpreter via configure()
-// user can run() code with a configure()'d Interpreter, and await the output.
-// once the output is awaited, more code can be run().
-// meanwhile, an external event loop (winit, etc.) can call and handle step(), which runs the Tcl event loop
-
+/// Interpreter is a long-lived handle that allows running Tcl code with an event loop.
+/// It's designed for integration into a host event loop (e.g. winit or JS).
+///
+/// If you simply want to get the result of a Tcl script, you may find [run_blocking] more convenient.
+///
+/// Interpreter consumes an EvalContext via `configure()`, and can then run a script:
+///
+/// ```rust
+/// use tanaid::parser;
+/// use tanaid::interpreter::Interpreter;
+/// use tanaid::eval::EvalContext;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let script = parser::parse("expr {2 + 2}")?;
+/// let mut context = EvalContext::new();
+/// let mut interpreter = Interpreter::new();
+/// interpreter.configure(context);
+/// interpreter.start(&script);
+/// # Ok(())
+/// # }
+/// ```
+///
+/// While an interpreter is running, starting another script is an error. [Self::is_busy()] will return true.
+///
+/// You must call [Self::step()] until it returns [StepResult::Done]. [Self::is_busy()] will then return false.
 pub struct Interpreter {
   state: InterpreterState,
 }
@@ -55,10 +71,11 @@ impl Interpreter {
   }
 
   /// Do work if there's work to be done, returning a result indicating what to do next.
-  pub fn step(&mut self) -> Result<StepResult, EvalError> {
+  pub fn step(&mut self, waker: &Waker) -> Result<StepResult, EvalError> {
     match &self.state {
       InterpreterState::Init => Ok(StepResult::Wait),
       InterpreterState::Idle(context) => {
+        context.event_loop.borrow_mut().set_waker(waker);
         let wait = context.event_loop.borrow_mut().next_wait()?;
         match wait {
           EventWait::Idle => return Ok(StepResult::Wait),
@@ -66,7 +83,7 @@ impl Interpreter {
           EventWait::Ready => self.dispatch_ready_event(),
         }
       }
-      InterpreterState::Running(_, _) => self.do_running_work(),
+      InterpreterState::Running(_, _) => self.do_running_work(waker),
     }
   }
 
@@ -104,7 +121,7 @@ impl Interpreter {
     Ok(StepResult::Again)
   }
 
-  fn do_running_work(&mut self) -> Result<StepResult, EvalError> {
+  fn do_running_work(&mut self, waker: &Waker) -> Result<StepResult, EvalError> {
     let (context, result) = match &mut self.state {
       InterpreterState::Init => {
         return Err(EvalError::Generic(
@@ -117,7 +134,7 @@ impl Interpreter {
         ));
       }
       InterpreterState::Running(event_loop, result_future) => {
-        let mut cx = Context::from_waker(Waker::noop());
+        let mut cx = Context::from_waker(waker);
         match result_future.as_mut().poll(&mut cx) {
           Poll::Ready(v) => v,
           Poll::Pending => {
@@ -140,9 +157,9 @@ impl Interpreter {
     self.state = InterpreterState::Idle(context);
   }
 
-  /// Start running a script. Errors if the interpreter is already running a script (see is_busy()).
-  pub fn start(&mut self, script: &ScriptNode) -> Result<(), EvalError> {
-    let mut context = match std::mem::replace(&mut self.state, InterpreterState::Init) {
+  /// Return the context if the interpreter is idle. Otherwise, return an error.
+  pub fn take_context(&mut self) -> Result<EvalContext, EvalError> {
+    match std::mem::replace(&mut self.state, InterpreterState::Init) {
       InterpreterState::Init => {
         self.state = InterpreterState::Init;
         return Err(EvalError::Generic(
@@ -156,8 +173,13 @@ impl Interpreter {
           "interpreter is busy running a script".to_string(),
         ));
       }
-      InterpreterState::Idle(context) => context,
-    };
+      InterpreterState::Idle(context) => Ok(context),
+    }
+  }
+
+  /// Start running a script. Errors if the interpreter is already running a script (see is_busy()).
+  pub fn start(&mut self, script: &ScriptNode) -> Result<(), EvalError> {
+    let mut context = self.take_context()?;
 
     let script = script.clone();
     self.state = InterpreterState::Running(
@@ -209,7 +231,10 @@ mod tests {
 
     let mut interpreter = Interpreter::new();
     interpreter.configure(context);
-    assert!(matches!(interpreter.step(), Ok(StepResult::Again)));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Again)
+    ));
 
     interpreter
       .start(&parser::parse("set x 1").unwrap())
