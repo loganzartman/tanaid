@@ -8,7 +8,7 @@ use tanaid::{
 };
 use winit::{
   event::{KeyEvent, Modifiers},
-  keyboard::ModifiersState,
+  keyboard::{Key, ModifiersState},
 };
 
 pub type Tag = String;
@@ -77,12 +77,27 @@ impl EventBindings {
     key_event: KeyEvent,
     event_loop: Rc<RefCell<event_loop::EventLoop>>,
   ) -> Result<(), EvalError> {
-    let detail = key_event.logical_key.to_text().unwrap_or("").to_string();
-    let mods = self.modifiers.state();
     let event_type = match key_event.state {
-      winit::event::ElementState::Pressed => Some(TclEventType::KeyPress),
-      winit::event::ElementState::Released => Some(TclEventType::KeyRelease),
+      winit::event::ElementState::Pressed => TclEventType::KeyPress,
+      winit::event::ElementState::Released => TclEventType::KeyRelease,
     };
+    self.handle_key(
+      tag,
+      event_type,
+      &key_detail(&key_event.logical_key),
+      event_loop,
+    )
+  }
+
+  fn handle_key(
+    &self,
+    tag: Tag,
+    event_type: TclEventType,
+    detail: &str,
+    event_loop: Rc<RefCell<event_loop::EventLoop>>,
+  ) -> Result<(), EvalError> {
+    let mods = self.modifiers.state();
+    let event_type = Some(event_type);
 
     let tags: &[String] = if tag == "all" {
       &[tag]
@@ -137,6 +152,10 @@ impl EventBindings {
 
     Ok(())
   }
+}
+
+fn key_detail(key: &Key) -> TclEventDetail {
+  key.to_text().unwrap_or("").to_string()
 }
 
 struct TkEvent {
@@ -246,4 +265,68 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
 fn parse_key(raw: &str) -> TclEventDetail {
   // TODO
   raw.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use winit::keyboard::NamedKey;
+
+  fn bind(bindings: &mut EventBindings, tag: &str, sequence: &str) {
+    let sequence = parse_sequence(sequence).unwrap();
+    bindings.bind(tag.to_string(), sequence, "set x 1", false);
+  }
+
+  /// press a key on "." and return how many scripts were queued
+  fn press(bindings: &EventBindings, detail: &str) -> usize {
+    let event_loop = Rc::new(RefCell::new(event_loop::EventLoop::new()));
+    bindings
+      .handle_key(
+        ".".to_string(),
+        TclEventType::KeyPress,
+        detail,
+        Rc::clone(&event_loop),
+      )
+      .unwrap();
+    event_loop.borrow().count_pending()
+  }
+
+  #[test]
+  fn keypress_without_detail_matches_any_key() {
+    let mut bindings = EventBindings::new();
+    bind(&mut bindings, ".", "<KeyPress>");
+    assert_eq!(press(&bindings, "a"), 1);
+  }
+
+  #[test]
+  fn keypress_detail_matches_with_unbound_modifier_held() {
+    let mut bindings = EventBindings::new();
+    bind(&mut bindings, ".", "<KeyPress-A>");
+    bindings.handle_modifiers(ModifiersState::SHIFT.into());
+    assert_eq!(press(&bindings, "A"), 1);
+  }
+
+  #[test]
+  fn widget_binding_does_not_suppress_all_binding() {
+    let mut bindings = EventBindings::new();
+    bind(&mut bindings, ".", "<KeyPress-w>");
+    bind(&mut bindings, "all", "<KeyPress-w>");
+    assert_eq!(press(&bindings, "w"), 2);
+  }
+
+  #[test]
+  fn key_is_alias_for_keypress() {
+    assert_eq!(
+      parse_sequence("<Key-Left>").unwrap(),
+      parse_sequence("<KeyPress-Left>").unwrap()
+    );
+  }
+
+  #[test]
+  fn named_keys_map_to_tk_keysyms() {
+    assert_eq!(key_detail(&Key::Character("a".into())), "a");
+    assert_eq!(key_detail(&Key::Named(NamedKey::ArrowUp)), "Up");
+    assert_eq!(key_detail(&Key::Named(NamedKey::Enter)), "Return");
+    assert_eq!(key_detail(&Key::Named(NamedKey::Space)), "space");
+  }
 }

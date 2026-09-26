@@ -171,3 +171,48 @@ impl Interpreter {
     Ok(())
   }
 }
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod tests {
+  use super::*;
+  use crate::event_loop::Event;
+  use crate::parser;
+  use std::cell::Cell;
+
+  struct NoopEvent;
+
+  impl Event for NoopEvent {
+    fn dispatch<'a>(
+      self: Box<Self>,
+      _ctx: &'a mut EvalContext,
+    ) -> Pin<Box<dyn Future<Output = Result<(), EvalError>> + 'a>> {
+      Box::pin(async { Ok(()) })
+    }
+  }
+
+  #[test]
+  fn step_keeps_context_when_ready_event_disappears() {
+    // next_wait's clock read says the timer is due; take_ready's says it isn't
+    let reads = Cell::new(0);
+    let context = EvalContext::new().with_clock_monotonic(move || {
+      reads.set(reads.get() + 1);
+      if reads.get() == 1 {
+        Duration::from_millis(10)
+      } else {
+        Duration::ZERO
+      }
+    });
+    context
+      .event_loop
+      .borrow_mut()
+      .push_scheduled(Box::new(NoopEvent), Duration::from_millis(5));
+
+    let mut interpreter = Interpreter::new();
+    interpreter.configure(context);
+    assert!(matches!(interpreter.step(), Ok(StepResult::Again)));
+
+    interpreter
+      .start(&parser::parse("set x 1").unwrap())
+      .expect("interpreter should still hold its EvalContext");
+  }
+}
