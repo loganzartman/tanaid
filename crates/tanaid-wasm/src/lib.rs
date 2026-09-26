@@ -4,6 +4,7 @@ use js_sys::{Date, Function, Promise, Reflect, global};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use tanaid::event_loop::EventLoop;
 use tanaid::interpreter::{Interpreter, StepResult};
 use tanaid::{eval::EvalContext, eval_error::EvalError, parser::parse};
 use tsify::Ts;
@@ -15,6 +16,7 @@ use web_sys;
 #[expect(dead_code)]
 pub struct Tcl {
   interpreter: Interpreter,
+  event_loop: Rc<RefCell<EventLoop>>,
   timeout_ids: Rc<RefCell<HashMap<usize, JsValue>>>,
   set_timeout: Function,
   clear_timeout: Function,
@@ -39,8 +41,8 @@ pub struct TclOptions {
 #[derive(Tsify, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunOptions {
-  #[serde(with = "serde_wasm_bindgen::preserve")]
-  #[tsify(type = "(countPending: number) => void")]
+  #[serde(default, with = "serde_wasm_bindgen::preserve")]
+  #[tsify(optional, type = "(countPending: number) => void")]
   pub handle_event_loop_status: Function,
 }
 
@@ -124,20 +126,31 @@ impl Tcl {
       .with_clock_unixtime(clock_unixtime);
 
     let mut interpreter = Interpreter::new();
+    let event_loop = Rc::clone(&context.event_loop);
     interpreter.configure(context);
 
     Ok(Tcl {
       interpreter,
+      event_loop,
       timeout_ids: Rc::new(RefCell::new(HashMap::new())),
       set_timeout: opts.set_timeout,
       clear_timeout: opts.clear_timeout,
     })
   }
 
-  pub async fn run(&mut self, src: &str, _options: Ts<RunOptions>) -> Result<JsValue, JsError> {
+  pub async fn run(
+    &mut self,
+    src: &str,
+    options: Option<Ts<RunOptions>>,
+  ) -> Result<JsValue, JsError> {
     if self.interpreter.is_busy() {
       return Err(JsError::new("interpreter is already running a script"));
     }
+
+    let options = options
+      .map(|o| o.to_rust())
+      .transpose()
+      .map_err(|e| JsError::new(format!("failed to parse options: {}", e).as_str()))?;
 
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
@@ -156,9 +169,22 @@ impl Tcl {
       })
     };
 
+    let handle_event_loop_status = options.map(|o| o.handle_event_loop_status);
+
     let mut result = None;
     loop {
       let step = self.interpreter.step()?;
+
+      if let Some(handler) = &handle_event_loop_status {
+        let count_pending = self.event_loop.borrow().count_pending();
+        handler
+          .call1(
+            &JsValue::UNDEFINED,
+            &JsValue::from(count_pending.saturating_cast::<i32>()),
+          )
+          .map_err(js_value_to_error)?;
+      }
+
       match step {
         StepResult::Again => continue,
         StepResult::Done(value) => {

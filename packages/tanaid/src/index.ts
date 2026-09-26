@@ -1,14 +1,10 @@
 import { Tcl, TclOptions } from "../../../crates/tanaid-wasm/pkg/bundler/tanaid_wasm";
 export * from "../../../crates/tanaid-wasm/pkg/bundler/tanaid_wasm";
 
-export type CreateTclOptions = Omit<TclOptions, "handleStdout" | "setTimeout" | "clearTimeout"> & {
-  handleStdout?: TclOptions["handleStdout"];
-  setTimeout?: TclOptions["setTimeout"];
-  clearTimeout?: TclOptions["clearTimeout"];
-};
+export type CreateTclOptions = Partial<TclOptions>;
 
-/** Interpreter.create with default options for convenience */
-export function createTcl(options: CreateTclOptions): Tcl {
+/** Tcl.create with default options for convenience */
+export function createTcl(options: CreateTclOptions = {}): Tcl {
   return Tcl.create({
     handleStdout: (stdout: string) => {
       console.log(stdout);
