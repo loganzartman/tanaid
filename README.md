@@ -43,10 +43,10 @@ pnpm add tanaid-tcl
 ```
 
 ```typescript
-import { createInterpreter } from "tanaid-tcl";
+import { createTcl } from "tanaid-tcl";
 
-const interp = createInterpreter({});
-const result = await interp.run(`expr {2 + 2}`);
+const tcl = createTcl();
+const result = await tcl.run(`expr {2 + 2}`);
 console.log(result);
 ```
 

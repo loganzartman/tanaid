@@ -2,6 +2,7 @@ use super::Proc;
 use super::event_loop::EventLoop;
 use crate::eval::{EvalCmdResult, eval_returnable_script};
 use crate::eval_error::EvalError;
+use crate::event_loop::{Event, EventId, EventWait, EventWaiter};
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
@@ -14,7 +15,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 pub type FrameId = usize;
-pub(crate) const GLOBAL_FRAME: FrameId = 0;
+pub const GLOBAL_FRAME: FrameId = 0;
 
 pub type OutputSink = Rc<dyn Fn(&str) -> Result<(), EvalError>>;
 pub type CommandHandler = dyn for<'a> Fn(
@@ -28,10 +29,10 @@ pub struct EvalContext {
   commands: HashMap<String, Rc<CommandHandler>>,
   frame_id: usize,
   frames: HashMap<FrameId, EvalFrame>,
-  event_loop: RefCell<EventLoop>,
+  pub event_loop: Rc<RefCell<EventLoop>>,
 
-  clock_monotonic_us: Option<Box<dyn Fn() -> u64>>,
-  clock_unixtime_ms: Option<Box<dyn Fn() -> i64>>,
+  clock_monotonic: Option<Rc<dyn Fn() -> Duration>>,
+  clock_unixtime: Option<Rc<dyn Fn() -> Duration>>,
   sleep_ms:
     Option<Rc<dyn Fn(u64) -> Pin<Box<dyn Future<Output = Result<(), EvalError>>>> + 'static>>,
 
@@ -73,10 +74,10 @@ impl EvalContext {
       commands: HashMap::new(),
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
-      event_loop: RefCell::new(EventLoop::new()),
+      event_loop: Rc::new(RefCell::new(EventLoop::new())),
 
-      clock_monotonic_us: None,
-      clock_unixtime_ms: None,
+      clock_monotonic: None,
+      clock_unixtime: None,
       sleep_ms: None,
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
@@ -99,13 +100,15 @@ impl EvalContext {
     self
   }
 
-  pub fn with_clock_monotonic_us(mut self, f: impl Fn() -> u64 + 'static) -> Self {
-    self.clock_monotonic_us = Some(Box::new(f));
+  pub fn with_clock_monotonic(mut self, f: impl Fn() -> Duration + 'static) -> Self {
+    let clock: Rc<dyn Fn() -> Duration> = Rc::new(f);
+    self.clock_monotonic = Some(Rc::clone(&clock));
+    self.event_loop.borrow_mut().clock_monotonic = Some(Rc::clone(&clock));
     self
   }
 
-  pub fn with_clock_unixtime_ms(mut self, f: impl Fn() -> i64 + 'static) -> Self {
-    self.clock_unixtime_ms = Some(Box::new(f));
+  pub fn with_clock_unixtime(mut self, f: impl Fn() -> Duration + 'static) -> Self {
+    self.clock_unixtime = Some(Rc::new(f));
     self
   }
 
@@ -117,18 +120,11 @@ impl EvalContext {
         std::thread::sleep(std::time::Duration::from_millis(ms));
         Ok(())
       })
-      .with_clock_monotonic_us(move || {
-        std::time::Instant::now()
-          .duration_since(start)
-          .as_micros()
-          .saturating_cast::<u64>()
-      })
-      .with_clock_unixtime_ms(|| {
+      .with_clock_monotonic(move || std::time::Instant::now().duration_since(start))
+      .with_clock_unixtime(|| {
         std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
           .expect("system clock set before UNIX_EPOCH")
-          .as_millis()
-          .saturating_cast::<i64>()
       })
   }
 
@@ -259,16 +255,19 @@ impl EvalContext {
     &mut self,
     timer_script: ScriptNode,
     delay_ms: u64,
-  ) -> Result<usize, EvalError> {
-    return Ok(self.event_loop.borrow_mut().start_timer(
-      Duration::from_micros(self.clock_monotonic()?),
-      timer_script,
-      Duration::from_millis(delay_ms),
-    ));
+  ) -> Result<EventId, EvalError> {
+    let event = TimerEvent::new(timer_script);
+    let deadline = self.clock_monotonic()? + Duration::from_millis(delay_ms);
+    return Ok(
+      self
+        .event_loop
+        .borrow_mut()
+        .push_scheduled(Box::new(event), deadline),
+    );
   }
 
-  pub fn cancel_timer(&mut self, timer_id: usize) -> Result<(), EvalError> {
-    self.event_loop.borrow_mut().cancel_timer(timer_id);
+  pub fn cancel_timer(&mut self, timer_id: EventId) -> Result<(), EvalError> {
+    self.event_loop.borrow_mut().remove(timer_id);
     Ok(())
   }
 
@@ -285,38 +284,32 @@ impl EvalContext {
     self.event_loop.borrow().count_pending()
   }
 
-  pub fn next_event_delay(&self) -> Result<Option<Duration>, EvalError> {
-    Ok(
-      self
-        .event_loop
-        .borrow_mut()
-        .next_delay(Duration::from_micros(self.clock_monotonic()?)),
-    )
+  pub fn next_event_wait(&self) -> Result<EventWait, EvalError> {
+    self.event_loop.borrow_mut().next_wait()
   }
 
-  pub fn clock_monotonic(&self) -> Result<u64, EvalError> {
-    Ok(self.clock_monotonic_us.as_ref().ok_or_else(|| {
+  pub async fn wait_for_event(&self) -> Result<(), EvalError> {
+    Ok(EventWaiter::wait(Rc::clone(&self.event_loop)).await?)
+  }
+
+  pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
+    Ok(self.clock_monotonic.as_ref().ok_or_else(|| {
       EvalError::Generic("Context missing clock_monotonic".to_string())
     })?())
   }
 
-  pub fn clock_unixtime(&self) -> Result<i64, EvalError> {
-    Ok(self.clock_unixtime_ms.as_ref().ok_or_else(|| {
+  pub fn clock_unixtime(&self) -> Result<Duration, EvalError> {
+    Ok(self.clock_unixtime.as_ref().ok_or_else(|| {
       EvalError::Generic("Context missing clock_unixtime".to_string())
     })?())
   }
 
   pub async fn poll_event(&mut self) -> Result<bool, EvalError> {
-    let Some((_, script)) = self
-      .event_loop
-      .borrow_mut()
-      .take_elapsed(Duration::from_micros(self.clock_monotonic()?))
-    else {
+    let Some(event) = self.event_loop.borrow_mut().take_ready()? else {
       return Ok(false);
     };
 
-    // TODO: bgerror (don't abort event loops)
-    eval_returnable_script(&script, self, GLOBAL_FRAME).await?;
+    event.dispatch(self).await?;
     Ok(true)
   }
 
@@ -453,5 +446,29 @@ impl EvalFrame {
   /// monotonically increasing counter that increases when variable is written
   pub fn get_rev(&self, name: &str) -> u64 {
     *self.variable_revs.get(name).unwrap_or(&0)
+  }
+}
+
+// an EventLoop event that simply runs its script (on timer fire)
+pub struct TimerEvent {
+  script: ScriptNode,
+}
+
+impl TimerEvent {
+  fn new(script: ScriptNode) -> Self {
+    Self { script }
+  }
+}
+
+impl Event for TimerEvent {
+  fn dispatch<'a>(
+    self: Box<Self>,
+    ctx: &'a mut EvalContext,
+  ) -> Pin<Box<dyn Future<Output = Result<(), EvalError>> + 'a>> {
+    Box::pin(async move {
+      // TODO: bgerror (don't abort event loops)
+      eval_returnable_script(&self.script, ctx, GLOBAL_FRAME).await?;
+      Ok(())
+    })
   }
 }

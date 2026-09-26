@@ -30,6 +30,14 @@ pub struct ScriptNode {
   pub commands: Vec<CommandNode>,
 }
 
+impl ScriptNode {
+  pub fn concat(a: &ScriptNode, b: &ScriptNode) -> ScriptNode {
+    ScriptNode {
+      commands: [a.commands.as_slice(), b.commands.as_slice()].concat(),
+    }
+  }
+}
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct CommandNode {
   pub words: Vec<WordNode>,

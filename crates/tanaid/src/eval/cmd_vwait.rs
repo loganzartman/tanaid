@@ -33,12 +33,7 @@ async fn eval_vwait<'a>(opts: VwaitOptions<'a>, context: &mut EvalContext) -> Ev
   }
 
   'outer: loop {
-    // TODO: wait for future events when no timers pending
-    let Some(delay) = context.next_event_delay()? else {
-      break;
-    };
-
-    context.sleep_ms(delay.as_millis() as u64).await?;
+    context.wait_for_event().await?;
     context.poll_event().await?;
 
     for var in opts.vars.iter() {

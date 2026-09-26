@@ -4,12 +4,14 @@ use reedline::{
   default_emacs_keybindings,
 };
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
 use tanaid::eval::EvalContext;
+use tanaid::interpreter::{Interpreter, StepResult};
+use tanaid::parser;
 use tanaid::parser::ParseError;
-use tanaid::{eval, parser};
 use tanaid_tk::Tk;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -66,10 +68,7 @@ enum ReplEvent {
   Exit,
 }
 
-pub fn run_repl(
-  context: &mut eval::EvalContext,
-  tk: &mut Tk,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::Error>> {
   let (next_tx, next_rx) = mpsc::channel::<()>();
 
   let event_loop = winit::event_loop::EventLoop::<ReplEvent>::with_user_event().build()?;
@@ -110,9 +109,14 @@ pub fn run_repl(
     }
   });
 
+  let tcl_event_loop = context.event_loop.clone();
+  let mut interpreter = Interpreter::new();
+  interpreter.configure(context);
+
   let mut app = ReplApp {
     tk,
-    context,
+    interpreter,
+    tcl_event_loop,
     next_tx,
   };
   event_loop.run_app(&mut app)?;
@@ -122,20 +126,21 @@ pub fn run_repl(
   Ok(())
 }
 
-struct ReplApp<'a> {
-  tk: &'a mut Tk,
-  context: &'a mut EvalContext,
+struct ReplApp {
+  tk: Tk,
+  interpreter: Interpreter,
+  tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
   next_tx: mpsc::Sender<()>,
 }
 
-impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
+impl ApplicationHandler<ReplEvent> for ReplApp {
   fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: ReplEvent) {
     match event {
       ReplEvent::Exit => {
         event_loop.exit();
       }
       ReplEvent::Line(line) => {
-        if let Err(err) = pollster::block_on(run_line(&line, &mut self.context)) {
+        if let Err(err) = pollster::block_on(run_line(&line, &mut self.interpreter)) {
           println!("Error: {}", err);
         }
         self.next_tx.send(()).unwrap();
@@ -148,43 +153,44 @@ impl<'a> ApplicationHandler<ReplEvent> for ReplApp<'a> {
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    if let Err(err) = pollster::block_on(self.context.poll_event()) {
-      println!("Error: {}", err);
-    }
-
     self.tk.context.handle_about_to_wait(event_loop);
-
-    match self
-      .context
-      .next_event_delay()
-      .expect("clock should be configured")
-    {
-      Some(delay) => {
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + delay));
+    match self.interpreter.step() {
+      Err(error) => {
+        println!("Error: {}", error);
       }
-      None => {
-        event_loop.set_control_flow(ControlFlow::Wait);
+      Ok(StepResult::Again) => event_loop.set_control_flow(ControlFlow::Poll),
+      Ok(StepResult::Wait) => event_loop.set_control_flow(ControlFlow::Wait),
+      Ok(StepResult::WaitDuration(duration)) => {
+        event_loop.set_control_flow(ControlFlow::wait_duration(duration))
       }
+      Ok(StepResult::Done(_)) => event_loop.set_control_flow(ControlFlow::Poll),
     }
   }
 
   fn window_event(
     &mut self,
-    event_loop: &winit::event_loop::ActiveEventLoop,
+    _event_loop: &winit::event_loop::ActiveEventLoop,
     window_id: winit::window::WindowId,
     event: WindowEvent,
   ) {
     self
       .tk
       .context
-      .handle_window_event(event_loop, window_id, event);
+      .handle_window_event(window_id, event, self.tcl_event_loop.clone());
   }
 }
 
-async fn run_line(line: &str, context: &mut EvalContext) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_line(
+  line: &str,
+  interpreter: &mut Interpreter,
+) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(line)?;
-  let mut result = eval::eval(&parsed, context).await?;
-  println!("{}", result.repr_str()?);
-  context.poll_event().await?;
+  interpreter.start(&parsed)?;
+
+  // pump once to print synchronous output
+  if let StepResult::Done(mut value) = interpreter.step()? {
+    println!("{}", value.repr_str()?);
+  }
+
   Ok(())
 }
