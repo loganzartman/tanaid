@@ -28,25 +28,34 @@ pub fn run_blocking(script: &ScriptNode, context: &mut EvalContext) -> Result<Va
 
   let result;
   loop {
-    match interpreter.step(&waker)? {
-      StepResult::Again => continue,
-      StepResult::WaitDuration(duration) => std::thread::park_timeout(duration),
-      StepResult::Wait => std::thread::park(),
-      StepResult::Done(value) => {
-        result = value;
+    match interpreter.step(&waker) {
+      Ok(StepResult::Again) => continue,
+      Ok(StepResult::WaitDuration(duration)) => std::thread::park_timeout(duration),
+      Ok(StepResult::Wait) => std::thread::park(),
+      Ok(StepResult::Done(value)) => {
+        result = Ok(value);
+        break;
+      }
+      Err(err) => {
+        result = Err(err);
         break;
       }
     }
   }
 
   *context = interpreter.take_context()?;
-  Ok(result)
+  result
 }
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use super::*;
-  use crate::{eval::EvalContext, parser};
+  use crate::{
+    eval::{EvalContext, GLOBAL_FRAME},
+    parser,
+  };
 
   #[test]
   fn runs_sync() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,6 +78,16 @@ mod tests {
     let script = parser::parse("after 10 {set x 1}; vwait x; return $x;")?;
     let mut context = EvalContext::new().with_std_time();
     assert_eq!(run_blocking(&script, &mut context)?.repr_int()?, 1);
+    Ok(())
+  }
+
+  #[test]
+  fn preserves_context_on_error() -> Result<(), Box<dyn std::error::Error>> {
+    let script = parser::parse("undefined_command")?;
+    let mut context = EvalContext::new().with_std_time();
+    context.set_variable(GLOBAL_FRAME, "test", Value::from(1));
+    assert_matches!(run_blocking(&script, &mut context), Err(_));
+    assert!(context.get_variable(GLOBAL_FRAME, "test").is_some());
     Ok(())
   }
 }
