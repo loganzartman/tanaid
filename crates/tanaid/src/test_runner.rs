@@ -7,12 +7,12 @@ use crate::{
   run_blocking::run_with_blocking_wait, value::Value,
 };
 
+/// Runs scripts with a fake clock that advances instantly.
 pub struct TestRunner {
   pub context: EvalContext,
   pub clock: Rc<Cell<Duration>>,
 }
 
-/// Runs scripts with a fake clock that advances instantly.
 impl TestRunner {
   pub fn new() -> Self {
     Self::new_with_context(EvalContext::new())
