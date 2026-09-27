@@ -6,7 +6,11 @@ self.onmessage = async ({ data: { source } }) => {
   let t0 = performance.now();
   const stdoutBuffer: string[] = [];
   const flushStdout = () => {
-    self.postMessage({ type: "stdout", value: stdoutBuffer.join("") });
+    const value = stdoutBuffer.join("");
+    if (!value.length) {
+      return;
+    }
+    self.postMessage({ type: "stdout", value });
     stdoutBuffer.length = 0;
     t0 = performance.now();
   };
