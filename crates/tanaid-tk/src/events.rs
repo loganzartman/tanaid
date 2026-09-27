@@ -281,7 +281,7 @@ fn history_matches(history_seq: &[TclEvent], binding_seq: &[TclEvent]) -> bool {
     if !h.modifiers.contains(b.modifiers) {
       return false;
     }
-    if b.modifiers > h.modifiers {
+    if b.detail.is_some() && h.detail != b.detail {
       return false;
     }
   }
@@ -291,10 +291,15 @@ fn history_matches(history_seq: &[TclEvent], binding_seq: &[TclEvent]) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use tanaid::test_runner::TestRunner;
 
   fn bind(bindings: &mut EventBindings, tag: &str, sequence: &str) {
+    bind_script(bindings, tag, sequence, "set x 1");
+  }
+
+  fn bind_script(bindings: &mut EventBindings, tag: &str, sequence: &str, script: &str) {
     let sequence = parse_sequence(sequence).unwrap();
-    bindings.bind(tag.to_string(), sequence, "set x 1", false);
+    bindings.bind(tag.to_string(), sequence, script, false);
   }
 
   /// send a key event to "." and return how many scripts were queued
@@ -308,6 +313,52 @@ mod tests {
 
   fn press(bindings: &EventBindings, detail: &str) -> usize {
     key(bindings, TclEventType::KeyPress, detail)
+  }
+
+  /// press a key on ".", run the queued scripts, and return the global `ran` (empty if unset)
+  fn press_and_run(bindings: &EventBindings, detail: &str) -> String {
+    let mut runner = TestRunner::new();
+    bindings
+      .handle_key(
+        ".".to_string(),
+        TclEventType::KeyPress,
+        detail,
+        Rc::clone(&runner.context.event_loop),
+      )
+      .unwrap();
+    runner.run(&parser::parse("update").unwrap()).unwrap();
+    runner
+      .context
+      .get_variable(GLOBAL_FRAME, "ran")
+      .map(|v| v.clone().repr_str().unwrap().to_string())
+      .unwrap_or_default()
+  }
+
+  #[test]
+  fn keypress_detail_rejects_other_keys() {
+    let mut bindings = EventBindings::new();
+    bind(&mut bindings, ".", "<KeyPress-a>");
+    assert_eq!(press(&bindings, "b"), 0);
+  }
+
+  #[test]
+  fn multi_event_binding_needs_full_sequence() {
+    let mut bindings = EventBindings::new();
+    bind(&mut bindings, ".", "<KeyPress-a><KeyPress-b>");
+    assert_eq!(press(&bindings, "b"), 0);
+  }
+
+  #[test]
+  fn most_specific_binding_wins() {
+    // HashMap iteration order is random per instance; repeat so a lucky order can't pass
+    for _ in 0..16 {
+      let mut bindings = EventBindings::new();
+      bind_script(&mut bindings, ".", "<KeyPress>", "lappend ran any");
+      bind_script(&mut bindings, ".", "<KeyPress-a>", "lappend ran a");
+      bind_script(&mut bindings, ".", "<Control-KeyPress>", "lappend ran control");
+      bindings.handle_modifiers(ModifiersState::CONTROL.into());
+      assert_eq!(press_and_run(&bindings, "a"), "a");
+    }
   }
 
   #[test]
