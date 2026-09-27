@@ -6,6 +6,7 @@ pub mod interpreter;
 pub mod parser;
 pub mod parser_expr;
 pub mod run_blocking;
+pub mod test_runner;
 pub mod value;
 
 pub use eval::event_loop;

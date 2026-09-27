@@ -1,6 +1,7 @@
 use std::{
   sync::Arc,
   task::{Wake, Waker},
+  time::Duration,
 };
 
 use crate::{
@@ -19,35 +20,54 @@ impl Wake for ThreadWaker {
   }
 }
 
-pub fn run_blocking(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+/// Run a script using a blocking wait(Duration) function, as well as a Waker that can interrupt it.
+pub fn run_with_blocking_wait(
+  script: &ScriptNode,
+  context: &mut EvalContext,
+  waker: &Waker,
+  mut wait: impl FnMut(Option<Duration>) -> Result<(), EvalError>,
+) -> Result<Value, EvalError> {
   let mut interpreter = Interpreter::new();
   interpreter.configure(std::mem::replace(context, EvalContext::new()));
   interpreter.start(script)?;
 
-  let waker = Waker::from(Arc::new(ThreadWaker(std::thread::current())));
-
-  let result;
-  loop {
-    match interpreter.step(&waker) {
-      Ok(StepResult::Again) => continue,
-      Ok(StepResult::WaitDuration(duration)) => std::thread::park_timeout(duration),
-      Ok(StepResult::Wait) => std::thread::park(),
-      Ok(StepResult::Done(value)) => {
-        result = Ok(value);
-        break;
-      }
-      Err(err) => {
-        result = Err(err);
-        break;
-      }
+  let result = (|| -> Result<Value, EvalError> {
+    loop {
+      match interpreter.step(waker)? {
+        StepResult::Again => continue,
+        StepResult::WaitDuration(duration) => wait(Some(duration)).map_err(context_lost_error)?,
+        StepResult::Wait => wait(None).map_err(context_lost_error)?,
+        StepResult::Done(value) => {
+          return Ok(value);
+        }
+      };
     }
-  }
+  })();
 
-  *context = interpreter.take_context()?;
+  if let Ok(restored) = interpreter.take_context() {
+    *context = restored;
+  }
   result
 }
 
-#[cfg(test)]
+fn context_lost_error(error: EvalError) -> EvalError {
+  EvalError::Generic(format!("Error while waiting (context lost): {}", error))
+}
+
+/// Run a script, blocking the current thread until it's done.
+pub fn run_blocking(script: &ScriptNode, context: &mut EvalContext) -> Result<Value, EvalError> {
+  let waker = Waker::from(Arc::new(ThreadWaker(std::thread::current())));
+  let wait = move |duration: Option<Duration>| {
+    match duration {
+      None => std::thread::park(),
+      Some(d) => std::thread::park_timeout(d),
+    }
+    Ok(())
+  };
+  run_with_blocking_wait(script, context, &waker, wait)
+}
+
+#[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
   use std::assert_matches;
 

@@ -88,21 +88,9 @@ impl Interpreter {
   }
 
   fn dispatch_ready_event(&mut self) -> Result<StepResult, EvalError> {
-    let mut context = match std::mem::replace(&mut self.state, InterpreterState::Init) {
-      InterpreterState::Init => {
-        return Err(EvalError::Generic(
-          "interpreter not configured with EvalContext".to_string(),
-        ));
-      }
-      InterpreterState::Idle(context) => context,
-      InterpreterState::Running(event_loop, result_future) => {
-        // replace state with previous one to avoid breaking interpreter
-        self.state = InterpreterState::Running(event_loop, result_future);
-        return Err(EvalError::Generic(
-          "interpreter is busy running a script".to_string(),
-        ));
-      }
-    };
+    let mut context = self
+      .take_context()
+      .expect("dispatch_ready_event should only be called while Idle");
 
     let event_loop = Rc::clone(&context.event_loop);
     let Some(event) = event_loop.borrow_mut().take_ready()? else {
