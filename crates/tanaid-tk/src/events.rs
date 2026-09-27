@@ -221,6 +221,12 @@ pub fn parse_sequence(mut raw: &str) -> Result<Vec<TclEvent>, EvalError> {
     }
   }
 
+  if seq.is_empty() {
+    return Err(EvalError::Generic(
+      "no events specified in binding".to_string(),
+    ));
+  }
+
   Ok(seq)
 }
 
