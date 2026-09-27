@@ -165,3 +165,7 @@ pnpm i
 # start dev server
 pnpm dev
 ```
+
+## LLMs
+
+i type nearly all the code for the purpose of practicing. writing is all human written or edited. test cases are mostly typed by LLM. boring files that are generated are marked accordingly.
