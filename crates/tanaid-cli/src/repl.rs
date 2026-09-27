@@ -151,12 +151,14 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
           Ok(script) => script,
           Err(err) => {
             eprintln!("Error: {}", err);
+            self.next_tx.send(()).unwrap();
             return;
           }
         };
 
         if let Err(err) = self.interpreter.start(&script) {
           eprintln!("Error: {}", err);
+          self.next_tx.send(()).unwrap();
           return;
         }
 
