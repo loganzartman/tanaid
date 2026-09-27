@@ -108,6 +108,7 @@ fn run_source(
     waker,
     interpreter,
     tcl_event_loop,
+    first_result: true,
     error: None,
   };
 
@@ -124,6 +125,7 @@ struct SourceApp<'a> {
   waker: Waker,
   interpreter: Interpreter,
   tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
+  first_result: bool,
   error: Option<Box<dyn std::error::Error>>,
 }
 
@@ -154,7 +156,13 @@ impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
         event_loop.set_control_flow(ControlFlow::wait_duration(duration))
       }
       Ok(StepResult::Wait) => event_loop.set_control_flow(ControlFlow::Wait),
-      Ok(StepResult::Done(_)) => event_loop.set_control_flow(ControlFlow::Poll),
+      Ok(StepResult::Done(value)) => {
+        if self.first_result {
+          self.first_result = false;
+          println!("{}", value);
+        }
+        event_loop.set_control_flow(ControlFlow::Poll)
+      }
     }
 
     if !self.interpreter.is_busy() && !self.tk.context.has_window() {
