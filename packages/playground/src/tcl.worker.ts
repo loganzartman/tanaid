@@ -1,18 +1,22 @@
-import { Interpreter } from "tanaid-tcl";
+import { Tcl } from "tanaid-tcl";
 
 self.onmessage = async ({ data: { source } }) => {
-  let interp;
+  let tcl;
 
   let t0 = performance.now();
   const stdoutBuffer: string[] = [];
   const flushStdout = () => {
-    self.postMessage({ type: "stdout", value: stdoutBuffer.join("") });
+    const value = stdoutBuffer.join("");
+    if (!value.length) {
+      return;
+    }
+    self.postMessage({ type: "stdout", value });
     stdoutBuffer.length = 0;
     t0 = performance.now();
   };
 
   try {
-    interp = Interpreter.create({
+    tcl = Tcl.create({
       handleStdout(value) {
         stdoutBuffer.push(value);
         if (performance.now() - t0 > 16) {
@@ -31,20 +35,20 @@ self.onmessage = async ({ data: { source } }) => {
       clearTimeout(timeoutId) {
         globalThis.clearTimeout(timeoutId as number);
       },
-      handleEventLoopStatus(nPending: number) {
-        self.postMessage({ type: "pending-timers", value: nPending });
+    });
+
+    const value = await tcl.run(source, {
+      handleEventLoopStatus(countPending: number) {
+        flushStdout();
+        self.postMessage({ type: "event-loop-status", countPending });
       },
     });
 
-    const value = await interp.run(source);
     flushStdout();
     self.postMessage({
       type: "result",
       value,
     });
-
-    await interp.runEventLoop();
-    flushStdout();
 
     self.postMessage({ type: "done" });
   } catch (error) {
@@ -55,7 +59,7 @@ self.onmessage = async ({ data: { source } }) => {
       error: String(error),
     });
   } finally {
-    interp?.free();
+    tcl?.free();
   }
 };
 

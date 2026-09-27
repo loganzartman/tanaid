@@ -2,11 +2,9 @@ use super::*;
 use crate::eval::context::GLOBAL_FRAME;
 use crate::eval_error::EvalError;
 use crate::parser::{self, CommandNode, ScriptNode, WordNode, WordPart};
+use crate::test_runner::TestRunner;
 use crate::value::Value;
 use std::assert_matches;
-use std::cell::Cell;
-use std::rc::Rc;
-use std::time::Duration;
 
 #[pollster::test]
 async fn eval_set_var_name() -> Result<(), Box<dyn std::error::Error>> {
@@ -1585,42 +1583,31 @@ async fn eval_foreach_uneven_list() -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 
-fn context_with_test_clock() -> EvalContext {
-  let clock_monotonic = Rc::new(Cell::new(Duration::ZERO));
-  let event_clock = clock_monotonic.clone();
-  let sleep_clock = clock_monotonic.clone();
+#[test]
+fn eval_update_does_not_fire_future_timer() -> Result<(), Box<dyn std::error::Error>> {
+  let mut runner = TestRunner::new();
+  runner.run(&parser::parse("after 10 {set future 1}; update")?)?;
 
-  EvalContext::new()
-    .with_clock_monotonic_us(move || event_clock.get().as_micros().saturating_cast::<u64>())
-    .with_sleep_ms(move |ms| {
-      sleep_clock.set(sleep_clock.get() + Duration::from_millis(ms));
-      async { Ok(()) }
-    })
-}
-
-#[pollster::test]
-async fn eval_update_does_not_fire_future_timer() -> Result<(), Box<dyn std::error::Error>> {
-  let mut ctx = context_with_test_clock();
-  eval(&parser::parse("after 10 {set future 1}; update")?, &mut ctx).await?;
-
-  assert!(ctx.get_variable(GLOBAL_FRAME, "future").is_none());
-  assert_eq!(ctx.count_pending_events(), 1);
+  assert!(
+    runner
+      .context
+      .get_variable(GLOBAL_FRAME, "future")
+      .is_none()
+  );
+  assert_eq!(runner.context.count_pending_events(), 1);
   Ok(())
 }
 
-#[pollster::test]
-async fn eval_vwait_ignores_unrelated_events() -> Result<(), Box<dyn std::error::Error>> {
-  let mut ctx = context_with_test_clock();
-  eval(
-    &parser::parse(
-      "set watched 0; after 10 {set other 1}; after 20 {set watched 1}; vwait watched",
-    )?,
-    &mut ctx,
-  )
-  .await?;
+#[test]
+fn eval_vwait_ignores_unrelated_events() -> Result<(), Box<dyn std::error::Error>> {
+  let mut runner = TestRunner::new();
+  runner.run(&parser::parse(
+    "set watched 0; after 10 {set other 1}; after 20 {set watched 1}; vwait watched",
+  )?)?;
 
   assert_eq!(
-    ctx
+    runner
+      .context
       .get_variable(GLOBAL_FRAME, "other")
       .unwrap()
       .clone()
@@ -1630,53 +1617,40 @@ async fn eval_vwait_ignores_unrelated_events() -> Result<(), Box<dyn std::error:
   Ok(())
 }
 
-#[pollster::test]
-async fn eval_vwait_leaves_later_events_pending() -> Result<(), Box<dyn std::error::Error>> {
-  let mut ctx = context_with_test_clock();
-  eval(
-    &parser::parse(
-      "set watched 0; after 10 {set watched 1}; after 20 {set later 1}; vwait watched",
-    )?,
-    &mut ctx,
-  )
-  .await?;
+#[test]
+fn eval_vwait_leaves_later_events_pending() -> Result<(), Box<dyn std::error::Error>> {
+  let mut runner = TestRunner::new();
+  runner.run(&parser::parse(
+    "set watched 0; after 10 {set watched 1}; after 20 {set later 1}; vwait watched",
+  )?)?;
 
-  assert!(ctx.get_variable(GLOBAL_FRAME, "later").is_none());
-  assert_eq!(ctx.count_pending_events(), 1);
+  assert!(runner.context.get_variable(GLOBAL_FRAME, "later").is_none());
+  assert_eq!(runner.context.count_pending_events(), 1);
   Ok(())
 }
 
-#[pollster::test]
-async fn eval_vwait_detects_same_value_write_through_alias()
--> Result<(), Box<dyn std::error::Error>> {
-  let mut ctx = context_with_test_clock();
-  eval(
-    &parser::parse(
-      "set watched 0; upvar #0 watched alias; after 10 {set watched 0}; after 20 {set later 1}; vwait alias",
-    )?,
-    &mut ctx,
-  )
-  .await?;
+#[test]
+fn eval_vwait_detects_same_value_write_through_alias() -> Result<(), Box<dyn std::error::Error>> {
+  let mut runner = TestRunner::new();
+  runner.run(&parser::parse(
+    "set watched 0; upvar #0 watched alias; after 10 {set watched 0}; after 20 {set later 1}; vwait alias",
+  )?)?;
 
-  assert!(ctx.get_variable(GLOBAL_FRAME, "later").is_none());
-  assert_eq!(ctx.count_pending_events(), 1);
+  assert!(runner.context.get_variable(GLOBAL_FRAME, "later").is_none());
+  assert_eq!(runner.context.count_pending_events(), 1);
   Ok(())
 }
 
-#[pollster::test]
-async fn eval_vwait_watches_global_variable_from_proc() -> Result<(), Box<dyn std::error::Error>> {
-  let mut ctx = context_with_test_clock();
-  let mut result = eval(
-    &parser::parse(
-      "proc wait {} {set watched local; after 10 {set watched global}; after 20 {set later 1}; vwait watched; return $watched}; wait",
-    )?,
-    &mut ctx,
-  )
-  .await?;
+#[test]
+fn eval_vwait_watches_global_variable_from_proc() -> Result<(), Box<dyn std::error::Error>> {
+  let mut runner = TestRunner::new();
+  let mut result = runner.run(&parser::parse(
+    "proc wait {} {set watched local; after 10 {set watched global}; after 20 {set later 1}; vwait watched; return $watched}; wait",
+  )?)?;
 
   assert_eq!(result.repr_str()?, "local");
-  assert!(ctx.get_variable(GLOBAL_FRAME, "later").is_none());
-  assert_eq!(ctx.count_pending_events(), 1);
+  assert!(runner.context.get_variable(GLOBAL_FRAME, "later").is_none());
+  assert_eq!(runner.context.count_pending_events(), 1);
   Ok(())
 }
 

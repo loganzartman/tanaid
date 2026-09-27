@@ -3,10 +3,11 @@
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
   "editor.defaultFormatter": "rust-lang.rust-analyzer",
-  "rust-analyzer.server.path": "rust-analyzer",
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
   },
+  "rust-analyzer.cargo.target": null,
+  "rust-analyzer.check.targets": ["host-tuple", "wasm32-unknown-unknown"],
   "[typescript][javascript][typescriptreact][javascriptreact][html][css][scss][json][yaml][markdown][toml]": {
     "editor.defaultFormatter": "oxc.oxc-vscode"
   }

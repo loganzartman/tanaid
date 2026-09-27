@@ -90,8 +90,8 @@ function runTcl(
             case "result":
               handleResult(data.value);
               break;
-            case "pending-timers":
-              handlePendingTimers(data.value);
+            case "event-loop-status":
+              handlePendingTimers(data.countPending);
               break;
             case "done":
               res();

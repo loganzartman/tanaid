@@ -1,27 +1,14 @@
-import {
-  Interpreter,
-  InterpreterOptions,
-} from "../../../crates/tanaid-wasm/pkg/bundler/tanaid_wasm";
+import { Tcl, TclOptions } from "../../../crates/tanaid-wasm/pkg/bundler/tanaid_wasm";
 export * from "../../../crates/tanaid-wasm/pkg/bundler/tanaid_wasm";
 
-export type CreateInterpreterOptions = Omit<
-  InterpreterOptions,
-  "handleStdout" | "handleEventLoopStatus" | "setTimeout" | "clearTimeout"
-> & {
-  handleStdout?: InterpreterOptions["handleStdout"];
-  handleEventLoopStatus?: InterpreterOptions["handleEventLoopStatus"];
-  setTimeout?: InterpreterOptions["setTimeout"];
-  clearTimeout?: InterpreterOptions["clearTimeout"];
-};
+export type CreateTclOptions = Partial<TclOptions>;
 
-/** Interpreter.create with default options for convenience */
-export function createInterpreter(options: CreateInterpreterOptions): Interpreter {
-  return Interpreter.create({
+/** Tcl.create with default options for convenience */
+export function createTcl(options: CreateTclOptions = {}): Tcl {
+  return Tcl.create({
     handleStdout: (stdout: string) => {
       console.log(stdout);
     },
-
-    handleEventLoopStatus: (_nPending: number) => {},
 
     setTimeout: (callback, delayMs) => {
       return globalThis.setTimeout(callback, delayMs);
@@ -32,5 +19,5 @@ export function createInterpreter(options: CreateInterpreterOptions): Interprete
     },
 
     ...options,
-  } satisfies InterpreterOptions);
+  } satisfies TclOptions);
 }
