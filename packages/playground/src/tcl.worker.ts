@@ -35,7 +35,8 @@ self.onmessage = async ({ data: { source } }) => {
 
     const value = await tcl.run(source, {
       handleEventLoopStatus(countPending: number) {
-        self.postMessage({ type: "event_loop_status", countPending });
+        flushStdout();
+        self.postMessage({ type: "event-loop-status", countPending });
       },
     });
 
