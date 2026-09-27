@@ -93,9 +93,17 @@ impl Interpreter {
       .expect("dispatch_ready_event should only be called while Idle");
 
     let event_loop = Rc::clone(&context.event_loop);
-    let Some(event) = event_loop.borrow_mut().take_ready()? else {
-      // possible timer disagreement, try again
-      return Ok(StepResult::Again);
+    let event = match event_loop.borrow_mut().take_ready() {
+      Ok(Some(event)) => event,
+      Ok(None) => {
+        // possible timer disagreement, try again
+        self.state = InterpreterState::Idle(context);
+        return Ok(StepResult::Again);
+      }
+      Err(e) => {
+        self.state = InterpreterState::Idle(context);
+        return Err(e);
+      }
     };
 
     self.state = InterpreterState::Running(
