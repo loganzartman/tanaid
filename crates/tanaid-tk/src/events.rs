@@ -122,8 +122,6 @@ impl EventBindings {
   ) -> Result<(), EvalError> {
     // TODO: record multi-key sequences
 
-    let mods = self.modifiers.state();
-
     let tags: &[String] = if tag == "all" {
       &[tag]
     } else {
@@ -131,8 +129,8 @@ impl EventBindings {
     };
 
     let event = TclEvent {
-      event_type: event_type,
-      modifiers: mods,
+      event_type,
+      modifiers: self.modifiers.state(),
       detail: Some(detail.to_string()),
     };
 
@@ -144,18 +142,27 @@ impl EventBindings {
       // TODO: prepend actual history
       let history_seq = std::slice::from_ref(&event);
 
-      for (binding_seq, script_str) in bindings {
-        if history_matches(history_seq, binding_seq) {
-          // TODO: template substitutions for key codes etc.
-          // TODO: parse with caching
-          let script =
-            parser::parse(script_str).map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
+      let most_specific_matching_binding = bindings
+        .iter()
+        .filter(|(binding_seq, _)| history_matches(history_seq, binding_seq))
+        .max_by_key(|(seq, _)| {
+          let last = seq.last().expect("sequence should have at least one event");
+          (
+            last.detail.is_some(),
+            seq.len(),
+            last.modifiers.bits().count_ones(),
+          )
+        });
 
-          event_loop
-            .borrow_mut()
-            .push_immediate(Box::new(TkEvent { script }));
-          break;
-        }
+      if let Some((_, script_str)) = most_specific_matching_binding {
+        // TODO: template substitutions for key codes etc.
+        // TODO: parse with caching
+        let script =
+          parser::parse(script_str).map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
+
+        event_loop
+          .borrow_mut()
+          .push_immediate(Box::new(TkEvent { script }));
       }
     }
 
@@ -274,6 +281,9 @@ fn parse_key(raw: &str) -> TclEventDetail {
 }
 
 fn history_matches(history_seq: &[TclEvent], binding_seq: &[TclEvent]) -> bool {
+  if binding_seq.len() > history_seq.len() {
+    return false;
+  }
   for (h, b) in history_seq.iter().rev().zip(binding_seq.iter().rev()) {
     if h.event_type != b.event_type {
       return false;
@@ -285,7 +295,7 @@ fn history_matches(history_seq: &[TclEvent], binding_seq: &[TclEvent]) -> bool {
       return false;
     }
   }
-  return true;
+  true
 }
 
 #[cfg(test)]
@@ -349,13 +359,33 @@ mod tests {
   }
 
   #[test]
+  fn dominated_binding_never_wins() {
+    // <Alt-Shift-a> strictly beats <Alt-a>; <Control-a> is incomparable to both
+    for _ in 0..16 {
+      let mut bindings = EventBindings::new();
+      bind_script(&mut bindings, ".", "<Control-a>", "lappend ran control");
+      bind_script(&mut bindings, ".", "<Alt-a>", "lappend ran alt");
+      bind_script(&mut bindings, ".", "<Alt-Shift-a>", "lappend ran alt-shift");
+      bindings.handle_modifiers(
+        (ModifiersState::CONTROL | ModifiersState::ALT | ModifiersState::SHIFT).into(),
+      );
+      assert_ne!(press_and_run(&bindings, "a"), "alt");
+    }
+  }
+
+  #[test]
   fn most_specific_binding_wins() {
     // HashMap iteration order is random per instance; repeat so a lucky order can't pass
     for _ in 0..16 {
       let mut bindings = EventBindings::new();
       bind_script(&mut bindings, ".", "<KeyPress>", "lappend ran any");
       bind_script(&mut bindings, ".", "<KeyPress-a>", "lappend ran a");
-      bind_script(&mut bindings, ".", "<Control-KeyPress>", "lappend ran control");
+      bind_script(
+        &mut bindings,
+        ".",
+        "<Control-KeyPress>",
+        "lappend ran control",
+      );
       bindings.handle_modifiers(ModifiersState::CONTROL.into());
       assert_eq!(press_and_run(&bindings, "a"), "a");
     }
@@ -372,7 +402,6 @@ mod tests {
   #[test]
   fn keypress_without_detail_matches_any_key() {
     let mut bindings = EventBindings::new();
-    println!("KP {:?}", parse_sequence("<KeyPress>"));
     bind(&mut bindings, ".", "<KeyPress>");
     assert_eq!(press(&bindings, "a"), 1);
   }
