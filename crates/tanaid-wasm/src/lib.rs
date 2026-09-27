@@ -1,23 +1,24 @@
 #![feature(integer_casts)]
 
-use js_sys::{Date, Function, Promise, Reflect, global};
+use js_sys::{Date, Function, Reflect, global};
 use serde::{Deserialize, Serialize};
+use std::future::poll_fn;
+use std::task::{Poll, Waker};
 use std::time::Duration;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 use tanaid::event_loop::EventLoop;
 use tanaid::interpreter::{Interpreter, StepResult};
-use tanaid::{eval::EvalContext, eval_error::EvalError, parser::parse};
+use tanaid::{eval::EvalContext, eval_error::EvalError, parser::parse, value::Value};
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 use web_sys;
 
 #[wasm_bindgen]
-#[expect(dead_code)]
 pub struct Tcl {
   interpreter: Interpreter,
   event_loop: Rc<RefCell<EventLoop>>,
-  timeout_ids: Rc<RefCell<HashMap<usize, JsValue>>>,
+  wake_timeout: Option<(JsValue, Closure<dyn FnMut()>)>,
   set_timeout: Function,
   clear_timeout: Function,
 }
@@ -58,6 +59,10 @@ fn js_value_to_error(value: JsValue) -> JsError {
   JsError::new(&js_error_message(value))
 }
 
+fn js_value_to_evalerror(value: JsValue) -> EvalError {
+  EvalError::Generic(js_error_message(value))
+}
+
 #[wasm_bindgen]
 impl Tcl {
   pub fn create(options: Ts<TclOptions>) -> Result<Tcl, JsError> {
@@ -74,8 +79,6 @@ impl Tcl {
         .map_err(|e| EvalError::Generic(js_error_message(e)))?;
       Ok(())
     });
-
-    let set_timeout = opts.set_timeout.clone();
 
     let performance = Reflect::get(&global(), &"performance".into())
       .map_err(js_value_to_error)?
@@ -104,7 +107,7 @@ impl Tcl {
     Ok(Tcl {
       interpreter,
       event_loop,
-      timeout_ids: Rc::new(RefCell::new(HashMap::new())),
+      wake_timeout: None,
       set_timeout: opts.set_timeout,
       clear_timeout: opts.clear_timeout,
     })
@@ -123,29 +126,14 @@ impl Tcl {
       .map(|o| o.to_rust())
       .transpose()
       .map_err(|e| JsError::new(format!("failed to parse options: {}", e).as_str()))?;
+    let handle_event_loop_status = options.map(|o| o.handle_event_loop_status);
 
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
     self.interpreter.start(&parsed)?;
 
-    let set_timeout = self.set_timeout.clone();
-    let sleep = move |duration: Duration| {
-      Promise::new(&mut |resolve, reject| {
-        if let Err(error) = set_timeout.call2(
-          &JsValue::UNDEFINED,
-          &resolve,
-          &JsValue::from(duration.as_millis().saturating_cast::<i32>()),
-        ) {
-          let _ = reject.call1(&JsValue::UNDEFINED, &error);
-        }
-      })
-    };
-
-    let handle_event_loop_status = options.map(|o| o.handle_event_loop_status);
-
-    let mut result = None;
-    loop {
-      let step = self.interpreter.step()?;
+    let result: Result<Value, EvalError> = poll_fn(|cx| {
+      let step = self.interpreter.step(cx.waker())?;
 
       if let Some(handler) = &handle_event_loop_status {
         let count_pending = self.event_loop.borrow().count_pending();
@@ -154,34 +142,61 @@ impl Tcl {
             &JsValue::UNDEFINED,
             &JsValue::from(count_pending.saturating_cast::<i32>()),
           )
-          .map_err(js_value_to_error)?;
+          .map_err(js_value_to_evalerror)?;
       }
 
       match step {
-        StepResult::Again => continue,
-        StepResult::Done(value) => {
-          result = result.or(Some(value));
-          break;
+        // need to do more work; yield and re-run immediately
+        StepResult::Again => {
+          self.set_wake_timeout(cx.waker(), Duration::ZERO)?;
+          Poll::Pending
         }
-        StepResult::Wait => {
-          sleep(Duration::ZERO).await.map_err(js_value_to_error)?;
-        }
+        // done; resolve future
+        StepResult::Done(value) => Poll::Ready(Ok(value)),
+        // scheduled timer; re-run after duration if nothing wakes us earlier
         StepResult::WaitDuration(duration) => {
-          sleep(duration).await.map_err(js_value_to_error)?;
+          self.set_wake_timeout(cx.waker(), duration)?;
+          Poll::Pending
         }
+        // nothing scheduled; wait for external wake
+        StepResult::Wait => Poll::Pending,
       }
+    })
+    .await;
 
-      if !self.interpreter.is_busy() {
-        break;
-      }
+    match result?.repr_str() {
+      Ok(s) => Ok(JsValue::from_str(s)),
+      Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
+    }
+  }
+
+  fn set_wake_timeout(&mut self, waker: &Waker, duration: Duration) -> Result<(), EvalError> {
+    // avoid accumulating timeouts
+    if let Some((id, _closure)) = self.wake_timeout.take() {
+      // clearTimeout failure shouldn't occur; if it does, continue.
+      let _ = self.clear_timeout.call1(&JsValue::UNDEFINED, &id);
     }
 
-    match result {
-      Some(mut v) => match v.repr_str() {
-        Ok(s) => Ok(JsValue::from_str(s)),
-        Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
-      },
-      None => Ok(JsValue::UNDEFINED),
+    let waker = waker.clone();
+    let closure = Closure::once(move || waker.wake());
+    let id = self
+      .set_timeout
+      .call2(
+        &JsValue::UNDEFINED,
+        closure.as_ref(),
+        &JsValue::from(duration.as_millis().saturating_cast::<i32>()),
+      )
+      .map_err(js_value_to_evalerror)?;
+    self.wake_timeout = Some((id, closure));
+
+    Ok(())
+  }
+}
+
+impl Drop for Tcl {
+  fn drop(&mut self) {
+    if let Some((id, _closure)) = self.wake_timeout.take() {
+      let _ = self.clear_timeout.call1(&JsValue::UNDEFINED, &id);
     }
   }
 }
