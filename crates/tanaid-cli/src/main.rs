@@ -105,6 +105,7 @@ fn run_source(
 
   let mut app = SourceApp {
     tk: &mut tk,
+    had_window: false,
     waker,
     interpreter,
     tcl_event_loop,
@@ -122,6 +123,7 @@ fn run_source(
 
 struct SourceApp<'a> {
   tk: &'a mut Tk,
+  had_window: bool,
   waker: Waker,
   interpreter: Interpreter,
   tcl_event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
@@ -140,6 +142,10 @@ impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
 
   fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_resumed(event_loop);
+
+    if self.tk.context.has_window() {
+      self.had_window = true;
+    }
   }
 
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
@@ -165,7 +171,7 @@ impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
       }
     }
 
-    if !self.interpreter.is_busy() && !self.tk.context.has_window() {
+    if !self.interpreter.is_busy() || (self.had_window && !self.tk.context.has_window()) {
       event_loop.exit();
     }
   }
