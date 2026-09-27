@@ -100,8 +100,8 @@ pub fn run_repl(context: EvalContext, tk: Tk) -> Result<(), Box<dyn std::error::
         }
         Ok(Signal::HostCommand(command)) if command == "ctrl-c" => {
           line_editor.run_edit_commands(&[EditCommand::Clear]);
-          println!();
-          println!("ctrl+d to exit");
+          eprintln!();
+          eprintln!("ctrl+d to exit");
           continue;
         }
         _ => unimplemented!(),
@@ -150,13 +150,13 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
         let script = match parser::parse(line.as_str()) {
           Ok(script) => script,
           Err(err) => {
-            println!("Error: {}", err);
+            eprintln!("Error: {}", err);
             return;
           }
         };
 
         if let Err(err) = self.interpreter.start(&script) {
-          println!("Error: {}", err);
+          eprintln!("Error: {}", err);
           return;
         }
 
@@ -189,7 +189,7 @@ impl ApplicationHandler<ReplEvent> for ReplApp {
         event_loop.set_control_flow(ControlFlow::Poll);
       }
       Err(error) => {
-        println!("Error: {}", error);
+        eprintln!("Error: {}", error);
         if self.line_started {
           self.line_started = false;
           self.next_tx.send(()).unwrap();

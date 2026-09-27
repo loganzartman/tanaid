@@ -123,7 +123,7 @@ impl TkContext {
             .borrow()
             .handle_key_event(".".to_string(), event, tcl_event_loop)
         {
-          println!("Error: {}", r);
+          eprintln!("Error: {}", r);
         }
       }
       _ => {}

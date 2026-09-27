@@ -79,8 +79,8 @@ fn run_source(
 ) -> Result<(), Box<dyn std::error::Error>> {
   let parsed = parser::parse(src)?;
   if opts.debug {
-    println!("=== parse tree ===");
-    println!("{:#?}", parsed)
+    eprintln!("=== parse tree ===");
+    eprintln!("{:#?}", parsed)
   }
 
   let event_loop = winit::event_loop::EventLoop::<AppEvent>::with_user_event().build()?;
@@ -145,7 +145,8 @@ impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
 
     match self.interpreter.step(&self.waker) {
       Err(err) => {
-        println!("Error: {}", err);
+        eprintln!("Error: {}", err);
+        self.error = Some(Box::new(err));
         event_loop.exit();
       }
       Ok(StepResult::Again) => event_loop.set_control_flow(ControlFlow::Poll),
