@@ -94,14 +94,17 @@ fn run_source(
 
   // pump once to see if window is opened or events have been queued.
   // if script returns synchronously and there's no window open, we're done.
-  if let StepResult::Done(mut value) = interpreter.step(&waker)? {
+  let printed_result = if let StepResult::Done(mut value) = interpreter.step(&waker)? {
     println!("{}", value.repr_str()?);
     // by convention, we keep running if a window is open to generate events,
     // even if the script didn't include any explicit wait.
     if !tk.context.has_window() {
       return Ok(());
     }
-  }
+    true
+  } else {
+    false
+  };
 
   let mut app = SourceApp {
     tk: &mut tk,
@@ -109,7 +112,7 @@ fn run_source(
     waker,
     interpreter,
     tcl_event_loop,
-    first_result: true,
+    first_result: !printed_result,
     error: None,
   };
 
@@ -151,6 +154,11 @@ impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
   fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
     self.tk.context.handle_about_to_wait(event_loop);
 
+    // a window may be opened later, e.g. from an event handler
+    if self.tk.context.has_window() {
+      self.had_window = true;
+    }
+
     match self.interpreter.step(&self.waker) {
       Err(err) => {
         eprintln!("Error: {}", err);
@@ -171,7 +179,8 @@ impl<'a> ApplicationHandler<AppEvent> for SourceApp<'a> {
       }
     }
 
-    if !self.interpreter.is_busy() || (self.had_window && !self.tk.context.has_window()) {
+    // exit when there's no window, and either the script is done or its window was closed
+    if !self.tk.context.has_window() && (!self.interpreter.is_busy() || self.had_window) {
       event_loop.exit();
     }
   }
