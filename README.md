@@ -27,10 +27,16 @@ cargo add tanaid
 ```
 
 ```rust
+use tanaid::{
+  parser::parse,
+  eval::EvalContext,
+  run_blocking::run_blocking,
+};
+
 fn run_tcl() -> Result<(), Box<dyn std::error::Error>> {
-  let parsed = tanaid::parser::parse("expr {2 + 2}")?;
-  let mut ctx = tanaid::eval::EvalContext::new();
-  let result = tanaid::eval::eval_blocking(&parsed, &mut ctx)?;
+  let parsed = parse("expr {2 + 2}")?;
+  let mut ctx = EvalContext::new();
+  let result = run_blocking(&parsed, &mut ctx)?;
   println!("result: {}", result);
   Ok(())
 }
