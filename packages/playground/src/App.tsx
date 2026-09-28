@@ -4,10 +4,12 @@ import stopwatchUrl from "../img/stopwtch.webp";
 import stopwatchStaticUrl from "../img/stopwtch-static.webp";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { ExampleSelect } from "./ExampleSelect.tsx";
-import { examples } from "./examples.ts";
+import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner } from "./tcl-runner.ts";
+
+const examples = loadExamples();
 
 const initialDoc = `proc fib {x} {
   if {$x <= 0} {
