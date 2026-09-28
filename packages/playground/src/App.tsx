@@ -26,15 +26,26 @@ const loadSrc = () => {
   if (!hash.length) {
     return null;
   }
+  let binary;
   try {
-    return atob(hash);
+    binary = atob(hash);
   } catch {
     return null;
+  }
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // links from before UTF-8 encoding held Latin-1 characters directly
+    return binary;
   }
 };
 
 const storeSrc = (src: string) => {
-  window.history.replaceState(null, "", `#${btoa(src)}`);
+  // `btoa` only accepts Latin-1, so encode the UTF-8 bytes
+  const bytes = new TextEncoder().encode(src);
+  const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
+  window.history.replaceState(null, "", `#${btoa(binary)}`);
 };
 
 export function App() {
