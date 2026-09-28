@@ -1,5 +1,7 @@
+import { createEffect, createMemo, createSignal, type Accessor, type ParentProps } from "solid-js";
+
 /**
- * `<pixel-perfect>` renders its children on the device pixel grid, so bitmap
+ * `<PixelPerfect>` renders its children on the device pixel grid, so bitmap
  * fonts, images, and whole-number CSS lengths land on exact device pixels at
  * any `devicePixelRatio`.
  *
@@ -15,69 +17,68 @@
  * result down to `ceil(devicePixelRatio)` device pixels per design pixel.
  * So, each design pixel is at least 1 device pixel, and more on HiDPI displays.
  *
- * Avoid applying styles to the <pixel-perfect> element itself, as it may
- * overwrite some. No shadow DOM is rendered.
- *
  * Special fonts must be used; their advances must be whole numbers.
  * Using fractional lengths (e.g. `0.5px`) will also break the effect.
  */
+export function PixelPerfect(props: ParentProps) {
+  const dpr = createDevicePixelRatio();
 
-export class PixelPerfect extends HTMLElement {
-  #resolution: MediaQueryList | null = null;
-  #onResolutionChange = () => this.refresh();
-
-  connectedCallback() {
-    // `transform` does not change the layout box, so divide the box by `gs` to
-    // leave the scaled result filling the parent.
-
-    // font-smoothing is required for macOS to avoid subpixel antialiasing.
-
-    this.style.cssText = `
-      display: block;
-      width: calc(round(100% / var(--gs), 1px));
-      height: calc(round(100% / var(--gs), 1px));
-      transform-origin: 0 0;
-      transform: scale(var(--gs));
-      zoom: var(--us);
-      box-sizing: border-box;
-      image-rendering: pixelated;
-      -webkit-font-smoothing: none;
-      -moz-osx-font-smoothing: grayscale;
-    `;
-    this.refresh();
-  }
-
-  disconnectedCallback() {
-    this.#resolution?.removeEventListener("change", this.#onResolutionChange);
-    this.#resolution = null;
-  }
-
-  refresh() {
-    const dpr = window.devicePixelRatio;
-
+  const scale = createMemo(() => {
     // the unitScale scales CSS pixels to integer device pixels
     // the goal is to get whole device pixels during layout calculation.
-    const unitScale = CSS.supports("zoom", "2") ? unitScaleFor(dpr) : 1;
+    const unitScale = CSS.supports("zoom", "2") ? unitScaleFor(dpr()) : 1;
 
     // the global scale:
     // 1. reverses the effect of unit scale once layout has happened on whole device pixels
     // 2. rounds up the DPR and applies it, so things are not too small on high-DPI devices
-    const globalScale = Math.ceil(dpr) / (dpr * unitScale);
+    const globalScale = Math.ceil(dpr()) / (dpr() * unitScale);
 
-    this.style.setProperty("--us", String(unitScale));
-    this.style.setProperty("--gs", String(globalScale));
+    return { unitScale, globalScale };
+  });
 
-    this.#watchResolution(dpr);
-  }
+  // `transform` does not change the layout box, so divide the box by `gs` to
+  // leave the scaled result filling the parent.
 
-  #watchResolution(dpr: number) {
-    this.#resolution?.removeEventListener("change", this.#onResolutionChange);
-    // detect DPR changes: browser zoom, moved to another display
-    this.#resolution = window.matchMedia(`(resolution: ${dpr}dppx)`);
-    this.#resolution.addEventListener("change", this.#onResolutionChange, { once: true });
-  }
+  // font-smoothing is required for macOS to avoid subpixel antialiasing.
+  return (
+    <div
+      style={{
+        "--us": String(scale().unitScale),
+        "--gs": String(scale().globalScale),
+        display: "block",
+        width: "calc(round(100% / var(--gs), 1px))",
+        height: "calc(round(100% / var(--gs), 1px))",
+        "transform-origin": "0 0",
+        transform: "scale(var(--gs))",
+        zoom: "var(--us)",
+        "box-sizing": "border-box",
+        "image-rendering": "pixelated",
+        "-webkit-font-smoothing": "none",
+        "-moz-osx-font-smoothing": "grayscale",
+      }}
+    >
+      {props.children}
+    </div>
+  );
 }
-customElements.define("pixel-perfect", PixelPerfect);
+
+/**
+ * Track `window.devicePixelRatio`, which changes with browser zoom or when the
+ * window moves to another display.
+ */
+function createDevicePixelRatio(): Accessor<number> {
+  const [dpr, setDpr] = createSignal(window.devicePixelRatio);
+
+  createEffect(dpr, (value) => {
+    // this query stops matching as soon as the DPR changes
+    const resolution = window.matchMedia(`(resolution: ${value}dppx)`);
+    const onChange = () => setDpr(window.devicePixelRatio);
+    resolution.addEventListener("change", onChange);
+    return () => resolution.removeEventListener("change", onChange);
+  });
+
+  return dpr;
+}
 
 /**
  * Compute smallest scale that maps one CSS pixel to an integer number of device pixels.

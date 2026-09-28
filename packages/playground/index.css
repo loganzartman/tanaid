@@ -21,8 +21,8 @@ body {
   text-underline-offset: 1px;
 }
 
-pixel-perfect:not(:defined) {
-  visibility: hidden;
+#root {
+  height: 100%;
 }
 
 .main-window-container {
