@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::rc::Rc;
 use std::sync::Arc;
+use tanaid::eval_error::EvalError;
 use vello::Scene;
 use vello::kurbo::Affine;
 use winit::event::WindowEvent;
@@ -33,28 +34,39 @@ impl TkContext {
     }
   }
 
-  fn ensure_window(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
+  fn ensure_window(
+    &self,
+    event_loop: &winit::event_loop::ActiveEventLoop,
+  ) -> Result<(), EvalError> {
     if self.renderer.borrow().is_some() {
-      return;
+      return Ok(());
     }
 
     let Some(window_attributes) = self.window_attributes.borrow().clone() else {
-      return;
+      return Ok(());
     };
 
     let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
     window.focus_window();
     let size = window.inner_size();
 
-    let renderer = pollster::block_on(TkRenderer::new(
+    let renderer = match pollster::block_on(TkRenderer::new(
       Arc::clone(&window),
       size.width,
       size.height,
-    ))
-    .expect("should be able to create TkRenderer");
+    )) {
+      Ok(renderer) => renderer,
+      Err(err) => {
+        return Err(EvalError::Generic(format!(
+          "Failed to create renderer: {}",
+          err
+        )));
+      }
+    };
 
     self.window.replace(Some(window));
     self.renderer.replace(Some(renderer));
+    Ok(())
   }
 
   fn redraw(&self) -> Result<(), Box<dyn Error>> {
@@ -95,11 +107,17 @@ impl TkContext {
   }
 
   pub fn handle_resumed(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.ensure_window(event_loop);
+    if let Err(err) = self.ensure_window(event_loop) {
+      eprintln!("{}", err);
+      self.window_attributes.replace(None);
+    }
   }
 
   pub fn handle_about_to_wait(&self, event_loop: &winit::event_loop::ActiveEventLoop) {
-    self.ensure_window(event_loop);
+    if let Err(err) = self.ensure_window(event_loop) {
+      eprintln!("{}", err);
+      self.window_attributes.replace(None);
+    }
   }
 
   pub fn handle_window_event(

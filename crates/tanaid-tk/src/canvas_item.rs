@@ -49,7 +49,7 @@ impl CanvasItem for CanvasItemRect {
   fn set_coords(&mut self, coords: &[f64]) -> Result<(), EvalError> {
     let [x1, y1, x2, y2] = coords else {
       return Err(EvalError::Generic(
-        "Setting wrong number of coords for rect".to_string(),
+        "wrong number of coords: rect expects 4".to_string(),
       ));
     };
     self.x = x1.min(*x2);

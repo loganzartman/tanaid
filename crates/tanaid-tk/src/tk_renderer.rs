@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use vello::{
-  AaConfig, RenderParams, Renderer, RendererOptions, Scene,
+  AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene,
   peniko::color::palette,
   util::{RenderContext, RenderSurface},
   wgpu::{self, CurrentSurfaceTexture, PresentMode, SurfaceTarget},
@@ -21,11 +21,17 @@ impl TkRenderer {
   ) -> Result<Self, Box<dyn Error>> {
     let mut context = RenderContext::new();
     let surface = context
-      .create_surface(target, width, height, PresentMode::AutoNoVsync)
+      .create_surface(target, width, height, PresentMode::AutoVsync)
       .await?;
 
     let device_handle = &context.devices[surface.dev_id];
-    let renderer = Renderer::new(&device_handle.device, RendererOptions::default())?;
+    let renderer = Renderer::new(
+      &device_handle.device,
+      RendererOptions {
+        antialiasing_support: AaSupport::area_only(),
+        ..Default::default()
+      },
+    )?;
 
     Ok(TkRenderer {
       context,
