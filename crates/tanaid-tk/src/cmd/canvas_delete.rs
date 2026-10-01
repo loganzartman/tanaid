@@ -1,4 +1,4 @@
-use crate::cmd::canvas::CanvasWidget;
+use crate::canvas::CanvasWidget;
 use crate::tk_context::TkContext;
 use tanaid::eval::EvalCmdResult;
 use tanaid::eval::EvalContext;
@@ -11,7 +11,7 @@ pub(crate) fn eval(
   _ctx: &mut EvalContext,
   _frame: FrameId,
   _tk: &TkContext,
-  widget: &CanvasWidget,
+  widget: &mut CanvasWidget,
 ) -> EvalCmdResult {
   let mut ids = vec![];
   for arg in args {
@@ -25,7 +25,7 @@ pub(crate) fn eval(
   }
 
   for id in ids {
-    widget.items.borrow_mut().shift_remove(&id);
+    widget.items.shift_remove(&id);
   }
   Ok(Value::none())
 }
