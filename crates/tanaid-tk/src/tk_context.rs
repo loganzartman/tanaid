@@ -130,6 +130,29 @@ impl TkContext {
       WindowEvent::Resized(_) => {
         self.request_redraw();
       }
+      WindowEvent::ScaleFactorChanged {
+        scale_factor,
+        mut inner_size_writer,
+      } => {
+        // Keep the logical size `pack` requested. If the scale goes A -> B -> A before the A -> B
+        // resize lands (e.g. a new window briefly given another monitor's scale), winit pre-fills
+        // the writer from the stale size it last saw; overwriting it stops winit sending that. But
+        // winit skips the writer's resize when it equals that stale size, so the in-flight A -> B
+        // resize would still win; `window.request_inner_size` always sends. Known gap: a scale
+        // change undoes manual resizes.
+        let requested = self
+          .window_attributes
+          .borrow()
+          .as_ref()
+          .and_then(|a| a.inner_size);
+        if let Some(size) = requested {
+          let size = size.to_physical::<u32>(scale_factor);
+          let _ = inner_size_writer.request_inner_size(size);
+          if let Some(window) = self.window.borrow().as_ref() {
+            let _ = window.request_inner_size(size);
+          }
+        }
+      }
       WindowEvent::RedrawRequested => {
         if let Err(err) = self.redraw() {
           eprintln!("Draw error: {}", err);
