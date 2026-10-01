@@ -1,5 +1,5 @@
-use crate::cmd::canvas::CanvasWidget;
-use crate::cmd::canvas::{CanvasItem, Rect};
+use crate::canvas::CanvasWidget;
+use crate::canvas_item::CanvasItemRect;
 use crate::tk_context::TkContext;
 use tanaid::eval::EvalCmdResult;
 use tanaid::eval::EvalContext;
@@ -12,7 +12,7 @@ pub(crate) fn eval(
   _ctx: &mut EvalContext,
   _frame: FrameId,
   _tk: &TkContext,
-  widget: &CanvasWidget,
+  widget: &mut CanvasWidget,
 ) -> EvalCmdResult {
   let (item_type, rest) = match args {
     [item_type, rest @ ..] => (item_type.repr_str()?, rest),
@@ -33,10 +33,10 @@ pub(crate) fn eval(
 }
 
 fn next_id(widget: &CanvasWidget) -> i64 {
-  widget.items.borrow().last().map_or(0, |(id, _)| id + 1)
+  widget.items.last().map_or(0, |(id, _)| id + 1)
 }
 
-fn create_rect(opts: &mut [Value], widget: &CanvasWidget) -> EvalCmdResult {
+fn create_rect(opts: &mut [Value], widget: &mut CanvasWidget) -> EvalCmdResult {
   let (x1, y1, x2, y2, _rest) = match opts {
     [x1, y1, x2, y2, rest @ ..] => (
       x1.repr_float()?,
@@ -54,9 +54,9 @@ fn create_rect(opts: &mut [Value], widget: &CanvasWidget) -> EvalCmdResult {
   };
 
   let id = next_id(widget);
-  widget.items.borrow_mut().insert(
+  widget.items.insert(
     id,
-    CanvasItem::Rect(Rect::new().with_coords(x1, y1, x2, y2)),
+    Box::new(CanvasItemRect::new().with_coords(x1, y1, x2, y2)?),
   );
 
   Ok(Value::from(id))

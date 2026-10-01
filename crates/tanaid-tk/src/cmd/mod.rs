@@ -6,10 +6,9 @@ pub(crate) mod canvas_delete;
 pub(crate) mod pack;
 
 use super::tk_context::TkContext;
-use std::rc::Rc;
 use tanaid::eval::EvalContext;
 
-pub fn register_commands(context: &mut EvalContext, tk: Rc<TkContext>) {
+pub fn register_commands(context: &mut EvalContext, tk: &TkContext) {
   {
     let tk = tk.clone();
     context.register_command("bind", move |args, ctx, frame| {
