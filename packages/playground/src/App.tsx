@@ -94,31 +94,14 @@ export function App() {
 
   return (
     <PixelPerfect>
-      <div class="main-window-container">
-        <div
-          class="window main-window"
-          style={{
-            height: "100%",
-            "box-sizing": "border-box",
-            display: "flex",
-            "flex-direction": "column",
-          }}
-        >
+      <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
+        <div class="window box-border flex size-full max-w-[1200px] flex-col">
           <div class="title-bar">
             <div class="title-bar-text">tanaid Tcl</div>
           </div>
-          <div
-            class="window-body"
-            style={{ flex: "1", "min-height": "0", display: "flex", "flex-direction": "column" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--element-spacing)",
-                "margin-bottom": "var(--element-spacing)",
-              }}
-            >
-              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
+          <div class="window-body flex min-h-0 flex-1 flex-col">
+            <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
+              <div class="flex flex-col gap-1">
                 <div>
                   run a tiny subset of{" "}
                   <a target="_blank" href="https://www.tcl-lang.org/">
@@ -130,65 +113,46 @@ export function App() {
                   <ExampleSelect examples={examples} onSelect={setSource} />
                 </div>
               </div>
-              <div style={{ flex: "1" }} />
+              <div class="flex-1" />
               <a target="_blank" href="https://github.com/loganzartman/tanaid">
-                <img
-                  alt="powered by tanaid"
-                  src={poweredByUrl}
-                  style={{ float: "right", width: "88px" }}
-                />
+                <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
               </a>
             </div>
-            <div style={{ display: "flex" }}>
-              <div class="input sunken-panel">
+            <div class="flex">
+              <div class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full">
                 <CodeEditor value={source()} onChange={setSource} />
               </div>
               <div class="sunken-panel">{tkCanvas}</div>
             </div>
             <div>
-              <div class="status-bar" style={{ width: "100%" }}>
-                <div
-                  class="status-bar-field"
-                  style={{
-                    display: "flex",
-                    "flex-direction": "row",
-                    "align-items": "center",
-                    gap: "8px",
-                    padding: "8px",
-                  }}
-                >
+              <div class="status-bar w-full">
+                <div class="status-bar-field flex flex-row items-center gap-2 p-2">
                   <label for="result">result:</label>
-                  <div id="result" class={["font-mono", { error: result() instanceof Error }]}>
+                  <div
+                    id="result"
+                    class={[
+                      "font-mono-13 whitespace-pre-wrap",
+                      { "text-error": result() instanceof Error },
+                    ]}
+                  >
                     {resultText()}
                   </div>
                 </div>
-                <div
-                  class="status-bar-field"
-                  style={{
-                    "flex-grow": "0",
-                    display: "flex",
-                    "flex-direction": "column",
-                    gap: "8px",
-                  }}
-                >
-                  <div
-                    style={{ display: "flex", "flex-direction": "row", "align-items": "center" }}
-                  >
+                <div class="status-bar-field flex grow-0 flex-col gap-2">
+                  <div class="flex flex-row items-center">
                     <Show
                       when={pendingTimers() > 0}
-                      fallback={<img src={stopwatchStaticUrl} style={{ display: "block" }} />}
+                      fallback={<img src={stopwatchStaticUrl} class="block" />}
                     >
-                      <img src={stopwatchUrl} style={{ display: "block" }} />
+                      <img src={stopwatchUrl} class="block" />
                     </Show>
-                    <div style={{ padding: "8px", "padding-left": "2px" }}>
-                      {pendingTimers()} timers
-                    </div>
+                    <div class="p-2 pl-0.5">{pendingTimers()} timers</div>
                   </div>
                 </div>
               </div>
-              <div class="field-row-stacked" style={{ "margin-top": "8px" }}>
+              <div class="field-row-stacked mt-2">
                 <label for="stdout">stdout:</label>
-                <div id="stdout" class="stdout sunken-panel">
+                <div id="stdout" class="sunken-panel h-48 min-h-16 overflow-hidden *:h-full">
                   <OutputView text={stdout()} />
                 </div>
               </div>

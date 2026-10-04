@@ -42,19 +42,10 @@ export function PixelPerfect(props: ParentProps) {
   // font-smoothing is required for macOS to avoid subpixel antialiasing.
   return (
     <div
+      class="box-border block size-[round(100%/var(--gs),1px)] origin-top-left transform-[scale(var(--gs))] [zoom:var(--us)] [image-rendering:pixelated] [-moz-osx-font-smoothing:grayscale] [-webkit-font-smoothing:none]"
       style={{
         "--us": String(scale().unitScale),
         "--gs": String(scale().globalScale),
-        display: "block",
-        width: "calc(round(100% / var(--gs), 1px))",
-        height: "calc(round(100% / var(--gs), 1px))",
-        "transform-origin": "0 0",
-        transform: "scale(var(--gs))",
-        zoom: "var(--us)",
-        "box-sizing": "border-box",
-        "image-rendering": "pixelated",
-        "-webkit-font-smoothing": "none",
-        "-moz-osx-font-smoothing": "grayscale",
       }}
     >
       {props.children}
