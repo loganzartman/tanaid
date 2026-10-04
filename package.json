@@ -13,6 +13,7 @@
   "devDependencies": {
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
+    "oxlint-tsgolint": "^7.0.2003",
     "wasm-pack": "0.15.0"
   },
   "devEngines": {
