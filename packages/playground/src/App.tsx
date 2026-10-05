@@ -156,7 +156,13 @@ export function App() {
                 </div>
               </div>
             </div>
-            <Window draggable title="tanaid-tk">
+            <Window
+              draggable
+              title="tanaid-tk"
+              onClose={() => {
+                // stop
+              }}
+            >
               {tkCanvas}
             </Window>
           </div>

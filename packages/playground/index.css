@@ -60,6 +60,11 @@
     text-decoration-skip-ink: none;
   }
 
+  /* An inline canvas sits on the text baseline, leaving descender space below it. */
+  canvas {
+    display: block;
+  }
+
   pre {
     font-family: "cour-13";
     font-size: 13px;
