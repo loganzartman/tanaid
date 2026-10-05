@@ -50,15 +50,26 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     tk.install(tcl);
     await tk.attachCanvas(offscreenCanvas);
 
+    let wasWindowOpen = false;
+
     requestAnimationFrame(function redraw() {
       if (stopped) {
         return;
       }
+
       try {
-        tk?.redraw(1);
+        if (tk) {
+          const windowOpen = tk.hasWindow();
+          if (windowOpen !== wasWindowOpen) {
+            self.postMessage(workerMessage({ type: "window-change", open: windowOpen }));
+          }
+
+          tk.redraw(1);
+        }
       } catch (error) {
         console.error("Redraw error", error);
       }
+
       requestAnimationFrame(redraw);
     });
 

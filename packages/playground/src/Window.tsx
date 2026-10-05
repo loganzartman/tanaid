@@ -5,6 +5,7 @@ export type WindowProps = ParentProps & {
   draggable?: boolean;
   onClose?: () => void;
   title?: string;
+  open?: boolean;
 };
 
 export function Window(props: WindowProps) {
@@ -51,7 +52,14 @@ export function Window(props: WindowProps) {
   };
 
   return (
-    <div class="window absolute" style={{ left: `${x()}px`, top: `${y()}px` }}>
+    <div
+      class="window absolute"
+      style={{
+        left: `${x()}px`,
+        top: `${y()}px`,
+        display: props.open ? "block" : "none",
+      }}
+    >
       <div
         ref={titlebarRef}
         class="title-bar"

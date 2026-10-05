@@ -22,11 +22,13 @@ export function createTclRunner({
   onStdout,
   onEventLoopStatus,
   onStateChanged,
+  onWindowChanged,
 }: {
   offscreenCanvas: OffscreenCanvas;
   onStdout?: (value: string) => void;
   onEventLoopStatus?: (status: EventLoopStatus) => void;
   onStateChanged?: (state: State) => void;
+  onWindowChanged?: (status: { open: boolean }) => void;
 }): TclRunner {
   const worker = new TclWorker();
 
@@ -166,6 +168,10 @@ export function createTclRunner({
         }
         case "event-loop-status": {
           onEventLoopStatus?.(data.status);
+          break;
+        }
+        case "window-change": {
+          onWindowChanged?.({ open: data.open });
           break;
         }
         case "stdout": {

@@ -41,4 +41,9 @@ impl Tk {
       .redraw_requested_size(scale_factor)
       .map_err(std_error_to_error)
   }
+
+  #[wasm_bindgen(js_name = "hasWindow")]
+  pub fn has_window(&self) -> bool {
+    self.tk.context.has_window()
+  }
 }

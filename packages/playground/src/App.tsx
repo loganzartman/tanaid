@@ -61,6 +61,7 @@ export function App() {
   const [pendingTimers, setPendingTimers] = createSignal<number>(0);
   const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
   const [tclState, setTclState] = createSignal<State>("idle");
+  const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
 
   const tkCanvas = document.createElement("canvas");
   tkCanvas.className = "m-0";
@@ -76,6 +77,9 @@ export function App() {
     onStateChanged(state) {
       setTclState(state);
     },
+    onWindowChanged({ open }) {
+      setWindowOpen(open);
+    },
   });
 
   const runSource = (source: string) => {
@@ -86,6 +90,10 @@ export function App() {
       })
       .catch((err) => {
         setResult(err);
+      })
+      .finally(() => {
+        setWindowOpen(false);
+        setPendingTimers(0);
       });
   };
 
@@ -192,17 +200,16 @@ export function App() {
                 </div>
               </div>
             </div>
-            <Show when={tclState() === "running"}>
-              <Window
-                draggable
-                title="tanaid-tk"
-                onClose={() => {
-                  handleCloseTkWindow();
-                }}
-              >
-                {tkCanvas}
-              </Window>
-            </Show>
+            <Window
+              draggable
+              title="tanaid-tk"
+              open={tclState() === "running" && windowOpen()}
+              onClose={() => {
+                handleCloseTkWindow();
+              }}
+            >
+              {tkCanvas}
+            </Window>
           </div>
         </div>
       </div>

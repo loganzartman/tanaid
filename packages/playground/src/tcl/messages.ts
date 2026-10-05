@@ -9,6 +9,7 @@ export type WorkerMessage =
   | { type: "ready" }
   | { type: "init" }
   | { type: "stdout"; value: string }
+  | { type: "window-change"; open: boolean }
   | { type: "event-loop-status"; status: EventLoopStatus }
   | { type: "result"; result: Result | Error };
 
