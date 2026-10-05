@@ -21,13 +21,26 @@ export function createTclRunner({
   offscreenCanvas,
   onStdout,
   onEventLoopStatus,
+  onStateChanged,
 }: {
   offscreenCanvas: OffscreenCanvas;
   onStdout?: (value: string) => void;
   onEventLoopStatus?: (status: EventLoopStatus) => void;
+  onStateChanged?: (state: State) => void;
 }): TclRunner {
   const worker = new TclWorker();
-  let state: State = "idle";
+
+  const { getState, setState } = (() => {
+    let state: State = "idle";
+    return {
+      getState: () => state,
+      setState: (newState: State) => {
+        state = newState;
+        onStateChanged?.(newState);
+      },
+    };
+  })();
+
   const ready = Promise.withResolvers<void>();
   const init = Promise.withResolvers<void>();
   let stopped = Promise.withResolvers<void>();
@@ -56,13 +69,14 @@ export function createTclRunner({
 
   const stopIfRunning = async () => {
     await initOnce();
+    const state = getState();
     switch (state) {
       case "idle": {
         break;
       }
       case "running": {
         stopped = Promise.withResolvers();
-        state = "stopping";
+        setState("stopping");
         if (result) {
           result.reject(new InterruptedError());
           result = undefined;
@@ -82,11 +96,11 @@ export function createTclRunner({
 
   const runNow = async (options: TclRunnerRunOptions) => {
     await initOnce();
-    if (state !== "idle") {
+    if (getState() !== "idle") {
       throw new Error("internal error: should be idle");
     }
 
-    state = "running";
+    setState("running");
     worker.postMessage(hostMessage({ type: "run", source: options.source }));
   };
 
@@ -101,7 +115,7 @@ export function createTclRunner({
   };
 
   const runQueued = async () => {
-    if (state !== "idle") {
+    if (getState() !== "idle") {
       throw new Error("internal error: should be idle");
     }
     if (!queuedRun || !queuedResult) {
@@ -118,6 +132,7 @@ export function createTclRunner({
   };
 
   const run: TclRunner["run"] = async (options) => {
+    const state = getState();
     switch (state) {
       case "idle": {
         result = Promise.withResolvers();
@@ -158,7 +173,7 @@ export function createTclRunner({
           break;
         }
         case "result": {
-          state = "idle";
+          setState("idle");
           stopped.resolve();
 
           if (typeof data.result === "string") {
@@ -180,7 +195,7 @@ export function createTclRunner({
   );
 
   return {
-    getState: () => state,
+    getState,
     run,
     stopIfRunning,
   };

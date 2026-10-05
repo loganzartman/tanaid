@@ -7,9 +7,12 @@ import { ExampleSelect } from "./ExampleSelect.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
-import { createTclRunner } from "./tcl/tcl-runner.ts";
+import { createTclRunner, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
+import startImg from "../img/start.png";
+import stopImg from "../img/stop.png";
+import { impossible } from "./impossible.ts";
 
 const examples = loadExamples();
 
@@ -57,6 +60,7 @@ export function App() {
   const [stdout, setStdout] = createSignal<string>("");
   const [pendingTimers, setPendingTimers] = createSignal<number>(0);
   const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
+  const [tclState, setTclState] = createSignal<State>("idle");
 
   const tkCanvas = document.createElement("canvas");
   tkCanvas.className = "m-0";
@@ -69,10 +73,12 @@ export function App() {
     onEventLoopStatus(status) {
       setPendingTimers(status.countPending);
     },
+    onStateChanged(state) {
+      setTclState(state);
+    },
   });
 
-  createEffect(source, storeSrc, { defer: true });
-  createEffect(source, (source) => {
+  const runSource = (source: string) => {
     runner
       .run({ source })
       .then((result) => {
@@ -81,7 +87,10 @@ export function App() {
       .catch((err) => {
         setResult(err);
       });
-  });
+  };
+
+  createEffect(source, storeSrc, { defer: true });
+  createEffect(source, (source) => runSource(source));
 
   const resultText = () => {
     const value = result();
@@ -92,6 +101,26 @@ export function App() {
       return "";
     }
     return value;
+  };
+
+  const handleStartStop = () => {
+    const state = tclState();
+    switch (state) {
+      case "idle":
+        runSource(source());
+        break;
+      case "running":
+        runner.stopIfRunning().catch((error) => console.error("failed to stop", error));
+        break;
+      case "stopping":
+        break;
+      default:
+        impossible(state);
+    }
+  };
+
+  const handleCloseTkWindow = () => {
+    runner.stopIfRunning().catch((error) => console.error("failed to stop", error));
   };
 
   return (
@@ -111,8 +140,15 @@ export function App() {
                   </a>{" "}
                   in your browser
                 </div>
-                <div>
+                <div class="flex flex-row gap-2">
                   <ExampleSelect examples={examples} onSelect={setSource} />
+                  <div class="flex flex-row">
+                    <link rel="preload" href={startImg} as="image" />
+                    <link rel="preload" href={stopImg} as="image" />
+                    <button class="min-w-4 min-h-4 px-1" onClick={handleStartStop}>
+                      <img src={tclState() === "idle" ? startImg : stopImg} />
+                    </button>
+                  </div>
                 </div>
               </div>
               <div class="flex-1" />
@@ -156,15 +192,17 @@ export function App() {
                 </div>
               </div>
             </div>
-            <Window
-              draggable
-              title="tanaid-tk"
-              onClose={() => {
-                // stop
-              }}
-            >
-              {tkCanvas}
-            </Window>
+            <Show when={tclState() === "running"}>
+              <Window
+                draggable
+                title="tanaid-tk"
+                onClose={() => {
+                  handleCloseTkWindow();
+                }}
+              >
+                {tkCanvas}
+              </Window>
+            </Show>
           </div>
         </div>
       </div>
