@@ -20,8 +20,12 @@ export function Window(props: WindowProps) {
 
   // oxlint-disable-next-line no-unassigned-vars
   let titlebarRef!: HTMLDivElement;
+
   const handleTitlebarDown = (event: PointerEvent) => {
     if (!props.draggable) {
+      return;
+    }
+    if (event.target !== titlebarRef) {
       return;
     }
     event.preventDefault();
@@ -55,7 +59,7 @@ export function Window(props: WindowProps) {
         onPointerUp={handleTitlebarUp}
         onPointerMove={handleTitlebarMove}
       >
-        <div class="title-bar-text">{props.title}</div>
+        <div class="title-bar-text pointer-events-none">{props.title}</div>
         <div class="title-bar-controls">
           <Show when={props.onClose}>
             <button aria-label="Close" onClick={() => props.onClose?.()}></button>
