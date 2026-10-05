@@ -9,9 +9,9 @@ export type WindowProps = ParentProps & {
 };
 
 export function Window(props: WindowProps) {
-  const [x, setX] = createSignal(0);
-  const [y, setY] = createSignal(0);
   const mouseScale = createPixelPerfectScale();
+  const [x, setX] = createSignal(() => window.innerWidth / 2 / mouseScale());
+  const [y, setY] = createSignal(() => window.innerHeight / 2 / mouseScale());
 
   let pdown = false;
   let px0 = 0;
@@ -53,10 +53,11 @@ export function Window(props: WindowProps) {
 
   return (
     <div
-      class="window absolute"
+      class="window absolute m-0"
       style={{
         left: `${x()}px`,
         top: `${y()}px`,
+        transform: `translate(-50%, -50%)`,
         display: props.open ? "block" : "none",
       }}
     >
