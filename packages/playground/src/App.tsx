@@ -9,6 +9,7 @@ import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
+import { Window } from "./Window.tsx";
 
 const examples = loadExamples();
 
@@ -58,6 +59,7 @@ export function App() {
   const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
 
   const tkCanvas = document.createElement("canvas");
+  tkCanvas.className = "m-0";
   const offscreenCanvas = tkCanvas.transferControlToOffscreen();
   const runner = createTclRunner({
     offscreenCanvas,
@@ -118,11 +120,8 @@ export function App() {
                 <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
               </a>
             </div>
-            <div class="flex">
-              <div class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full">
-                <CodeEditor value={source()} onChange={setSource} />
-              </div>
-              <div class="sunken-panel">{tkCanvas}</div>
+            <div class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full">
+              <CodeEditor value={source()} onChange={setSource} />
             </div>
             <div>
               <div class="status-bar w-full">
@@ -157,6 +156,9 @@ export function App() {
                 </div>
               </div>
             </div>
+            <Window draggable title="tanaid-tk">
+              {tkCanvas}
+            </Window>
           </div>
         </div>
       </div>

@@ -53,6 +53,11 @@ export function PixelPerfect(props: ParentProps) {
   );
 }
 
+export function createPixelPerfectScale(): Accessor<number> {
+  const dpr = createDevicePixelRatio();
+  return () => Math.ceil(dpr()) / dpr();
+}
+
 /**
  * Track `window.devicePixelRatio`, which changes with browser zoom or when the
  * window moves to another display.
