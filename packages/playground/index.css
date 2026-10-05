@@ -1,10 +1,11 @@
 @layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "./fonts.css";
 /*
- * 98.css takes the place of Tailwind's preflight: it is written against the UA
- * defaults that preflight resets. Layering it lets utilities override it.
+ * 98.css follows preflight in the base layer, so it wins over the reset wherever
+ * the two set the same property. Layering it lets utilities override it.
  */
 @import "./98.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
@@ -47,6 +48,29 @@
 }
 
 @layer base {
+  /* targeted fixes for 98.css */
+  html {
+    /* avoid fractional line heights */
+    line-height: 1;
+  }
+
+  fieldset {
+    /* 98.css draws the group box with `border-image`, which needs a border width. */
+    border-width: 2px;
+  }
+
+  legend {
+    padding-inline: 2px;
+  }
+
+  /*
+   * 98.css sets the tree-view +/- box's width and height assuming `content-box`.
+   * Preflight's `border-box` would shrink the box by its border and padding.
+   */
+  ul.tree-view details > summary::before {
+    box-sizing: content-box;
+  }
+
   * {
     font-synthesis: none;
     text-decoration-thickness: from-font;
@@ -56,13 +80,10 @@
   }
 
   a {
+    /* preflight removes the underline */
+    text-decoration-line: underline;
     text-decoration-thickness: 1px;
     text-decoration-skip-ink: none;
-  }
-
-  /* An inline canvas sits on the text baseline, leaving descender space below it. */
-  canvas {
-    display: block;
   }
 
   pre {
