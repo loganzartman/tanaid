@@ -86,7 +86,6 @@ impl Interpreter {
     match &self.state {
       InterpreterState::Init => Ok(StepResult::Wait),
       InterpreterState::Idle(context) => {
-        context.event_loop.borrow_mut().start_step();
         let action = context.event_loop.borrow_mut().next_action()?;
         match action {
           EventAction::Idle => Ok(StepResult::Wait),
@@ -141,7 +140,6 @@ impl Interpreter {
         ));
       }
       InterpreterState::Running(event_loop, result_future) => {
-        event_loop.borrow_mut().start_step();
         let mut cx = Context::from_waker(waker);
         match result_future.as_mut().poll(&mut cx) {
           Poll::Ready(v) => v,

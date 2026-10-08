@@ -58,7 +58,7 @@ impl EventLoop {
       event_queue: BinaryHeap::new(),
       waker: None,
       yield_after,
-      yield_deadline: Duration::ZERO,
+      yield_deadline: Duration::MAX,
     }
   }
 
