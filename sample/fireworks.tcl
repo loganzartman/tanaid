@@ -62,3 +62,4 @@ proc launch {} {
 
 launch
 frame
+vwait forever
