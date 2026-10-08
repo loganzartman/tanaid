@@ -5,7 +5,7 @@ version.workspace = true
 publish = false
 
 [features]
-tk = ["dep:tanaid-tk"]
+tk = ["dep:tanaid-tk", "dep:winit"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -25,6 +25,7 @@ tsify = { git = "https://github.com/madonoharu/tsify.git", rev = "d89d5c1d16a83c
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4.78"
 web-sys = { version = "0.3.105", features = ["Window", "Performance", "OffscreenCanvas"] }
+winit = { workspace = true, features = ["serde"], optional = true }
 
 [lints]
 workspace = true
