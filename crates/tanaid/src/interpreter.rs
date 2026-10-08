@@ -1,6 +1,6 @@
 use crate::eval::{self, EvalCmdResult, EvalContext};
 use crate::eval_error::EvalError;
-use crate::event_loop::{EventLoop, EventWait};
+use crate::event_loop::{EventAction, EventLoop};
 use crate::parser::ScriptNode;
 use crate::value::Value;
 use std::cell::RefCell;
@@ -72,28 +72,39 @@ impl Interpreter {
 
   /// Do work if there's work to be done, returning a result indicating what to do next.
   pub fn step(&mut self, waker: &Waker) -> Result<StepResult, EvalError> {
+    let Some(event_loop) = self.event_loop() else {
+      return Ok(StepResult::Wait);
+    };
+
+    event_loop.borrow_mut().start_step();
+    let result = self.do_step(waker);
+    event_loop.borrow_mut().end_step(waker);
+    result
+  }
+
+  fn do_step(&mut self, waker: &Waker) -> Result<StepResult, EvalError> {
     match &self.state {
       InterpreterState::Init => Ok(StepResult::Wait),
       InterpreterState::Idle(context) => {
-        context.event_loop.borrow_mut().set_waker(waker);
-        let wait = context.event_loop.borrow_mut().next_wait()?;
-        match wait {
-          EventWait::Idle => return Ok(StepResult::Wait),
-          EventWait::Delay(d) => return Ok(StepResult::WaitDuration(d)),
-          EventWait::Ready => self.dispatch_ready_event(),
+        context.event_loop.borrow_mut().start_step();
+        let action = context.event_loop.borrow_mut().next_action()?;
+        match action {
+          EventAction::Idle => Ok(StepResult::Wait),
+          EventAction::WaitDuration(d) => Ok(StepResult::WaitDuration(d)),
+          EventAction::Ready => self.poll_event(),
         }
       }
       InterpreterState::Running(_, _) => self.do_running_work(waker),
     }
   }
 
-  fn dispatch_ready_event(&mut self) -> Result<StepResult, EvalError> {
+  fn poll_event(&mut self) -> Result<StepResult, EvalError> {
     let mut context = self
       .take_context()
-      .expect("dispatch_ready_event should only be called while Idle");
+      .expect("poll_event should only be called while Idle");
 
     let event_loop = Rc::clone(&context.event_loop);
-    let event = match event_loop.borrow_mut().take_ready() {
+    let event = match event_loop.borrow_mut().take_event() {
       Ok(Some(event)) => event,
       Ok(None) => {
         // possible timer disagreement, try again
@@ -130,14 +141,15 @@ impl Interpreter {
         ));
       }
       InterpreterState::Running(event_loop, result_future) => {
+        event_loop.borrow_mut().start_step();
         let mut cx = Context::from_waker(waker);
         match result_future.as_mut().poll(&mut cx) {
           Poll::Ready(v) => v,
           Poll::Pending => {
-            return match event_loop.borrow_mut().next_wait()? {
-              EventWait::Ready => Ok(StepResult::Again),
-              EventWait::Delay(duration) => Ok(StepResult::WaitDuration(duration)),
-              EventWait::Idle => Ok(StepResult::Wait),
+            return match event_loop.borrow_mut().next_action()? {
+              EventAction::Ready => Ok(StepResult::Again),
+              EventAction::WaitDuration(duration) => Ok(StepResult::WaitDuration(duration)),
+              EventAction::Idle => Ok(StepResult::Wait),
             };
           }
         }
@@ -146,6 +158,14 @@ impl Interpreter {
 
     self.state = InterpreterState::Idle(context);
     Ok(StepResult::Done(result?))
+  }
+
+  fn event_loop(&self) -> Option<Rc<RefCell<EventLoop>>> {
+    match &self.state {
+      InterpreterState::Init => None,
+      InterpreterState::Idle(context) => Some(Rc::clone(&context.event_loop)),
+      InterpreterState::Running(event_loop, _) => Some(Rc::clone(event_loop)),
+    }
   }
 
   /// Consume an EvalContext and prepare the interpreter to run scripts.

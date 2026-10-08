@@ -33,7 +33,6 @@ async fn eval_vwait<'a>(opts: VwaitOptions<'a>, context: &mut EvalContext) -> Ev
   }
 
   'outer: loop {
-    context.wait_for_event().await?;
     context.poll_event().await?;
 
     for var in opts.vars.iter() {

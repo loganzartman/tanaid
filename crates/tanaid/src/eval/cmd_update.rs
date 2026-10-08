@@ -27,7 +27,7 @@ async fn eval_update(context: &mut EvalContext, tasks: Tasks) -> EvalCmdResult {
   }
 
   loop {
-    if !context.poll_event().await? {
+    if !context.poll_ready_event().await? {
       break;
     }
   }
