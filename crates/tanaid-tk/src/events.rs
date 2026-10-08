@@ -307,6 +307,7 @@ fn history_matches(history_seq: &[TclEvent], binding_seq: &[TclEvent]) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::time::Duration;
   use tanaid::test_runner::TestRunner;
 
   fn bind(bindings: &mut EventBindings, tag: &str, sequence: &str) {
@@ -320,7 +321,7 @@ mod tests {
 
   /// send a key event to "." and return how many scripts were queued
   fn key(bindings: &EventBindings, event_type: TclEventType, detail: &str) -> usize {
-    let event_loop = Rc::new(RefCell::new(event_loop::EventLoop::new()));
+    let event_loop = Rc::new(RefCell::new(event_loop::EventLoop::new(Duration::ZERO)));
     bindings
       .handle_key(".".to_string(), event_type, detail, Rc::clone(&event_loop))
       .unwrap();

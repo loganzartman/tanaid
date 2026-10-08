@@ -258,10 +258,10 @@ mod tests {
       .await
       .unwrap();
 
-    context.poll_event().await.unwrap();
+    context.poll_ready_event().await.unwrap();
     assert_eq!(*output.borrow(), "first\n");
 
-    context.poll_event().await.unwrap();
+    context.poll_ready_event().await.unwrap();
     assert_eq!(*output.borrow(), "first\nsecond\n");
   }
 
@@ -275,8 +275,8 @@ mod tests {
     .await
     .unwrap();
 
-    assert!(context.poll_event().await.is_err());
-    context.poll_event().await.unwrap();
+    assert!(context.poll_ready_event().await.is_err());
+    context.poll_ready_event().await.unwrap();
 
     assert_eq!(*output.borrow(), "second\n");
   }
