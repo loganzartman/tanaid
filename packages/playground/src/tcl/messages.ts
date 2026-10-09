@@ -3,7 +3,6 @@ export type EventLoopStatus = { countPending: number };
 
 export type HostMessage =
   | { type: "init"; offscreenCanvas: OffscreenCanvas }
-  | { type: "stop" }
   | { type: "run"; source: string };
 export type WorkerMessage =
   | { type: "ready" }

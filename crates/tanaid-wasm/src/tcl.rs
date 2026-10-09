@@ -10,7 +10,7 @@ use tanaid::{eval::EvalContext, eval_error::EvalError, parser::parse, value::Val
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
-use web_sys::{self, AbortSignal};
+use web_sys;
 
 use crate::util::{js_error_message, js_value_to_error, js_value_to_evalerror};
 
@@ -42,10 +42,6 @@ pub struct TclOptions {
 #[derive(Tsify, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunOptions {
-  #[serde(with = "serde_wasm_bindgen::preserve")]
-  #[tsify(optional)]
-  pub abort_signal: AbortSignal,
-
   #[serde(default, with = "serde_wasm_bindgen::preserve")]
   #[tsify(optional, type = "(countPending: number) => void")]
   pub handle_event_loop_status: Function,
@@ -115,31 +111,14 @@ impl Tcl {
       .transpose()
       .map_err(|e| JsError::new(format!("failed to parse options: {}", e).as_str()))?;
     let handle_event_loop_status = options.as_ref().map(|o| &o.handle_event_loop_status);
-    let abort_signal = options.as_ref().map(|o| &o.abort_signal);
 
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
     let waker: Rc<RefCell<Option<Waker>>> = Rc::new(RefCell::new(None));
-    let abort_listener = abort_signal.map(|signal| {
-      let waker = Rc::clone(&waker);
-      let callback = Closure::<dyn FnMut()>::new(move || {
-        if let Some(waker) = waker.borrow().as_ref() {
-          waker.wake_by_ref();
-        }
-      });
-      let _ = signal.add_event_listener_with_callback("abort", callback.as_ref().unchecked_ref());
-      (signal, callback)
-    });
 
     self.interpreter.start(&parsed)?;
 
     let result: Result<Value, EvalError> = poll_fn(|cx| {
-      if let Some(signal) = abort_signal
-        && signal.aborted()
-      {
-        return Poll::Ready(Err(EvalError::Generic("stopped".to_string())));
-      }
-
       waker.replace(Some(cx.waker().clone()));
       let step = self.interpreter.step(cx.waker())?;
 
@@ -171,11 +150,6 @@ impl Tcl {
       }
     })
     .await;
-
-    if let Some((signal, callback)) = abort_listener {
-      let _ =
-        signal.remove_event_listener_with_callback("abort", callback.as_ref().unchecked_ref());
-    }
 
     match result?.repr_str() {
       Ok(s) => Ok(JsValue::from_str(s)),

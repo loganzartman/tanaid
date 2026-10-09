@@ -3,7 +3,6 @@ import { workerMessage, type HostMessage } from "./messages";
 import { impossible } from "../impossible";
 
 let offscreenCanvas: OffscreenCanvas | undefined;
-let abortController: AbortController | undefined;
 
 self.onmessage = async ({ data }: { data: HostMessage }) => {
   switch (data.type) {
@@ -12,9 +11,6 @@ self.onmessage = async ({ data }: { data: HostMessage }) => {
       break;
     case "run":
       await handleRun(data);
-      break;
-    case "stop":
-      await handleStop();
       break;
     default:
       impossible(data);
@@ -26,15 +22,11 @@ async function handleInit(data: Extract<HostMessage, { type: "init" }>) {
   self.postMessage(workerMessage({ type: "init" }));
 }
 
-async function handleStop() {
-  abortController?.abort("stop requested");
-}
-
 async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
   if (!offscreenCanvas) {
     throw new Error("not initialized");
   }
-  abortController = new AbortController();
+
   let tcl: Tcl | undefined;
   let tk: Tk | undefined;
   let stopped = false;
@@ -74,7 +66,6 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     });
 
     const value = await tcl.run(source, {
-      abortSignal: abortController.signal,
       handleEventLoopStatus(countPending: number) {
         self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
       },
@@ -95,7 +86,6 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     );
   } finally {
     stopped = true;
-    abortController = undefined;
     tcl?.free();
     tk?.free();
   }

@@ -62,12 +62,9 @@ export function App() {
   const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
+  const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
 
-  const tkCanvas = document.createElement("canvas");
-  tkCanvas.className = "m-0";
-  const offscreenCanvas = tkCanvas.transferControlToOffscreen();
   const runner = createTclRunner({
-    offscreenCanvas,
     onStdout(value) {
       setStdout((v) => v + value);
     },
@@ -77,8 +74,10 @@ export function App() {
     onStateChanged(state) {
       setTclState(state);
     },
-    onWindowChanged({ open }) {
+    onWindowChanged({ open, canvas }) {
       setWindowOpen(open);
+      setTkCanvas(canvas);
+      canvas.className = "m-0";
     },
   });
 
@@ -111,6 +110,11 @@ export function App() {
     return value;
   };
 
+  const stop = () => {
+    runner.stop();
+    setWindowOpen(false);
+  };
+
   const handleStartStop = () => {
     const state = tclState();
     switch (state) {
@@ -118,9 +122,7 @@ export function App() {
         runSource(source());
         break;
       case "running":
-        runner.stopIfRunning().catch((error) => console.error("failed to stop", error));
-        break;
-      case "stopping":
+        stop();
         break;
       default:
         impossible(state);
@@ -128,7 +130,7 @@ export function App() {
   };
 
   const handleCloseTkWindow = () => {
-    runner.stopIfRunning().catch((error) => console.error("failed to stop", error));
+    stop();
   };
 
   return (
@@ -208,7 +210,7 @@ export function App() {
                 handleCloseTkWindow();
               }}
             >
-              {tkCanvas}
+              {tkCanvas()}
             </Window>
           </div>
         </div>
