@@ -79,7 +79,8 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
           tk.redraw(1);
         }
       } catch (error) {
-        console.error("Redraw error", error);
+        reportError(error);
+        return;
       }
 
       requestAnimationFrame(redraw);
