@@ -90,7 +90,7 @@ impl EventLoop {
   /// mark the end of an execution step
   pub fn end_step(&mut self, waker: &Waker) {
     match &mut self.waker {
-      Some(current) => current.clone_from(waker),
+      Some(_) => unreachable!("start_step clears waker"),
       None => self.waker = Some(waker.clone()),
     }
   }
@@ -184,7 +184,7 @@ impl EventLoop {
 
       match item {
         EventItem::Event(event) => return Ok(Some(event)),
-        EventItem::Sleep => continue,
+        EventItem::Sleep => unreachable!("sleep markers should be skipped as not pending"),
       }
     }
     Ok(None)
