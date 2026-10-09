@@ -1,4 +1,8 @@
-use crate::{tcl::Tcl, util::std_error_to_error};
+mod key;
+
+use std::error::Error;
+
+use crate::tcl::Tcl;
 use tanaid_tk::SurfaceTarget;
 use wasm_bindgen::{JsError, prelude::wasm_bindgen};
 use web_sys::OffscreenCanvas;
@@ -46,4 +50,8 @@ impl Tk {
   pub fn has_window(&self) -> bool {
     self.tk.context.has_window()
   }
+}
+
+fn std_error_to_error(value: Box<dyn Error>) -> JsError {
+  JsError::new(value.to_string().as_str())
 }
