@@ -81,7 +81,7 @@ impl EventLoop {
   /// mark the beginning of an execution step
   pub fn start_step(&mut self) {
     self.yield_deadline = match self.clock_monotonic() {
-      Ok(time) => time + self.yield_after,
+      Ok(time) => time.saturating_add(self.yield_after),
       Err(_) => Duration::MAX,
     };
     self.waker = None;
