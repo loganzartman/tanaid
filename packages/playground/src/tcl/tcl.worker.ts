@@ -53,11 +53,11 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
 
     tk = Tk.create();
     tk.install(tcl);
-    await tk.attachCanvas(offscreenCanvas);
 
     let wasWindowOpen = false;
+    let didAttach = false;
 
-    requestAnimationFrame(function redraw() {
+    requestAnimationFrame(async function redraw() {
       if (stopped) {
         return;
       }
@@ -65,6 +65,12 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
       try {
         if (tk) {
           const windowOpen = tk.hasWindow();
+
+          if (windowOpen && offscreenCanvas && !didAttach) {
+            didAttach = true;
+            await tk.attachCanvas(offscreenCanvas);
+          }
+
           if (windowOpen !== wasWindowOpen) {
             wasWindowOpen = windowOpen;
             self.postMessage(workerMessage({ type: "window-change", open: windowOpen }));
