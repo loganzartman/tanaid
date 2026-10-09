@@ -10,7 +10,6 @@ use tanaid::{eval::EvalContext, eval_error::EvalError, parser::parse, value::Val
 use tsify::Ts;
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
-use web_sys;
 
 use crate::util::{js_error_message, js_value_to_error, js_value_to_evalerror};
 
@@ -114,12 +113,9 @@ impl Tcl {
 
     let parsed = parse(src).map_err(|e| JsError::new(e.to_string().as_str()))?;
 
-    let waker: Rc<RefCell<Option<Waker>>> = Rc::new(RefCell::new(None));
-
     self.interpreter.start(&parsed)?;
 
     let result: Result<Value, EvalError> = poll_fn(|cx| {
-      waker.replace(Some(cx.waker().clone()));
       let step = self.interpreter.step(cx.waker())?;
 
       if let Some(handler) = &handle_event_loop_status {

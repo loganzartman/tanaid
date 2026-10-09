@@ -1,11 +1,7 @@
 import TclWorker from "./tcl.worker.ts?worker";
 import { hostMessage, type EventLoopStatus, type WorkerMessage } from "./messages";
 import { impossible } from "../impossible";
-
-export type TclOutcome =
-  | { status: "running" }
-  | { status: "ok"; value: string }
-  | { status: "error"; message: string };
+import { raceAbort } from "../race-abort";
 
 export type State = "idle" | "running";
 
@@ -35,6 +31,7 @@ export function createTclRunner({
   onWindowChanged?: (status: { open: boolean; canvas: HTMLCanvasElement }) => void;
 }): TclRunner {
   let worker: Worker | undefined;
+  let abort: AbortController | undefined;
 
   const { getState, setState } = (() => {
     let state: State = "idle";
@@ -47,11 +44,19 @@ export function createTclRunner({
     };
   })();
 
+  const stop = () => {
+    worker?.terminate();
+    abort?.abort(new InterruptedError("stopped"));
+    setState("idle");
+  };
+
   const replaceWorker = async () => {
     if (worker !== undefined) {
       worker.terminate();
+      abort?.abort(new InterruptedError("interrupted"));
     }
     worker = new TclWorker();
+    abort = new AbortController();
 
     const ready = Promise.withResolvers<void>();
     const init = Promise.withResolvers<void>();
@@ -88,31 +93,32 @@ export function createTclRunner({
       }
     };
 
-    await ready.promise;
+    worker.onerror = (event) => {
+      setState("idle");
+      worker?.terminate();
+      abort?.abort(new Error(event.message));
+    };
+
+    await raceAbort(ready.promise, abort.signal);
 
     worker.postMessage(hostMessage({ type: "init", offscreenCanvas }), [offscreenCanvas]);
 
-    await init.promise;
+    await raceAbort(init.promise, abort.signal);
 
-    return { worker, resultPromise: result.promise };
+    return { worker, abort, resultPromise: result.promise };
   };
 
   const run = async ({ source }: RunOptions) => {
     setState("running");
-    const { worker, resultPromise } = await replaceWorker();
+    const { worker, abort, resultPromise } = await replaceWorker();
     worker.postMessage(hostMessage({ type: "run", source }));
-    const result = await resultPromise;
+    const result = await raceAbort(resultPromise, abort.signal);
     setState("idle");
 
     if (result instanceof Error) {
       throw result;
     }
     return result;
-  };
-
-  const stop = () => {
-    worker?.terminate();
-    setState("idle");
   };
 
   return { run, stop, getState };

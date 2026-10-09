@@ -7,7 +7,7 @@ import { ExampleSelect } from "./ExampleSelect.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
-import { createTclRunner, type State } from "./tcl/tcl-runner.ts";
+import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
 import startImg from "../img/start.png";
@@ -66,7 +66,7 @@ export function App() {
 
   const runner = createTclRunner({
     onStdout(value) {
-      setStdout((v) => v + value);
+      setStdout((v) => (v + value).slice(-1_000_000));
     },
     onEventLoopStatus(status) {
       setPendingTimers(status.countPending);
@@ -82,13 +82,20 @@ export function App() {
   });
 
   const runSource = (source: string) => {
+    setResult(undefined);
+    setStdout("");
+
     runner
       .run({ source })
       .then((result) => {
         setResult(result);
       })
       .catch((err) => {
-        setResult(err);
+        if (err instanceof InterruptedError) {
+          setResult(undefined);
+        } else {
+          setResult(err);
+        }
       })
       .finally(() => {
         setWindowOpen(false);
@@ -112,7 +119,6 @@ export function App() {
 
   const stop = () => {
     runner.stop();
-    setWindowOpen(false);
   };
 
   const handleStartStop = () => {

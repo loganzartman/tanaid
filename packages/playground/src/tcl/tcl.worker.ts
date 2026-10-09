@@ -31,10 +31,23 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
   let tk: Tk | undefined;
   let stopped = false;
 
+  let stdoutBuf = "";
+  let stdoutLastFlush = performance.now();
+  const flushStdout = () => {
+    if (stdoutBuf.length > 0) {
+      self.postMessage(workerMessage({ type: "stdout", value: stdoutBuf }));
+      stdoutBuf = "";
+    }
+    stdoutLastFlush = performance.now();
+  };
+
   try {
     tcl = createTcl({
       handleStdout(value) {
-        self.postMessage(workerMessage({ type: "stdout", value }));
+        stdoutBuf += value;
+        if (performance.now() - stdoutLastFlush >= 10) {
+          flushStdout();
+        }
       },
     });
 
@@ -53,6 +66,7 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
         if (tk) {
           const windowOpen = tk.hasWindow();
           if (windowOpen !== wasWindowOpen) {
+            wasWindowOpen = windowOpen;
             self.postMessage(workerMessage({ type: "window-change", open: windowOpen }));
           }
 
@@ -68,6 +82,7 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     const value = await tcl.run(source, {
       handleEventLoopStatus(countPending: number) {
         self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
+        flushStdout();
       },
     });
 
@@ -85,6 +100,7 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
       }),
     );
   } finally {
+    flushStdout();
     stopped = true;
     tcl?.free();
     tk?.free();
