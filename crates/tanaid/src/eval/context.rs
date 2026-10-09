@@ -73,7 +73,7 @@ impl EvalContext {
       commands: HashMap::new(),
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
-      event_loop: Rc::new(RefCell::new(EventLoop::new(Duration::from_millis(1)))),
+      event_loop: Rc::new(RefCell::new(EventLoop::new(Duration::from_millis(15)))),
 
       clock_monotonic: None,
       clock_unixtime: None,
