@@ -14,7 +14,9 @@ pub struct Sleep {
 }
 
 impl Sleep {
-  pub fn new(event_loop: Rc<RefCell<EventLoop>>, event_id: EventId, deadline: Duration) -> Self {
+  /// start a blocking sleep. its marker stays in the event loop until this is dropped
+  pub fn new(event_loop: Rc<RefCell<EventLoop>>, deadline: Duration) -> Self {
+    let event_id = event_loop.borrow_mut().push_sleep(deadline);
     Sleep {
       event_loop,
       event_id,

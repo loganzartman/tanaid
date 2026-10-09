@@ -184,7 +184,7 @@ impl EventLoop {
 
       match item {
         EventItem::Event(event) => return Ok(Some(event)),
-        EventItem::Sleep => unreachable!("sleep markers should be skipped as not pending"),
+        EventItem::Sleep => unreachable!("Sleep removes own marker when dropped"),
       }
     }
     Ok(None)

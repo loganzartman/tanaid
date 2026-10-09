@@ -263,8 +263,7 @@ impl EvalContext {
 
   pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
     let deadline = self.clock_monotonic()? + Duration::from_millis(ms);
-    let event_id = self.event_loop.borrow_mut().push_sleep(deadline);
-    Sleep::new(Rc::clone(&self.event_loop), event_id, deadline).await?;
+    Sleep::new(Rc::clone(&self.event_loop), deadline).await?;
     Ok(())
   }
 
