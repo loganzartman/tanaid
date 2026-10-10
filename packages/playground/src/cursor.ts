@@ -1,11 +1,18 @@
-import cursorDarkBase from "../img/cur-dark.png";
-import cursorLightBase from "../img/cur-light.png";
-
-export async function createCssCursor({ scale }: { scale: number }): Promise<string> {
+export async function makeCssCursor({
+  lightSrc,
+  darkSrc,
+  unitScale,
+  globalScale,
+}: {
+  lightSrc: string;
+  darkSrc: string;
+  unitScale: number;
+  globalScale: number;
+}): Promise<string> {
   const dark = new Image();
   const light = new Image();
-  dark.src = cursorDarkBase;
-  light.src = cursorLightBase;
+  dark.src = darkSrc;
+  light.src = lightSrc;
   await Promise.all([
     new Promise<void>((res, rej) => {
       dark.onload = () => res();
@@ -17,9 +24,10 @@ export async function createCssCursor({ scale }: { scale: number }): Promise<str
     }),
   ]);
 
-  const darkCursor = await renderCursor({ img: dark, scale });
-  const lightCursor = await renderCursor({ img: light, scale });
-  return `image-set(light-dark(url('${lightCursor}'), url('${darkCursor}')) ${scale}x) 6 6, auto`;
+  const darkCursor = await renderCursor({ img: dark, scale: unitScale });
+  const lightCursor = await renderCursor({ img: light, scale: unitScale });
+  const origin = Math.ceil(6 * unitScale * globalScale);
+  return `image-set(light-dark(url('${lightCursor}'), url('${darkCursor}')) ${1 / globalScale}x) ${origin} ${origin}, auto`;
 }
 
 async function renderCursor({
@@ -34,7 +42,7 @@ async function renderCursor({
   if (!cShadow) {
     throw new Error("Failed to create canvas context");
   }
-  cShadow.filter = "drop-shadow(3px 1px 1.5px rgb(0 0 0 / 0.32))";
+  cShadow.filter = "drop-shadow(2.6px 1.5px 1.5px rgb(0 0 0 / 0.32))";
   cShadow.drawImage(img, 0, 0);
 
   const scaled = new OffscreenCanvas(Math.ceil(img.width * scale), Math.ceil(img.height * scale));

@@ -6,14 +6,16 @@ import { CodeEditor } from "./CodeEditor.tsx";
 import { ExampleSelect } from "./ExampleSelect.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
-import { createDevicePixelRatio, PixelPerfect } from "./PixelPerfect.tsx";
+import { createPixelPerfectScale, PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
 import startImg from "../img/start.svg";
 import stopImg from "../img/stop.svg";
 import { impossible } from "./impossible.ts";
-import { createCssCursor } from "./cursor.ts";
+import cursorDarkAuto from "../img/cur-dark.png";
+import cursorLightAuto from "../img/cur-light.png";
+import { makeCssCursor } from "./cursor.ts";
 
 const examples = loadExamples();
 
@@ -66,8 +68,15 @@ export function App() {
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
 
-  const dpr = createDevicePixelRatio();
-  const cursor = createMemo(() => createCssCursor({ scale: Math.ceil(dpr()) }));
+  const scale = createPixelPerfectScale();
+  const cursor = createMemo(() =>
+    makeCssCursor({
+      lightSrc: cursorLightAuto,
+      darkSrc: cursorDarkAuto,
+      globalScale: scale().globalScale,
+      unitScale: scale().unitScale,
+    }),
+  );
 
   const runner = createTclRunner({
     onStdout(value) {
