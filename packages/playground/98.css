@@ -238,6 +238,23 @@ input[type="reset"].default {
   box-shadow: var(--default-button-border-raised-outer), var(--default-button-border-raised-inner);
 }
 
+button.icon,
+input[type="submit"].icon,
+input[type="reset"].icon {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  & img {
+    margin-top: 4px;
+    margin-inline-end: 2px;
+    align-self: start;
+  }
+  &:active img {
+    transform: translate(1px, 1px);
+  }
+}
+
 .vertical-bar {
   width: 4px;
   height: 20px;

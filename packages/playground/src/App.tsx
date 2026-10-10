@@ -161,8 +161,9 @@ export function App() {
                   <div class="flex flex-row">
                     <link rel="preload" href={startImg} as="image" />
                     <link rel="preload" href={stopImg} as="image" />
-                    <button class="min-w-4 min-h-4 px-1" onClick={handleStartStop}>
+                    <button class="icon" onClick={handleStartStop}>
                       <img src={tclState() === "idle" ? startImg : stopImg} />
+                      <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
                     </button>
                   </div>
                 </div>
