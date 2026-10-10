@@ -120,12 +120,11 @@ impl Tcl {
 
       if let Some(handler) = &handle_event_loop_status {
         let count_pending = self.event_loop.borrow().count_pending();
-        handler
-          .call1(
-            &JsValue::UNDEFINED,
-            &JsValue::from(count_pending.saturating_cast::<i32>()),
-          )
-          .map_err(js_value_to_evalerror)?;
+        // TODO: report errors
+        let _ = handler.call1(
+          &JsValue::UNDEFINED,
+          &JsValue::from(count_pending.saturating_cast::<i32>()),
+        );
       }
 
       match step {
