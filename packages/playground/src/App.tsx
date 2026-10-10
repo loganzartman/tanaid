@@ -24,7 +24,7 @@ const initialDoc = `proc fib {x} {
     return 1
   }
   return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
-}
+} 
 
 fib 8`;
 
