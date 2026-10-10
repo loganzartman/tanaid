@@ -7,9 +7,9 @@
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
   },
   // uncomment for native dev
-  // "rust-analyzer.cargo.target": null,
+  "rust-analyzer.cargo.target": null,
   // uncomment for tanaid-wasm dev
-  "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+  // "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
   "rust-analyzer.cargo.features": ["tk"],
   "rust-analyzer.check.targets": ["host-tuple", "wasm32-unknown-unknown"],
   "[typescript][javascript][typescriptreact][javascriptreact][html][css][scss][json][yaml][markdown][toml]": {
