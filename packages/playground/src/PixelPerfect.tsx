@@ -21,20 +21,7 @@ import { createEffect, createMemo, createSignal, type Accessor, type ParentProps
  * Using fractional lengths (e.g. `0.5px`) will also break the effect.
  */
 export function PixelPerfect(props: ParentProps) {
-  const dpr = createDevicePixelRatio();
-
-  const scale = createMemo(() => {
-    // the unitScale scales CSS pixels to integer device pixels
-    // the goal is to get whole device pixels during layout calculation.
-    const unitScale = CSS.supports("zoom", "2") ? unitScaleFor(dpr()) : 1;
-
-    // the global scale:
-    // 1. reverses the effect of unit scale once layout has happened on whole device pixels
-    // 2. rounds up the DPR and applies it, so things are not too small on high-DPI devices
-    const globalScale = Math.ceil(dpr()) / (dpr() * unitScale);
-
-    return { unitScale, globalScale };
-  });
+  const scale = createPixelPerfectScale();
 
   // `transform` does not change the layout box, so divide the box by `gs` to
   // leave the scaled result filling the parent.
@@ -53,16 +40,27 @@ export function PixelPerfect(props: ParentProps) {
   );
 }
 
-export function createPixelPerfectScale(): Accessor<number> {
+export function createPixelPerfectScale(): Accessor<{ unitScale: number; globalScale: number }> {
   const dpr = createDevicePixelRatio();
-  return () => Math.ceil(dpr()) / dpr();
+  return createMemo(() => {
+    // the unitScale scales CSS pixels to integer device pixels
+    // the goal is to get whole device pixels during layout calculation.
+    const unitScale = CSS.supports("zoom", "2") ? unitScaleFor(dpr()) : 1;
+
+    // the global scale:
+    // 1. reverses the effect of unit scale once layout has happened on whole device pixels
+    // 2. rounds up the DPR and applies it, so things are not too small on high-DPI devices
+    const globalScale = Math.ceil(dpr()) / (dpr() * unitScale);
+
+    return { unitScale, globalScale };
+  });
 }
 
 /**
  * Track `window.devicePixelRatio`, which changes with browser zoom or when the
  * window moves to another display.
  */
-function createDevicePixelRatio(): Accessor<number> {
+export function createDevicePixelRatio(): Accessor<number> {
   const [dpr, setDpr] = createSignal(window.devicePixelRatio);
 
   createEffect(dpr, (value) => {

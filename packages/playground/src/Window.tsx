@@ -1,4 +1,4 @@
-import { createSignal, Show, type ParentProps } from "solid-js";
+import { createMemo, createSignal, Show, type ParentProps } from "solid-js";
 import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
@@ -9,7 +9,8 @@ export type WindowProps = ParentProps & {
 };
 
 export function Window(props: WindowProps) {
-  const mouseScale = createPixelPerfectScale();
+  const scale = createPixelPerfectScale();
+  const mouseScale = createMemo(() => scale().globalScale * scale().unitScale);
   const [x, setX] = createSignal(() => window.innerWidth / 2 / mouseScale());
   const [y, setY] = createSignal(() => window.innerHeight / 2 / mouseScale());
 

@@ -63,6 +63,45 @@
     padding-inline: 2px;
   }
 
+  :root {
+    cursor: var(--cursor-default);
+  }
+
+  input,
+  textarea,
+  [contenteditable]:not([contenteditable="false"]) {
+    cursor: var(--cursor-text);
+  }
+
+  label,
+  button,
+  select,
+  input:is(
+    [type="button"],
+    [type="submit"],
+    [type="reset"],
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"],
+    [type="color"],
+    [type="file"],
+    [type="date"],
+    [type="time"],
+    [type="datetime-local"],
+    [type="month"],
+    [type="week"]
+  ) {
+    cursor: var(--cursor-default);
+  }
+
+  :any-link,
+  input[type="image"] {
+    cursor: var(--cursor-pointer);
+  }
+  :any-link:read-write {
+    cursor: var(--cursor-text);
+  }
+
   /*
    * 98.css sets the tree-view +/- box's width and height assuming `content-box`.
    * Preflight's `border-box` would shrink the box by its border and padding.

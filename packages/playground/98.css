@@ -246,12 +246,12 @@ input[type="reset"].icon {
   align-items: center;
   min-height: 0;
 
-  & img {
+  & :is(img, svg) {
     margin-top: 3px;
     margin-inline-end: 2px;
     align-self: start;
   }
-  &:active img {
+  &:active :is(img, svg) {
     transform: translate(1px, 1px);
   }
 }

@@ -4,15 +4,15 @@ import stopwatchUrl from "../img/stopwtch.webp";
 import stopwatchStaticUrl from "../img/stopwtch-static.webp";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { ExampleSelect } from "./ExampleSelect.tsx";
+import { StartIcon, StopIcon } from "./Icons.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
-import startImg from "../img/start.svg";
-import stopImg from "../img/stop.svg";
 import { impossible } from "./impossible.ts";
+import { applyCursorStyles } from "./cursor.ts";
 
 const examples = loadExamples();
 
@@ -64,6 +64,8 @@ export function App() {
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
+
+  applyCursorStyles();
 
   const runner = createTclRunner({
     onStdout(value) {
@@ -167,10 +169,10 @@ export function App() {
                 <div class="flex flex-row gap-2">
                   <ExampleSelect examples={examples} onSelect={setSource} />
                   <div class="flex flex-row">
-                    <link rel="preload" href={startImg} as="image" />
-                    <link rel="preload" href={stopImg} as="image" />
                     <button class="icon" onClick={handleStartStop}>
-                      <img src={tclState() === "idle" ? startImg : stopImg} />
+                      <Show when={tclState() === "idle"} fallback={<StopIcon />}>
+                        <StartIcon />
+                      </Show>
                       <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
                     </button>
                   </div>
