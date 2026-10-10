@@ -62,7 +62,7 @@ export function createPixelPerfectScale(): Accessor<number> {
  * Track `window.devicePixelRatio`, which changes with browser zoom or when the
  * window moves to another display.
  */
-function createDevicePixelRatio(): Accessor<number> {
+export function createDevicePixelRatio(): Accessor<number> {
   const [dpr, setDpr] = createSignal(window.devicePixelRatio);
 
   createEffect(dpr, (value) => {

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Show } from "solid-js";
 import poweredByUrl from "../powered-by.png";
 import stopwatchUrl from "../img/stopwtch.webp";
 import stopwatchStaticUrl from "../img/stopwtch-static.webp";
@@ -6,13 +6,14 @@ import { CodeEditor } from "./CodeEditor.tsx";
 import { ExampleSelect } from "./ExampleSelect.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
-import { PixelPerfect } from "./PixelPerfect.tsx";
+import { createDevicePixelRatio, PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
 import startImg from "../img/start.svg";
 import stopImg from "../img/stop.svg";
 import { impossible } from "./impossible.ts";
+import { createCssCursor } from "./cursor.ts";
 
 const examples = loadExamples();
 
@@ -64,6 +65,9 @@ export function App() {
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
+
+  const dpr = createDevicePixelRatio();
+  const cursor = createMemo(() => createCssCursor({ scale: Math.ceil(dpr()) }));
 
   const runner = createTclRunner({
     onStdout(value) {
@@ -149,7 +153,10 @@ export function App() {
 
   return (
     <PixelPerfect>
-      <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
+      <div
+        class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6"
+        style={{ cursor: cursor() }}
+      >
         <div class="window box-border flex size-full max-w-[1200px] flex-col">
           <div class="title-bar">
             <div class="title-bar-text">tanaid Tcl</div>
