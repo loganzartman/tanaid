@@ -17,11 +17,11 @@ use winit::window::{Window, WindowAttributes};
 
 #[derive(Clone)]
 pub struct TkContext {
-  pub(crate) widgets: Rc<RefCell<HashMap<String, Rc<RefCell<dyn Widget>>>>>,
-  pub(crate) window_attributes: Rc<RefCell<Option<WindowAttributes>>>,
-  pub(crate) renderer: Rc<RefCell<Option<TkRenderer>>>,
-  pub(crate) window: Rc<RefCell<Option<Arc<Window>>>>,
-  pub(crate) event_bindings: Rc<RefCell<EventBindings>>,
+  pub widgets: Rc<RefCell<HashMap<String, Rc<RefCell<dyn Widget>>>>>,
+  pub window_attributes: Rc<RefCell<Option<WindowAttributes>>>,
+  pub renderer: Rc<RefCell<Option<TkRenderer>>>,
+  pub window: Rc<RefCell<Option<Arc<Window>>>>,
+  pub event_bindings: Rc<RefCell<EventBindings>>,
   scene: Rc<RefCell<Scene>>,
 }
 
@@ -165,6 +165,12 @@ impl TkContext {
       .and_then(|a| a.inner_size)
   }
 
+  pub fn handle_close_window(&self) {
+    self.window_attributes.replace(None);
+    self.window.replace(None);
+    self.renderer.replace(None);
+  }
+
   pub fn handle_window_event(
     &mut self,
     _window_id: winit::window::WindowId,
@@ -201,20 +207,17 @@ impl TkContext {
         self.request_redraw_window();
       }
       WindowEvent::CloseRequested => {
-        self.window_attributes.replace(None);
-        self.window.replace(None);
-        self.renderer.replace(None);
+        self.handle_close_window();
       }
       WindowEvent::ModifiersChanged(mods) => {
-        self.event_bindings.borrow_mut().handle_modifiers(mods)
+        self.event_bindings.borrow_mut().handle_modifiers(mods);
       }
       WindowEvent::KeyboardInput { event, .. } => {
-        if let Err(r) =
-          self
-            .event_bindings
-            .borrow()
-            .handle_key_event(".".to_string(), event, tcl_event_loop)
-        {
+        if let Err(r) = self.event_bindings.borrow().handle_winit_key_event(
+          ".".to_string(),
+          event,
+          tcl_event_loop,
+        ) {
           eprintln!("Error: {}", r);
         }
       }

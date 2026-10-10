@@ -315,18 +315,28 @@ input[type="reset"]:disabled,
   box-shadow: var(--border-window-outer), var(--border-window-inner);
   background: var(--surface);
   padding: 3px;
+  overflow: hidden;
+}
+
+.window:focus-visible {
+  outline: none;
 }
 
 .title-bar {
-  background: linear-gradient(90deg, var(--dialog-blue), var(--dialog-blue-light));
   padding: 3px 2px 3px 3px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
+.title-bar,
 .title-bar.inactive {
   background: linear-gradient(90deg, var(--dialog-gray), var(--dialog-gray-light));
+}
+
+.title-bar.active,
+.window:focus-within .title-bar {
+  background: linear-gradient(90deg, var(--dialog-blue), var(--dialog-blue-light));
 }
 
 .title-bar-text {

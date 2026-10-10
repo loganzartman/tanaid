@@ -101,7 +101,6 @@ export function App() {
         }
       })
       .finally(() => {
-        setWindowOpen(false);
         setPendingTimers(0);
       });
   };
@@ -128,6 +127,7 @@ export function App() {
   };
 
   const stop = () => {
+    setWindowOpen(false);
     runner.stop();
   };
 
@@ -145,18 +145,11 @@ export function App() {
     }
   };
 
-  const handleCloseTkWindow = () => {
-    stop();
-  };
-
   return (
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
-        <div class="window box-border flex size-full max-w-[1200px] flex-col">
-          <div class="title-bar">
-            <div class="title-bar-text">tanaid Tcl</div>
-          </div>
-          <div class="window-body flex min-h-0 flex-1 flex-col">
+        <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
+          <div class="flex min-h-0 flex-1 flex-col">
             <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
               <div class="flex flex-col gap-1">
                 <div>
@@ -167,7 +160,13 @@ export function App() {
                   in your browser
                 </div>
                 <div class="flex flex-row gap-2">
-                  <ExampleSelect examples={examples} onSelect={setSource} />
+                  <ExampleSelect
+                    examples={examples}
+                    onSelect={(source) => {
+                      stop();
+                      setSource(source);
+                    }}
+                  />
                   <div class="flex flex-row">
                     <button class="icon" onClick={handleStartStop}>
                       <Show when={tclState() === "idle"} fallback={<StopIcon />}>
@@ -182,7 +181,7 @@ export function App() {
                     checked={isAuto()}
                     onChange={(event) => setIsAuto(event.currentTarget.checked)}
                   />
-                  <label for="checkbox-auto">Auto</label>
+                  <label for="checkbox-auto">Auto-run</label>
                 </div>
               </div>
               <div class="flex-1" />
@@ -226,18 +225,31 @@ export function App() {
                 </div>
               </div>
             </div>
-            <Window
-              draggable
-              title="tanaid-tk"
-              open={tclState() === "running" && windowOpen()}
-              onClose={() => {
-                handleCloseTkWindow();
-              }}
-            >
-              {tkCanvas()}
-            </Window>
           </div>
-        </div>
+        </Window>
+        <Window
+          draggable
+          title="tanaid-tk"
+          open={windowOpen()}
+          onClose={() => {
+            setIsAuto(false);
+            stop();
+          }}
+          onKeyDown={(event) => {
+            runner.handleKeyEvent({
+              event: { key: event.key, location: event.location },
+              eventType: "down",
+            });
+          }}
+          onKeyUp={(event) => {
+            runner.handleKeyEvent({
+              event: { key: event.key, location: event.location },
+              eventType: "up",
+            });
+          }}
+        >
+          {tkCanvas()}
+        </Window>
       </div>
     </PixelPerfect>
   );

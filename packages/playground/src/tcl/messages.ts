@@ -1,9 +1,13 @@
 export type Result = string;
 export type EventLoopStatus = { countPending: number };
 
+export type SerializedKeyboardEvent = { key: string; location: number };
+export type KeyboardEventType = "down" | "up";
+
 export type HostMessage =
   | { type: "init"; offscreenCanvas: OffscreenCanvas }
-  | { type: "run"; source: string };
+  | { type: "run"; source: string }
+  | { type: "key-event"; eventType: KeyboardEventType; event: SerializedKeyboardEvent };
 export type WorkerMessage =
   | { type: "ready" }
   | { type: "init" }

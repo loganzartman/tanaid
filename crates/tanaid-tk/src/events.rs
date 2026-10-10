@@ -95,7 +95,8 @@ impl EventBindings {
     self.modifiers = mods;
   }
 
-  pub fn handle_key_event(
+  /// handle a key event encoded as a winit KeyEvent
+  pub fn handle_winit_key_event(
     &self,
     tag: Tag,
     key_event: KeyEvent,
@@ -105,7 +106,7 @@ impl EventBindings {
       winit::event::ElementState::Pressed => TclEventType::KeyPress,
       winit::event::ElementState::Released => TclEventType::KeyRelease,
     };
-    self.handle_key(
+    self.handle_key_event(
       tag,
       event_type,
       &key_detail(&key_event.logical_key, key_event.location),
@@ -113,7 +114,8 @@ impl EventBindings {
     )
   }
 
-  fn handle_key(
+  /// handle a key event
+  pub fn handle_key_event(
     &self,
     tag: Tag,
     event_type: TclEventType,
@@ -323,7 +325,7 @@ mod tests {
   fn key(bindings: &EventBindings, event_type: TclEventType, detail: &str) -> usize {
     let event_loop = Rc::new(RefCell::new(event_loop::EventLoop::new(Duration::ZERO)));
     bindings
-      .handle_key(".".to_string(), event_type, detail, Rc::clone(&event_loop))
+      .handle_key_event(".".to_string(), event_type, detail, Rc::clone(&event_loop))
       .unwrap();
     event_loop.borrow().count_pending()
   }
@@ -336,7 +338,7 @@ mod tests {
   fn press_and_run(bindings: &EventBindings, detail: &str) -> String {
     let mut runner = TestRunner::new();
     bindings
-      .handle_key(
+      .handle_key_event(
         ".".to_string(),
         TclEventType::KeyPress,
         detail,

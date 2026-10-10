@@ -2,6 +2,7 @@ import { createTcl, Tcl, Tk } from "tanaid-tcl";
 import { workerMessage, type HostMessage } from "./messages";
 import { impossible } from "../impossible";
 
+let tk: Tk | undefined;
 let offscreenCanvas: OffscreenCanvas | undefined;
 
 self.onmessage = async ({ data }: { data: HostMessage }) => {
@@ -11,6 +12,9 @@ self.onmessage = async ({ data }: { data: HostMessage }) => {
       break;
     case "run":
       await handleRun(data);
+      break;
+    case "key-event":
+      handleKeyEvent(data);
       break;
     default:
       impossible(data);
@@ -28,7 +32,6 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
   }
 
   let tcl: Tcl | undefined;
-  let tk: Tk | undefined;
   let stopped = false;
 
   let stdoutBuf = "";
@@ -117,6 +120,22 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     stopped = true;
     tcl?.free();
     tk?.free();
+  }
+}
+
+function handleKeyEvent({ event, eventType }: Extract<HostMessage, { type: "key-event" }>) {
+  if (!tk) {
+    return;
+  }
+  switch (eventType) {
+    case "down":
+      tk.handleKeyDown(".", event.key, event.location);
+      break;
+    case "up":
+      tk.handleKeyUp(".", event.key, event.location);
+      break;
+    default:
+      impossible(eventType);
   }
 }
 

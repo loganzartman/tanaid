@@ -1,11 +1,16 @@
-import { createMemo, createSignal, Show, type ParentProps } from "solid-js";
+import { createEffect, createMemo, createSignal, Show, type ParentProps } from "solid-js";
 import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
   draggable?: boolean;
   onClose?: () => void;
+  onPointerDown?: (event: PointerEvent) => void;
+  onPointerUp?: (event: PointerEvent) => void;
+  onKeyDown?: (event: KeyboardEvent) => void;
+  onKeyUp?: (event: KeyboardEvent) => void;
   title?: string;
   open?: boolean;
+  class?: string;
 };
 
 export function Window(props: WindowProps) {
@@ -21,7 +26,13 @@ export function Window(props: WindowProps) {
   let wy0 = 0;
 
   // oxlint-disable-next-line no-unassigned-vars
+  let windowRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
   let titlebarRef!: HTMLDivElement;
+
+  const handleWindowPointerDown = () => {
+    windowRef.focus();
+  };
 
   const handleTitlebarDown = (event: PointerEvent) => {
     if (!props.draggable) {
@@ -38,9 +49,11 @@ export function Window(props: WindowProps) {
     wx0 = x();
     wy0 = y();
   };
+
   const handleTitlebarUp = (_event: PointerEvent) => {
     pdown = false;
   };
+
   const handleTitlebarMove = (event: PointerEvent) => {
     if (!pdown) {
       return;
@@ -52,15 +65,33 @@ export function Window(props: WindowProps) {
     setY(Math.round(wy0 + (py - py0) / mouseScale()));
   };
 
+  createEffect(
+    () => props.open,
+    (open) => {
+      if (open) {
+        windowRef.focus();
+      } else {
+        windowRef.blur();
+      }
+    },
+  );
+
   return (
     <div
-      class="window absolute m-0"
+      autofocus
+      ref={windowRef}
+      class={`window m-0 flex flex-col ${props.class ?? ""}`}
+      tabindex={0}
       style={{
-        left: `${x()}px`,
-        top: `${y()}px`,
-        transform: `translate(round(-50%, 1px), round(-50%, 1px))`,
-        display: props.open ? "block" : "none",
+        position: props.draggable ? "absolute" : "unset",
+        left: props.draggable ? `${x()}px` : "unset",
+        top: props.draggable ? `${y()}px` : "unset",
+        transform: props.draggable ? `translate(round(-50%, 1px), round(-50%, 1px))` : "unset",
+        display: (props.open ?? true) ? "flex" : "none",
       }}
+      onPointerDown={handleWindowPointerDown}
+      onKeyDown={props.onKeyDown}
+      onKeyUp={props.onKeyUp}
     >
       <div
         ref={titlebarRef}
@@ -76,7 +107,13 @@ export function Window(props: WindowProps) {
           </Show>
         </div>
       </div>
-      <div class="window-body">{props.children}</div>
+      <div
+        class="window-body flex"
+        onPointerDown={props.onPointerDown}
+        onPointerUp={props.onPointerUp}
+      >
+        {props.children}
+      </div>
     </div>
   );
 }

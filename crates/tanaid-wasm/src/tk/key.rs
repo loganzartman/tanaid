@@ -1,6 +1,3 @@
-//! Mapping from DOM `KeyboardEvent` attributes to winit keys.
-#![expect(dead_code, reason = "not yet wired into Tk event handling")]
-
 use serde::{
   Deserialize,
   de::value::{Error, StrDeserializer},
