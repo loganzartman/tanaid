@@ -1,21 +1,18 @@
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import poweredByUrl from "../powered-by.png";
 import stopwatchUrl from "../img/stopwtch.webp";
 import stopwatchStaticUrl from "../img/stopwtch-static.webp";
 import { CodeEditor } from "./CodeEditor.tsx";
 import { ExampleSelect } from "./ExampleSelect.tsx";
+import { StartIcon, StopIcon } from "./Icons.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
-import { createPixelPerfectScale, PixelPerfect } from "./PixelPerfect.tsx";
+import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
-import startImg from "../img/start.svg";
-import stopImg from "../img/stop.svg";
 import { impossible } from "./impossible.ts";
-import cursorDarkAuto from "../img/cur-dark.png";
-import cursorLightAuto from "../img/cur-light.png";
-import { makeCssCursor } from "./cursor.ts";
+import { applyCursorStyles } from "./cursor.ts";
 
 const examples = loadExamples();
 
@@ -68,15 +65,7 @@ export function App() {
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
 
-  const scale = createPixelPerfectScale();
-  const cursor = createMemo(() =>
-    makeCssCursor({
-      lightSrc: cursorLightAuto,
-      darkSrc: cursorDarkAuto,
-      globalScale: scale().globalScale,
-      unitScale: scale().unitScale,
-    }),
-  );
+  applyCursorStyles();
 
   const runner = createTclRunner({
     onStdout(value) {
@@ -162,10 +151,7 @@ export function App() {
 
   return (
     <PixelPerfect>
-      <div
-        class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6"
-        style={{ cursor: cursor() }}
-      >
+      <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
         <div class="window box-border flex size-full max-w-[1200px] flex-col">
           <div class="title-bar">
             <div class="title-bar-text">tanaid Tcl</div>
@@ -183,10 +169,10 @@ export function App() {
                 <div class="flex flex-row gap-2">
                   <ExampleSelect examples={examples} onSelect={setSource} />
                   <div class="flex flex-row">
-                    <link rel="preload" href={startImg} as="image" />
-                    <link rel="preload" href={stopImg} as="image" />
                     <button class="icon" onClick={handleStartStop}>
-                      <img src={tclState() === "idle" ? startImg : stopImg} />
+                      <Show when={tclState() === "idle"} fallback={<StopIcon />}>
+                        <StartIcon />
+                      </Show>
                       <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
                     </button>
                   </div>

@@ -1,13 +1,74 @@
+import { createEffect, createMemo } from "solid-js";
+import cursorDarkDefault from "../cursor/arrow-dark.png";
+import cursorLightDefault from "../cursor/arrow-light.png";
+import cursorDarkPointer from "../cursor/hand-dark.png";
+import cursorLightPointer from "../cursor/hand-light.png";
+import cursorDarkText from "../cursor/beam-dark.png";
+import cursorLightText from "../cursor/beam-light.png";
+import { createPixelPerfectScale } from "./PixelPerfect";
+
+export function applyCursorStyles() {
+  const scale = createPixelPerfectScale();
+
+  const cursorDefault = createMemo(() =>
+    makeCssCursor({
+      lightSrc: cursorLightDefault,
+      darkSrc: cursorDarkDefault,
+      globalScale: scale().globalScale,
+      unitScale: scale().unitScale,
+      origin: [6, 6],
+      fallback: "default",
+    }),
+  );
+  const cursorPointer = createMemo(() =>
+    makeCssCursor({
+      lightSrc: cursorLightPointer,
+      darkSrc: cursorDarkPointer,
+      globalScale: scale().globalScale,
+      unitScale: scale().unitScale,
+      origin: [10, 6],
+      fallback: "pointer",
+    }),
+  );
+  const cursorText = createMemo(() =>
+    makeCssCursor({
+      lightSrc: cursorLightText,
+      darkSrc: cursorDarkText,
+      globalScale: scale().globalScale,
+      unitScale: scale().unitScale,
+      origin: [15, 15],
+      fallback: "text",
+    }),
+  );
+
+  createEffect(
+    () => ({
+      cursorDefault: cursorDefault(),
+      cursorPointer: cursorPointer(),
+      cursorText: cursorText(),
+    }),
+    ({ cursorDefault, cursorPointer, cursorText }) => {
+      document.documentElement.style.setProperty("--cursor-default", cursorDefault);
+      document.documentElement.style.setProperty("--cursor-pointer", cursorPointer);
+      document.documentElement.style.setProperty("--cursor-text", cursorText);
+    },
+  );
+}
+
 export async function makeCssCursor({
   lightSrc,
   darkSrc,
   unitScale,
   globalScale,
+  origin,
+  fallback,
 }: {
   lightSrc: string;
   darkSrc: string;
   unitScale: number;
   globalScale: number;
+  origin: [number, number];
+  fallback: string;
 }): Promise<string> {
   const dark = new Image();
   const light = new Image();
@@ -26,8 +87,9 @@ export async function makeCssCursor({
 
   const darkCursor = await renderCursor({ img: dark, scale: unitScale });
   const lightCursor = await renderCursor({ img: light, scale: unitScale });
-  const origin = Math.ceil(6 * unitScale * globalScale);
-  return `image-set(light-dark(url('${lightCursor}'), url('${darkCursor}')) ${1 / globalScale}x) ${origin} ${origin}, auto`;
+  const originX = Math.ceil(origin[0] * unitScale * globalScale);
+  const originY = Math.ceil(origin[1] * unitScale * globalScale);
+  return `image-set(light-dark(url('${lightCursor}'), url('${darkCursor}')) ${1 / globalScale}x) ${originX} ${originY}, ${fallback}`;
 }
 
 async function renderCursor({
