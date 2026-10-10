@@ -29,7 +29,7 @@ impl Tk {
   }
 
   #[wasm_bindgen(js_name = "attachCanvas")]
-  pub async fn attach_canvas(&mut self, canvas: OffscreenCanvas) -> Result<(), JsError> {
+  pub async fn attach_canvas(&self, canvas: OffscreenCanvas) -> Result<(), JsError> {
     self
       .tk
       .context
@@ -38,7 +38,7 @@ impl Tk {
     Ok(())
   }
 
-  pub fn redraw(&mut self, scale_factor: f64) -> Result<(), JsError> {
+  pub fn redraw(&self, scale_factor: f64) -> Result<(), JsError> {
     self
       .tk
       .context

@@ -46,6 +46,18 @@ pub struct RunOptions {
   pub handle_event_loop_status: Function,
 }
 
+#[derive(Tsify, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunEventLoopOptions {
+  #[serde(default, with = "serde_wasm_bindgen::preserve")]
+  #[tsify(optional, type = "(countPending: number) => void")]
+  pub handle_event_loop_status: Function,
+
+  #[serde(with = "serde_wasm_bindgen::preserve")]
+  #[tsify(type = "() => boolean")]
+  pub keep_running: Function,
+}
+
 #[wasm_bindgen]
 impl Tcl {
   pub fn create(options: Ts<TclOptions>) -> Result<Tcl, JsError> {
@@ -151,6 +163,60 @@ impl Tcl {
       Ok(s) => Ok(JsValue::from_str(s)),
       Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
     }
+  }
+
+  #[wasm_bindgen(js_name = "runEventLoop")]
+  pub async fn run_event_loop(
+    &mut self,
+    options: Ts<RunEventLoopOptions>,
+  ) -> Result<JsValue, JsError> {
+    if self.interpreter.is_busy() {
+      return Err(JsError::new("interpreter is already running a script"));
+    }
+
+    let options = options
+      .to_rust()
+      .map_err(|e| JsError::new(format!("failed to parse options: {}", e).as_str()))?;
+    let handle_event_loop_status = &options.handle_event_loop_status;
+    let keep_running = &options.keep_running;
+
+    poll_fn::<Result<(), EvalError>, _>(|cx| {
+      if !keep_running
+        .call0(&JsValue::UNDEFINED)
+        .map_err(js_value_to_evalerror)?
+        .as_bool()
+        .ok_or_else(|| EvalError::Generic("keepRunning returned non-boolean value".to_string()))?
+      {
+        return Poll::Ready(Ok(()));
+      }
+      let step = self.interpreter.step(cx.waker())?;
+
+      let count_pending = self.event_loop.borrow().count_pending();
+      handle_event_loop_status
+        .call1(
+          &JsValue::UNDEFINED,
+          &JsValue::from(count_pending.saturating_cast::<i32>()),
+        )
+        .map_err(js_value_to_evalerror)?;
+
+      match step {
+        // need to do more work; yield and re-run immediately
+        StepResult::Again | StepResult::Done(_) => {
+          self.set_wake_timeout(cx.waker(), Duration::ZERO)?;
+          Poll::Pending
+        }
+        // scheduled timer; re-run after duration if nothing wakes us earlier
+        StepResult::WaitDuration(duration) => {
+          self.set_wake_timeout(cx.waker(), duration)?;
+          Poll::Pending
+        }
+        // nothing scheduled; wait for external wake
+        StepResult::Wait => Poll::Pending,
+      }
+    })
+    .await?;
+
+    Ok(JsValue::UNDEFINED)
   }
 
   fn set_wake_timeout(&mut self, waker: &Waker, duration: Duration) -> Result<(), EvalError> {

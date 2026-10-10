@@ -54,6 +54,11 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     tk = Tk.create();
     tk.install(tcl);
 
+    const handleEventLoopStatus = (countPending: number) => {
+      self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
+      flushStdout();
+    };
+
     let wasWindowOpen = false;
     let didAttach = false;
 
@@ -87,11 +92,14 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     });
 
     const value = await tcl.run(source, {
-      handleEventLoopStatus(countPending: number) {
-        self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
-        flushStdout();
-      },
+      handleEventLoopStatus,
     });
+
+    if (tk?.hasWindow()) {
+      await tcl.runEventLoop({
+        keepRunning: () => tk?.hasWindow() ?? false,
+      });
+    }
 
     self.postMessage(
       workerMessage({
