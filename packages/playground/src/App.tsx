@@ -10,8 +10,8 @@ import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
 import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
-import startImg from "../img/start.svg";
-import stopImg from "../img/stop.svg";
+import startImg from "../img/start.png";
+import stopImg from "../img/stop.png";
 import { impossible } from "./impossible.ts";
 
 const examples = loadExamples();
