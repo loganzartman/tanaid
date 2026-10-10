@@ -56,6 +56,7 @@ const storeSrc = (src: string) => {
 };
 
 export function App() {
+  const [isAuto, setIsAuto] = createSignal(true);
   const [result, setResult] = createSignal<Result | Error | undefined>();
   const [stdout, setStdout] = createSignal<string>("");
   const [pendingTimers, setPendingTimers] = createSignal<number>(0);
@@ -104,7 +105,14 @@ export function App() {
   };
 
   createEffect(source, storeSrc, { defer: true });
-  createEffect(source, (source) => runSource(source));
+  createEffect(
+    () => ({ source: source(), isAuto: isAuto() }),
+    ({ source, isAuto }) => {
+      if (isAuto) {
+        runSource(source);
+      }
+    },
+  );
 
   const resultText = () => {
     const value = result();
@@ -166,6 +174,13 @@ export function App() {
                       <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
                     </button>
                   </div>
+                  <input
+                    type="checkbox"
+                    id="checkbox-auto"
+                    checked={isAuto()}
+                    onChange={(event) => setIsAuto(event.currentTarget.checked)}
+                  />
+                  <label for="checkbox-auto">Auto</label>
                 </div>
               </div>
               <div class="flex-1" />
