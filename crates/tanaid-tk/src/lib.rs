@@ -10,3 +10,4 @@ pub mod widget;
 
 pub use tk::Tk;
 pub use tk_context::TkContext;
+pub use vello::wgpu::SurfaceTarget;

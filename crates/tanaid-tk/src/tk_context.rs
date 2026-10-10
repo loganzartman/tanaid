@@ -9,6 +9,9 @@ use std::sync::Arc;
 use tanaid::eval_error::EvalError;
 use vello::Scene;
 use vello::kurbo::Affine;
+#[cfg(target_arch = "wasm32")]
+use vello::wgpu::SurfaceTarget;
+use winit::dpi::Size;
 use winit::event::WindowEvent;
 use winit::window::{Window, WindowAttributes};
 
@@ -32,6 +35,28 @@ impl TkContext {
       event_bindings: Rc::new(RefCell::new(EventBindings::new())),
       scene: Rc::new(RefCell::new(Scene::new())),
     }
+  }
+
+  /// Create a renderer using a SurfaceTarget (e.g. web OffscreenCanvas) and no winit window
+  #[cfg(target_arch = "wasm32")]
+  pub async fn attach_surface_target(
+    &self,
+    surface_target: impl Into<SurfaceTarget<'static>>,
+  ) -> Result<(), EvalError> {
+    // resized later
+    let renderer = match TkRenderer::new(surface_target, 1, 1).await {
+      Ok(renderer) => renderer,
+      Err(err) => {
+        return Err(EvalError::Generic(format!(
+          "Failed to create renderer: {}",
+          err
+        )));
+      }
+    };
+
+    self.window.replace(None);
+    self.renderer.replace(Some(renderer));
+    Ok(())
   }
 
   fn ensure_window(
@@ -69,33 +94,45 @@ impl TkContext {
     Ok(())
   }
 
-  fn redraw(&self) -> Result<(), Box<dyn Error>> {
+  fn redraw_window(&self) -> Result<(), Box<dyn Error>> {
     let window = self.window.borrow();
     let Some(window) = window.as_ref() else {
       return Ok(());
     };
+    let size = window.inner_size();
+    let size = (size.width, size.height);
+    let scale_factor = window.scale_factor();
+    self.redraw(size, scale_factor)
+  }
 
+  pub fn redraw_requested_size(&self, scale_factor: f64) -> Result<(), Box<dyn Error>> {
+    let Some(size) = self.requested_size() else {
+      return Ok(());
+    };
+    let size = size.to_physical(scale_factor);
+    self.redraw((size.width, size.height), scale_factor)
+  }
+
+  pub fn redraw(&self, size: (u32, u32), scale_factor: f64) -> Result<(), Box<dyn Error>> {
     self.scene.borrow_mut().reset();
 
     // TODO: Track packed widgets and layout instead of drawing every registered widget.
-    let transform = Affine::scale(window.scale_factor());
+    let transform = Affine::scale(scale_factor);
     for widget in self.widgets.borrow().values() {
       widget
         .borrow()
         .redraw(&mut self.scene.borrow_mut(), transform);
     }
 
-    let size = window.inner_size();
-
     self
       .renderer
       .borrow_mut()
       .as_mut()
-      .map(|renderer| renderer.render(&self.scene.borrow(), size.width, size.height))
+      .map(|renderer| renderer.render(&self.scene.borrow(), size.0, size.1))
       .unwrap_or(Ok(()))
   }
 
-  fn request_redraw(&self) {
+  fn request_redraw_window(&self) {
     if let Some(window) = self.window.borrow().as_ref() {
       window.request_redraw();
     }
@@ -120,6 +157,14 @@ impl TkContext {
     }
   }
 
+  fn requested_size(&self) -> Option<Size> {
+    self
+      .window_attributes
+      .borrow()
+      .as_ref()
+      .and_then(|a| a.inner_size)
+  }
+
   pub fn handle_window_event(
     &mut self,
     _window_id: winit::window::WindowId,
@@ -128,7 +173,7 @@ impl TkContext {
   ) {
     match event {
       WindowEvent::Resized(_) => {
-        self.request_redraw();
+        self.request_redraw_window();
       }
       WindowEvent::ScaleFactorChanged {
         scale_factor,
@@ -140,12 +185,7 @@ impl TkContext {
         // winit skips the writer's resize when it equals that stale size, so the in-flight A -> B
         // resize would still win; `window.request_inner_size` always sends. Known gap: a scale
         // change undoes manual resizes.
-        let requested = self
-          .window_attributes
-          .borrow()
-          .as_ref()
-          .and_then(|a| a.inner_size);
-        if let Some(size) = requested {
+        if let Some(size) = self.requested_size() {
           let size = size.to_physical::<u32>(scale_factor);
           let _ = inner_size_writer.request_inner_size(size);
           if let Some(window) = self.window.borrow().as_ref() {
@@ -154,11 +194,11 @@ impl TkContext {
         }
       }
       WindowEvent::RedrawRequested => {
-        if let Err(err) = self.redraw() {
+        if let Err(err) = self.redraw_window() {
           eprintln!("Draw error: {}", err);
         }
         // TODO: only when dirty
-        self.request_redraw();
+        self.request_redraw_window();
       }
       WindowEvent::CloseRequested => {
         self.window_attributes.replace(None);

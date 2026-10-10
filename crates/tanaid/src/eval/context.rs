@@ -3,7 +3,7 @@ use super::event_loop::EventLoop;
 use crate::eval::sleep::Sleep;
 use crate::eval::{EvalCmdResult, eval_returnable_script};
 use crate::eval_error::EvalError;
-use crate::event_loop::{Event, EventId, EventWait, EventWaiter};
+use crate::event_loop::{Event, EventId, WaitForEvent};
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
@@ -73,7 +73,7 @@ impl EvalContext {
       commands: HashMap::new(),
       frame_id: GLOBAL_FRAME,
       frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
-      event_loop: Rc::new(RefCell::new(EventLoop::new())),
+      event_loop: Rc::new(RefCell::new(EventLoop::new(Duration::from_millis(15)))),
 
       clock_monotonic: None,
       clock_unixtime: None,
@@ -87,6 +87,11 @@ impl EvalContext {
     };
     super::cmd::register_builtin_commands(&mut context);
     context
+  }
+
+  pub fn with_yield_after(self, yield_after: Duration) -> Self {
+    self.event_loop.borrow_mut().yield_after = yield_after;
+    self
   }
 
   pub fn with_clock_monotonic(mut self, f: impl Fn() -> Duration + 'static) -> Self {
@@ -258,8 +263,7 @@ impl EvalContext {
 
   pub async fn sleep_ms(&self, ms: u64) -> Result<(), EvalError> {
     let deadline = self.clock_monotonic()? + Duration::from_millis(ms);
-    let event_id = self.event_loop.borrow_mut().wake_at(deadline);
-    Sleep::new(Rc::clone(&self.event_loop), event_id, deadline).await?;
+    Sleep::new(Rc::clone(&self.event_loop), deadline).await?;
     Ok(())
   }
 
@@ -267,12 +271,21 @@ impl EvalContext {
     self.event_loop.borrow().count_pending()
   }
 
-  pub fn next_event_wait(&self) -> Result<EventWait, EvalError> {
-    self.event_loop.borrow_mut().next_wait()
+  /// wait for an event and then dispatch it
+  pub async fn poll_event(&mut self) -> Result<(), EvalError> {
+    let event = WaitForEvent::new(Rc::clone(&self.event_loop)).await?;
+    event.dispatch(self).await?;
+    Ok(())
   }
 
-  pub async fn wait_for_event(&self) -> Result<(), EvalError> {
-    Ok(EventWaiter::wait(Rc::clone(&self.event_loop)).await?)
+  // dispatch an event if one is ready without waiting
+  pub async fn poll_ready_event(&mut self) -> Result<bool, EvalError> {
+    let event = self.event_loop.borrow_mut().take_event()?;
+    let Some(event) = event else {
+      return Ok(false);
+    };
+    event.dispatch(self).await?;
+    Ok(true)
   }
 
   pub fn clock_monotonic(&self) -> Result<Duration, EvalError> {
@@ -285,15 +298,6 @@ impl EvalContext {
     Ok(self.clock_unixtime.as_ref().ok_or_else(|| {
       EvalError::Generic("Context missing clock_unixtime".to_string())
     })?())
-  }
-
-  pub async fn poll_event(&mut self) -> Result<bool, EvalError> {
-    let Some(event) = self.event_loop.borrow_mut().take_ready()? else {
-      return Ok(false);
-    };
-
-    event.dispatch(self).await?;
-    Ok(true)
   }
 
   pub fn parse_script_caching(

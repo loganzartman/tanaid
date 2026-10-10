@@ -116,3 +116,4 @@ proc frame {} {
 }
 
 frame
+vwait forever

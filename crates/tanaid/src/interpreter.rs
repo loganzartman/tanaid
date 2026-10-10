@@ -1,6 +1,6 @@
 use crate::eval::{self, EvalCmdResult, EvalContext};
 use crate::eval_error::EvalError;
-use crate::event_loop::{EventLoop, EventWait};
+use crate::event_loop::{EventAction, EventLoop};
 use crate::parser::ScriptNode;
 use crate::value::Value;
 use std::cell::RefCell;
@@ -72,28 +72,38 @@ impl Interpreter {
 
   /// Do work if there's work to be done, returning a result indicating what to do next.
   pub fn step(&mut self, waker: &Waker) -> Result<StepResult, EvalError> {
+    let Some(event_loop) = self.event_loop() else {
+      return Ok(StepResult::Wait);
+    };
+
+    event_loop.borrow_mut().start_step();
+    let result = self.do_step(waker);
+    event_loop.borrow_mut().end_step(waker);
+    result
+  }
+
+  fn do_step(&mut self, waker: &Waker) -> Result<StepResult, EvalError> {
     match &self.state {
       InterpreterState::Init => Ok(StepResult::Wait),
       InterpreterState::Idle(context) => {
-        context.event_loop.borrow_mut().set_waker(waker);
-        let wait = context.event_loop.borrow_mut().next_wait()?;
-        match wait {
-          EventWait::Idle => return Ok(StepResult::Wait),
-          EventWait::Delay(d) => return Ok(StepResult::WaitDuration(d)),
-          EventWait::Ready => self.dispatch_ready_event(),
+        let action = context.event_loop.borrow_mut().next_action()?;
+        match action {
+          EventAction::Idle => Ok(StepResult::Wait),
+          EventAction::WaitDuration(d) => Ok(StepResult::WaitDuration(d)),
+          EventAction::Ready => self.poll_event(),
         }
       }
       InterpreterState::Running(_, _) => self.do_running_work(waker),
     }
   }
 
-  fn dispatch_ready_event(&mut self) -> Result<StepResult, EvalError> {
+  fn poll_event(&mut self) -> Result<StepResult, EvalError> {
     let mut context = self
       .take_context()
-      .expect("dispatch_ready_event should only be called while Idle");
+      .expect("poll_event should only be called while Idle");
 
     let event_loop = Rc::clone(&context.event_loop);
-    let event = match event_loop.borrow_mut().take_ready() {
+    let event = match event_loop.borrow_mut().take_event() {
       Ok(Some(event)) => event,
       Ok(None) => {
         // possible timer disagreement, try again
@@ -134,10 +144,10 @@ impl Interpreter {
         match result_future.as_mut().poll(&mut cx) {
           Poll::Ready(v) => v,
           Poll::Pending => {
-            return match event_loop.borrow_mut().next_wait()? {
-              EventWait::Ready => Ok(StepResult::Again),
-              EventWait::Delay(duration) => Ok(StepResult::WaitDuration(duration)),
-              EventWait::Idle => Ok(StepResult::Wait),
+            return match event_loop.borrow_mut().next_action()? {
+              EventAction::Ready => Ok(StepResult::Again),
+              EventAction::WaitDuration(duration) => Ok(StepResult::WaitDuration(duration)),
+              EventAction::Idle => Ok(StepResult::Wait),
             };
           }
         }
@@ -146,6 +156,14 @@ impl Interpreter {
 
     self.state = InterpreterState::Idle(context);
     Ok(StepResult::Done(result?))
+  }
+
+  fn event_loop(&self) -> Option<Rc<RefCell<EventLoop>>> {
+    match &self.state {
+      InterpreterState::Init => None,
+      InterpreterState::Idle(context) => Some(Rc::clone(&context.event_loop)),
+      InterpreterState::Running(event_loop, _) => Some(Rc::clone(event_loop)),
+    }
   }
 
   /// Consume an EvalContext and prepare the interpreter to run scripts.
@@ -193,9 +211,13 @@ impl Interpreter {
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
   use super::*;
+  use crate::eval::GLOBAL_FRAME;
   use crate::event_loop::Event;
   use crate::parser;
   use std::cell::Cell;
+  use std::sync::Arc;
+  use std::sync::atomic::{AtomicUsize, Ordering};
+  use std::task::Wake;
 
   struct NoopEvent;
 
@@ -208,32 +230,232 @@ mod tests {
     }
   }
 
-  #[test]
-  fn step_keeps_context_when_ready_event_disappears() {
-    // next_wait's clock read says the timer is due; take_ready's says it isn't
-    let reads = Cell::new(0);
-    let context = EvalContext::new().with_clock_monotonic(move || {
-      reads.set(reads.get() + 1);
-      if reads.get() == 1 {
-        Duration::from_millis(10)
-      } else {
-        Duration::ZERO
-      }
-    });
-    context
-      .event_loop
-      .borrow_mut()
-      .push_scheduled(Box::new(NoopEvent), Duration::from_millis(5));
+  #[derive(Default)]
+  struct CountingWaker(AtomicUsize);
 
+  impl CountingWaker {
+    fn wakes(&self) -> usize {
+      self.0.load(Ordering::Relaxed)
+    }
+  }
+
+  impl Wake for CountingWaker {
+    fn wake(self: Arc<Self>) {
+      self.0.fetch_add(1, Ordering::Relaxed);
+    }
+  }
+
+  /// a context whose clock only moves when the test moves it, or when a script calls
+  /// `work ms`, which stands in for a computation that takes that long
+  fn context_with_manual_clock() -> (EvalContext, Rc<Cell<Duration>>) {
+    let clock = Rc::new(Cell::new(Duration::ZERO));
+    let context_clock = Rc::clone(&clock);
+    let mut context = EvalContext::new().with_clock_monotonic(move || context_clock.get());
+
+    let work_clock = Rc::clone(&clock);
+    context.register_command("work", move |args, _context, _frame| {
+      let ms = args[0].repr_int()?.saturating_cast::<u64>();
+      work_clock.set(work_clock.get() + Duration::from_millis(ms));
+      Ok(Value::none())
+    });
+
+    (context, clock)
+  }
+
+  fn start(context: EvalContext, source: &str) -> Interpreter {
     let mut interpreter = Interpreter::new();
     interpreter.configure(context);
+    interpreter.start(&parser::parse(source).unwrap()).unwrap();
+    interpreter
+  }
+
+  #[test]
+  fn step_returns_when_handler_outlasts_its_timer() {
+    // like an animation whose frame takes longer than its interval: the next timer is
+    // already due whenever the handler returns
+    let (context, _clock) = context_with_manual_clock();
+    let mut interpreter = start(
+      context,
+      "set n 0
+       proc frame {} {
+         global n done
+         after 16 frame
+         work 32
+         if {[incr n] == 3} {set done 1}
+       }
+       frame
+       vwait done",
+    );
+
     assert!(matches!(
       interpreter.step(Waker::noop()),
       Ok(StepResult::Again)
     ));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Again)
+    ));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Done(_))
+    ));
+  }
 
-    interpreter
-      .start(&parser::parse("set x 1").unwrap())
-      .expect("interpreter should still hold its EvalContext");
+  #[test]
+  fn step_dispatches_quick_events_together() {
+    let (context, _clock) = context_with_manual_clock();
+    let mut interpreter = start(
+      context.with_yield_after(Duration::from_millis(10)),
+      "after 0 {set a 1}; after 0 {set b 1}; after 0 {set done 1}; vwait done",
+    );
+
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Done(_))
+    ));
+  }
+
+  #[test]
+  fn step_yields_once_per_wait_when_yield_after_is_zero() {
+    let (context, _clock) = context_with_manual_clock();
+    let mut interpreter = start(
+      context.with_yield_after(Duration::ZERO),
+      "after 0 {set a 1}; after 0 {set done 1}; vwait done",
+    );
+
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Again)
+    ));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Again)
+    ));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Done(_))
+    ));
+  }
+
+  #[test]
+  fn step_doesnt_wake_for_events_scheduled_while_stepping() {
+    let (context, clock) = context_with_manual_clock();
+    let wakes = Arc::new(CountingWaker::default());
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut interpreter = start(context, "proc tick {} {after 10 tick}; tick; vwait forever");
+
+    // the first step leaves the waker stored. the second dispatches a tick, which schedules
+    // the next one.
+    assert!(matches!(
+      interpreter.step(&waker),
+      Ok(StepResult::WaitDuration(_))
+    ));
+    clock.set(Duration::from_millis(10));
+    assert!(matches!(
+      interpreter.step(&waker),
+      Ok(StepResult::WaitDuration(_))
+    ));
+
+    assert_eq!(wakes.wakes(), 0);
+  }
+
+  #[test]
+  fn step_wakes_host_when_event_is_pushed_between_steps() {
+    let (context, _clock) = context_with_manual_clock();
+    let event_loop = Rc::clone(&context.event_loop);
+    let wakes = Arc::new(CountingWaker::default());
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut interpreter = start(context, "vwait forever");
+
+    assert!(matches!(interpreter.step(&waker), Ok(StepResult::Wait)));
+    event_loop.borrow_mut().push_immediate(Box::new(NoopEvent));
+
+    assert_eq!(wakes.wakes(), 1);
+  }
+
+  #[test]
+  fn step_wakes_host_after_script_ends_or_fails() {
+    for source in ["set x 1", "undefined_command"] {
+      let (context, _clock) = context_with_manual_clock();
+      let event_loop = Rc::clone(&context.event_loop);
+      let wakes = Arc::new(CountingWaker::default());
+      let waker = Waker::from(Arc::clone(&wakes));
+      let mut interpreter = start(context, source);
+
+      let _ = interpreter.step(&waker);
+      assert!(!interpreter.is_busy());
+      event_loop.borrow_mut().push_immediate(Box::new(NoopEvent));
+
+      assert_eq!(wakes.wakes(), 1, "after `{source}`");
+    }
+  }
+
+  #[test]
+  fn step_waits_out_sleep_when_event_is_due() {
+    let (context, clock) = context_with_manual_clock();
+    let mut interpreter = start(context, "after 50 {set x 1}; after 1000");
+
+    // the timer can't run until the script stops sleeping, so it's no reason to step sooner
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::WaitDuration(d)) if d == Duration::from_millis(1000)
+    ));
+    clock.set(Duration::from_millis(50));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::WaitDuration(d)) if d == Duration::from_millis(950)
+    ));
+    clock.set(Duration::from_millis(1000));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Done(_))
+    ));
+
+    // the timer outlived the sleep, and the idle interpreter runs it
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Again)
+    ));
+    assert!(matches!(
+      interpreter.step(Waker::noop()),
+      Ok(StepResult::Done(_))
+    ));
+    let context = interpreter.take_context().unwrap();
+    assert!(context.get_variable(GLOBAL_FRAME, "x").is_some());
+  }
+
+  #[test]
+  fn step_keeps_context_when_ready_event_disappears() {
+    // the clock runs backwards after some number of reads. for one of these numbers,
+    // next_action's read says the timer is due and take_event's says it isn't.
+    let mut disagreed = false;
+    for late_reads in 1..=6 {
+      let reads = Cell::new(0);
+      let context = EvalContext::new().with_clock_monotonic(move || {
+        reads.set(reads.get() + 1);
+        if reads.get() <= late_reads {
+          Duration::from_millis(10)
+        } else {
+          Duration::ZERO
+        }
+      });
+      context
+        .event_loop
+        .borrow_mut()
+        .push_scheduled(Box::new(NoopEvent), Duration::from_millis(5));
+
+      let mut interpreter = Interpreter::new();
+      interpreter.configure(context);
+      let result = interpreter.step(Waker::noop());
+
+      // ready, but nothing was taken
+      if matches!(result, Ok(StepResult::Again)) && !interpreter.is_busy() {
+        disagreed = true;
+        interpreter
+          .start(&parser::parse("set x 1").unwrap())
+          .expect("interpreter should still hold its EvalContext");
+      }
+    }
+    assert!(disagreed);
   }
 }

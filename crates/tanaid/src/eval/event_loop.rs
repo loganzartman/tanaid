@@ -12,12 +12,12 @@ use crate::{eval::EvalContext, eval_error::EvalError};
 
 pub type EventId = usize;
 
-pub enum EventWait {
-  /// An event is due to be dispatched
+pub enum EventAction {
+  /// an event is due to be dispatched
   Ready,
-  /// An event is scheduled after this delay (suspend for this long)
-  Delay(Duration),
-  /// No events are pending; loop is idle (suspend indefinitely)
+  /// an event is scheduled after this delay (suspend for this long)
+  WaitDuration(Duration),
+  /// no events are pending; loop is idle (suspend indefinitely)
   Idle,
 }
 
@@ -30,25 +30,35 @@ pub trait Event {
 
 enum EventItem {
   Event(Box<dyn Event>),
-  Wake,
+  Sleep,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Category {
+  Sleep,
+  Event,
 }
 
 pub struct EventLoop {
   pub(crate) clock_monotonic: Option<Rc<dyn Fn() -> Duration + 'static>>,
   event_id: EventId,
   pending_events: HashMap<EventId, EventItem>,
-  event_queue: BinaryHeap<Reverse<(Duration, EventId)>>,
+  event_queue: BinaryHeap<Reverse<(Category, Duration, EventId)>>,
   waker: Option<Waker>,
+  pub yield_after: Duration,
+  yield_deadline: Duration,
 }
 
 impl EventLoop {
-  pub fn new() -> EventLoop {
+  pub fn new(yield_after: Duration) -> EventLoop {
     EventLoop {
       clock_monotonic: None,
       event_id: 1,
       pending_events: HashMap::new(),
       event_queue: BinaryHeap::new(),
       waker: None,
+      yield_after,
+      yield_deadline: Duration::MAX,
     }
   }
 
@@ -62,26 +72,40 @@ impl EventLoop {
     Ok(clock_monotonic())
   }
 
-  pub fn set_waker(&mut self, waker: &Waker) {
-    match &mut self.waker {
-      Some(current) => current.clone_from(waker),
-      None => self.waker = Some(waker.clone()),
-    }
-  }
-
-  fn wake(&mut self) {
+  fn maybe_wake(&self) {
     if let Some(waker) = &self.waker {
       waker.wake_by_ref();
     }
   }
 
-  pub fn wake_at(&mut self, deadline: Duration) -> EventId {
+  /// mark the beginning of an execution step
+  pub fn start_step(&mut self) {
+    self.yield_deadline = match self.clock_monotonic() {
+      Ok(time) => time.saturating_add(self.yield_after),
+      Err(_) => Duration::MAX,
+    };
+    self.waker = None;
+  }
+
+  /// mark the end of an execution step
+  pub fn end_step(&mut self, waker: &Waker) {
+    match &mut self.waker {
+      Some(_) => unreachable!("start_step clears waker"),
+      None => self.waker = Some(waker.clone()),
+    }
+  }
+
+  /// enqueue a blocking sleep marker that takes priority over events
+  pub fn push_sleep(&mut self, deadline: Duration) -> EventId {
     let event_id = self.event_id;
     self.event_id += 1;
 
-    self.pending_events.insert(event_id, EventItem::Wake);
-    self.event_queue.push(Reverse((deadline, event_id)));
-    self.wake();
+    self.pending_events.insert(event_id, EventItem::Sleep);
+    self
+      .event_queue
+      .push(Reverse((Category::Sleep, deadline, event_id)));
+    self.maybe_wake();
+
     event_id
   }
 
@@ -93,12 +117,15 @@ impl EventLoop {
     self
       .pending_events
       .insert(event_id, EventItem::Event(event));
-    self.event_queue.push(Reverse((deadline, event_id)));
-    self.wake();
+    self
+      .event_queue
+      .push(Reverse((Category::Event, deadline, event_id)));
+    self.maybe_wake();
+
     event_id
   }
 
-  /// enqueue an event to dispatch ASAP, before any timers
+  /// enqueue an event to dispatch ASAP, before any timers, but after blocking sleeps
   pub fn push_immediate(&mut self, event: Box<dyn Event>) -> EventId {
     self.push_scheduled(event, Duration::ZERO)
   }
@@ -108,7 +135,7 @@ impl EventLoop {
     self.pending_events.remove(&event_id);
   }
 
-  /// get the number of queued events, ignoring wakes
+  /// get the number of queued events, ignoring other markers
   pub fn count_pending(&self) -> usize {
     self
       .pending_events
@@ -117,71 +144,87 @@ impl EventLoop {
       .count()
   }
 
-  /// determine whether an event is ready, or how long to wait for one
-  pub fn next_wait(&mut self) -> Result<EventWait, EvalError> {
-    while let Some(Reverse((deadline, event_id))) = self.event_queue.peek() {
+  /// get the next event, if any, without removing any events from the queue
+  pub fn next_action(&mut self) -> Result<EventAction, EvalError> {
+    while let Some(Reverse((_, deadline, event_id))) = self.event_queue.peek() {
       if !self.pending_events.contains_key(&event_id) {
-        // cancelled
-        self.event_queue.pop();
-        continue;
-      }
-
-      if &self.clock_monotonic()? >= deadline {
-        return Ok(EventWait::Ready);
-      }
-      return Ok(EventWait::Delay(
-        deadline.saturating_sub(self.clock_monotonic()?),
-      ));
-    }
-    Ok(EventWait::Idle)
-  }
-
-  /// take the next ready event, if any.
-  pub fn take_ready(&mut self) -> Result<Option<Box<dyn Event>>, EvalError> {
-    while let Some(Reverse((deadline, event_id))) = self.event_queue.peek() {
-      if &self.clock_monotonic()? < deadline {
-        return Ok(None);
-      }
-
-      let Some(item) = self.pending_events.remove(&event_id) else {
-        // cancelled
+        // cancelled or not an event
         self.event_queue.pop();
         continue;
       };
 
+      if &self.clock_monotonic()? < deadline {
+        return Ok(EventAction::WaitDuration(
+          deadline.saturating_sub(self.clock_monotonic()?),
+        ));
+      }
+
+      return Ok(EventAction::Ready);
+    }
+    Ok(EventAction::Idle)
+  }
+
+  /// take the next ready event, if any.
+  pub fn take_event(&mut self) -> Result<Option<Box<dyn Event>>, EvalError> {
+    while let Some(Reverse((_, deadline, event_id))) = self.event_queue.peek() {
+      if !self.pending_events.contains_key(&event_id) {
+        // cancelled or not an event
+        self.event_queue.pop();
+        continue;
+      };
+
+      if &self.clock_monotonic()? < deadline {
+        return Ok(None);
+      }
+
+      let item = self
+        .pending_events
+        .remove(&event_id)
+        .expect("pending_events should contain event_id");
+
       match item {
         EventItem::Event(event) => return Ok(Some(event)),
-        EventItem::Wake => continue,
+        EventItem::Sleep => unreachable!("Sleep removes own marker when dropped"),
       }
     }
     Ok(None)
   }
 }
 
-pub struct EventWaiter {
+pub struct WaitForEvent {
   event_loop: Rc<RefCell<EventLoop>>,
+  yielded_once: bool,
 }
 
-impl EventWaiter {
-  pub async fn wait(event_loop: Rc<RefCell<EventLoop>>) -> Result<(), EvalError> {
-    EventWaiter { event_loop }.await
+impl WaitForEvent {
+  pub fn new(event_loop: Rc<RefCell<EventLoop>>) -> Self {
+    WaitForEvent {
+      event_loop,
+      yielded_once: false,
+    }
   }
 }
 
-impl Future for EventWaiter {
-  type Output = Result<(), EvalError>;
+impl Future for WaitForEvent {
+  type Output = Result<Box<dyn Event>, EvalError>;
 
-  fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-    self.event_loop.borrow_mut().set_waker(cx.waker());
+  fn poll(mut self: Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+    if !self.yielded_once {
+      let event_loop = Rc::clone(&self.event_loop);
+      if let Ok(time) = event_loop.borrow().clock_monotonic()
+        && time >= event_loop.borrow().yield_deadline
+      {
+        self.yielded_once = true;
+        return Poll::Pending;
+      }
+    }
 
-    match self.event_loop.borrow_mut().next_wait() {
-      Ok(EventWait::Ready) => Poll::Ready(Ok(())),
-      Ok(EventWait::Delay(_)) => Poll::Pending,
-      Ok(EventWait::Idle) => Poll::Pending,
-      Err(err) => Poll::Ready(Err(EvalError::Generic(format!(
-        "Error while running event loop: {}",
-        err
-      )))),
+    match self.event_loop.borrow_mut().take_event() {
+      Ok(event) => match event {
+        Some(event) => Poll::Ready(Ok(event)),
+        None => Poll::Pending,
+      },
+      Err(err) => Poll::Ready(Err(err)),
     }
   }
 }
@@ -215,10 +258,10 @@ mod tests {
       .await
       .unwrap();
 
-    context.poll_event().await.unwrap();
+    context.poll_ready_event().await.unwrap();
     assert_eq!(*output.borrow(), "first\n");
 
-    context.poll_event().await.unwrap();
+    context.poll_ready_event().await.unwrap();
     assert_eq!(*output.borrow(), "first\nsecond\n");
   }
 
@@ -232,8 +275,8 @@ mod tests {
     .await
     .unwrap();
 
-    assert!(context.poll_event().await.is_err());
-    context.poll_event().await.unwrap();
+    assert!(context.poll_ready_event().await.is_err());
+    context.poll_ready_event().await.unwrap();
 
     assert_eq!(*output.borrow(), "second\n");
   }

@@ -7,7 +7,12 @@ import { ExampleSelect } from "./ExampleSelect.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
-import { createTclRunner } from "./tcl-runner.ts";
+import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
+import type { Result } from "./tcl/messages.ts";
+import { Window } from "./Window.tsx";
+import startImg from "../img/start.svg";
+import stopImg from "../img/stop.svg";
+import { impossible } from "./impossible.ts";
 
 const examples = loadExamples();
 
@@ -51,50 +56,107 @@ const storeSrc = (src: string) => {
 };
 
 export function App() {
+  const [isAuto, setIsAuto] = createSignal(true);
+  const [result, setResult] = createSignal<Result | Error | undefined>();
+  const [stdout, setStdout] = createSignal<string>("");
+  const [pendingTimers, setPendingTimers] = createSignal<number>(0);
   const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
-  createEffect(source, storeSrc, { defer: true });
+  const [tclState, setTclState] = createSignal<State>("idle");
+  const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
+  const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
 
-  const run = createTclRunner(source, { timeoutMs: 10000 });
+  const runner = createTclRunner({
+    onStdout(value) {
+      setStdout((v) => (v + value).slice(-1_000_000));
+    },
+    onEventLoopStatus(status) {
+      setPendingTimers(status.countPending);
+    },
+    onStateChanged(state) {
+      setTclState(state);
+    },
+    onWindowChanged({ open, canvas }) {
+      setWindowOpen(open);
+      setTkCanvas(canvas);
+      canvas.className = "m-0";
+    },
+  });
+
+  const runSource = (source: string) => {
+    setResult(undefined);
+    setStdout("");
+
+    runner
+      .run({ source })
+      .then((result) => {
+        setResult(result);
+      })
+      .catch((err) => {
+        if (err instanceof InterruptedError) {
+          setResult(undefined);
+        } else {
+          setResult(err);
+        }
+      })
+      .finally(() => {
+        setWindowOpen(false);
+        setPendingTimers(0);
+      });
+  };
+
+  createEffect(source, storeSrc, { defer: true });
+  createEffect(
+    () => ({ source: source(), isAuto: isAuto() }),
+    ({ source, isAuto }) => {
+      if (isAuto) {
+        runSource(source);
+      }
+    },
+  );
 
   const resultText = () => {
-    const outcome = run.outcome();
-    switch (outcome.status) {
-      case "running":
-        return "...";
-      case "ok":
-        return outcome.value.length ? outcome.value : " ";
-      case "error":
-        return outcome.message;
+    const value = result();
+    if (value instanceof Error) {
+      return value.message;
     }
+    if (value === undefined) {
+      return "";
+    }
+    return value;
+  };
+
+  const stop = () => {
+    runner.stop();
+  };
+
+  const handleStartStop = () => {
+    const state = tclState();
+    switch (state) {
+      case "idle":
+        runSource(source());
+        break;
+      case "running":
+        stop();
+        break;
+      default:
+        impossible(state);
+    }
+  };
+
+  const handleCloseTkWindow = () => {
+    stop();
   };
 
   return (
     <PixelPerfect>
-      <div class="main-window-container">
-        <div
-          class="window main-window"
-          style={{
-            height: "100%",
-            "box-sizing": "border-box",
-            display: "flex",
-            "flex-direction": "column",
-          }}
-        >
+      <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
+        <div class="window box-border flex size-full max-w-[1200px] flex-col">
           <div class="title-bar">
             <div class="title-bar-text">tanaid Tcl</div>
           </div>
-          <div
-            class="window-body"
-            style={{ flex: "1", "min-height": "0", display: "flex", "flex-direction": "column" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--element-spacing)",
-                "margin-bottom": "var(--element-spacing)",
-              }}
-            >
-              <div style={{ display: "flex", "flex-direction": "column", gap: "4px" }}>
+          <div class="window-body flex min-h-0 flex-1 flex-col">
+            <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
+              <div class="flex flex-col gap-1">
                 <div>
                   run a tiny subset of{" "}
                   <a target="_blank" href="https://www.tcl-lang.org/">
@@ -102,73 +164,76 @@ export function App() {
                   </a>{" "}
                   in your browser
                 </div>
-                <div>
+                <div class="flex flex-row gap-2">
                   <ExampleSelect examples={examples} onSelect={setSource} />
+                  <div class="flex flex-row">
+                    <link rel="preload" href={startImg} as="image" />
+                    <link rel="preload" href={stopImg} as="image" />
+                    <button class="icon" onClick={handleStartStop}>
+                      <img src={tclState() === "idle" ? startImg : stopImg} />
+                      <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
+                    </button>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="checkbox-auto"
+                    checked={isAuto()}
+                    onChange={(event) => setIsAuto(event.currentTarget.checked)}
+                  />
+                  <label for="checkbox-auto">Auto</label>
                 </div>
               </div>
-              <div style={{ flex: "1" }} />
+              <div class="flex-1" />
               <a target="_blank" href="https://github.com/loganzartman/tanaid">
-                <img
-                  alt="powered by tanaid"
-                  src={poweredByUrl}
-                  style={{ float: "right", width: "88px" }}
-                />
+                <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
               </a>
             </div>
-            <div class="input sunken-panel">
+            <div class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full">
               <CodeEditor value={source()} onChange={setSource} />
             </div>
             <div>
-              <div class="status-bar" style={{ width: "100%" }}>
-                <div
-                  class="status-bar-field"
-                  style={{
-                    display: "flex",
-                    "flex-direction": "row",
-                    "align-items": "center",
-                    gap: "8px",
-                    padding: "8px",
-                  }}
-                >
+              <div class="status-bar w-full">
+                <div class="status-bar-field flex flex-row items-center gap-2 p-2">
                   <label for="result">result:</label>
                   <div
                     id="result"
-                    class={["font-mono", { error: run.outcome().status === "error" }]}
+                    class={[
+                      "font-mono-13 whitespace-pre-wrap",
+                      { "text-error": result() instanceof Error },
+                    ]}
                   >
                     {resultText()}
                   </div>
                 </div>
-                <div
-                  class="status-bar-field"
-                  style={{
-                    "flex-grow": "0",
-                    display: "flex",
-                    "flex-direction": "column",
-                    gap: "8px",
-                  }}
-                >
-                  <div
-                    style={{ display: "flex", "flex-direction": "row", "align-items": "center" }}
-                  >
+                <div class="status-bar-field flex grow-0 flex-col gap-2">
+                  <div class="flex flex-row items-center">
                     <Show
-                      when={run.pendingTimers() > 0}
-                      fallback={<img src={stopwatchStaticUrl} style={{ display: "block" }} />}
+                      when={pendingTimers() > 0}
+                      fallback={<img src={stopwatchStaticUrl} class="block" />}
                     >
-                      <img src={stopwatchUrl} style={{ display: "block" }} />
+                      <img src={stopwatchUrl} class="block" />
                     </Show>
-                    <div style={{ padding: "8px", "padding-left": "2px" }}>
-                      {run.pendingTimers()} timers
-                    </div>
+                    <div class="p-2 pl-0.5">{pendingTimers()} timers</div>
                   </div>
                 </div>
               </div>
-              <div class="field-row-stacked" style={{ "margin-top": "8px" }}>
+              <div class="field-row-stacked mt-2">
                 <label for="stdout">stdout:</label>
-                <div id="stdout" class="stdout sunken-panel">
-                  <OutputView text={run.stdout()} />
+                <div id="stdout" class="sunken-panel h-48 min-h-16 overflow-hidden *:h-full">
+                  <OutputView text={stdout()} />
                 </div>
               </div>
             </div>
+            <Window
+              draggable
+              title="tanaid-tk"
+              open={tclState() === "running" && windowOpen()}
+              onClose={() => {
+                handleCloseTkWindow();
+              }}
+            >
+              {tkCanvas()}
+            </Window>
           </div>
         </div>
       </div>
