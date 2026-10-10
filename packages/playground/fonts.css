@@ -4,8 +4,20 @@
 }
 
 @font-face {
+  font-family: "sans-13";
+  font-weight: bold;
+  src: url("./font/sans-13-bold.woff2") format("woff2");
+}
+
+@font-face {
   font-family: "sans-16";
   src: url("./font/sans-16.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "sans-16";
+  font-weight: bold;
+  src: url("./font/sans-16-bold.woff2") format("woff2");
 }
 
 @font-face {
@@ -14,8 +26,20 @@
 }
 
 @font-face {
+  font-family: "sans-20";
+  font-weight: bold;
+  src: url("./font/sans-20-bold.woff2") format("woff2");
+}
+
+@font-face {
   font-family: "sans-24";
   src: url("./font/sans-24.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "sans-24";
+  font-weight: bold;
+  src: url("./font/sans-24-bold.woff2") format("woff2");
 }
 
 @font-face {

@@ -12,8 +12,14 @@ Strikes are selected by their point size (how a .fon indexes them) but named by
 their pixel cell, since the cell is the font-size you actually use: the 8pt and
 10pt strikes below come out as `sans-13` and `sans-16`.
 
+A raster .fon usually ships one weight, and GDI synthesizes the bold on request.
+`--bold` does the same and writes `sans-13-bold`: the family name stays
+`sans-13`, so CSS can pair the two faces by `font-weight`.
+
     ./scripts/fon2woff2.py packages/playground/sserife.fon --list
     ./scripts/fon2woff2.py packages/playground/sserife.fon --sizes 8 10 \
+        --outdir packages/playground
+    ./scripts/fon2woff2.py packages/playground/sserife.fon --sizes 8 10 --bold \
         --outdir packages/playground
 
 Requires: fonttools, brotli.
@@ -150,6 +156,14 @@ def glyph_bitmap(b, f, index):
     return width, rows
 
 
+def embolden(width, rows):
+    """Synthesize bold as GDI does for a raster font: overstrike each glyph one
+    pixel to the right, and widen its cell by that pixel."""
+    return width + 1, [
+        [a | b for a, b in zip(row + [0], [0] + row)] for row in rows
+    ]
+
+
 # --- pixels -> contours -----------------------------------------------------
 
 
@@ -229,9 +243,11 @@ def trace_contours(pixels):
 # --- font building ----------------------------------------------------------
 
 
-def glyph_pixels(b, f, code):
+def glyph_pixels(b, f, code, bold=False):
     """Filled cells for a character, y up with y=0 on the baseline."""
     w, rows = glyph_bitmap(b, f, code - f["first_char"])
+    if bold:
+        w, rows = embolden(w, rows)
     asc = f["ascent"]
     return w, {
         (x, asc - 1 - y) for y, row in enumerate(rows) for x, p in enumerate(row) if p
@@ -260,8 +276,11 @@ def ink_height(b, f, ch):
     return (max(y for _, y in pixels) + 1) if pixels else 0
 
 
-def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None):
+def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None,
+                 bold=False):
     height, asc = f["pix_height"], f["ascent"]
+    style = "Bold" if bold else "Regular"
+    full_name = f"{family} Bold" if bold else family
     upem = height * PPU
     unicode_of = code_to_unicode(charset)
 
@@ -276,7 +295,9 @@ def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None):
     glyph_order = [".notdef"]
     glyphs, metrics, cmap = {}, {}, {}
 
-    nd_w, nd_pixels = glyph_pixels(raw, f, f["first_char"] + f["default_char"])
+    nd_w, nd_pixels = glyph_pixels(
+        raw, f, f["first_char"] + f["default_char"], bold
+    )
     glyphs[".notdef"], nd_lsb = build_glyph(nd_pixels)
     metrics[".notdef"] = (nd_w * PPU, nd_lsb)
 
@@ -287,7 +308,7 @@ def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None):
         if uni is None:
             continue
         name = f"uni{uni:04X}"
-        w, pixels = glyph_pixels(raw, f, code)
+        w, pixels = glyph_pixels(raw, f, code, bold)
         glyph_order.append(name)
         glyphs[name], lsb = build_glyph(pixels)
         metrics[name] = (w * PPU, lsb)
@@ -312,15 +333,22 @@ def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None):
                 "typeface designs are not subject to copyright in the US."
             ),
             "familyName": family,
-            "styleName": "Regular",
-            "uniqueFontIdentifier": f"{family}; {VERSION}",
-            "fullName": family,
+            "styleName": style,
+            "uniqueFontIdentifier": f"{full_name}; {VERSION}",
+            "fullName": full_name,
             "version": f"Version {VERSION}",
-            "psName": f"{family}-Regular",
+            "psName": f"{family}-{style}",
             "description": (
                 f"Traced from the {f['points']}pt strike ({height}px cell) of "
                 f"{src_name}. Unhinted; one em equals one {height}px cell, so "
                 f"font-size: {height}px renders at native 1:1 scale."
+                + (
+                    " Bold is synthesized as GDI does for a raster font: each "
+                    "glyph overstruck one pixel to the right, in a cell one "
+                    "pixel wider."
+                    if bold
+                    else ""
+                )
             ),
         }
     )
@@ -333,15 +361,16 @@ def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None):
         usWinDescent=(height - asc) * PPU,
         sxHeight=ink_height(raw, f, "x") * PPU,
         sCapHeight=ink_height(raw, f, "H") * PPU,
-        usWeightClass=f["weight"],
+        usWeightClass=700 if bold else f["weight"],
         usWidthClass=5,
         fsType=0,
-        fsSelection=(1 << 6) | (1 << 7),  # REGULAR | USE_TYPO_METRICS
+        # BOLD or REGULAR | USE_TYPO_METRICS
+        fsSelection=(1 << 5 if bold else 1 << 6) | (1 << 7),
         achVendID="NONE",
-        panose=dict(  # text sans-serif, normal weight, modern proportion
+        panose=dict(  # text sans-serif, book or bold weight, modern proportion
             bFamilyType=2,
             bSerifStyle=11,
-            bWeight=5,
+            bWeight=8 if bold else 5,
             bProportion=3,
             bContrast=0,
             bStrokeVariation=0,
@@ -367,6 +396,7 @@ def build_strike(raw, f, src_name, family, charset, out_woff2, out_ttf=None):
     # baseline at y=0 | lsb at x=0 | force integer ppem (keeps pixels on grid).
     # Bits 2 and 4 (instructions affect size / advance) stay clear: no hinting.
     head.flags = 0b1011
+    head.macStyle = 1 if bold else 0
     head.lowestRecPPEM = height
     fb.font["maxp"].maxZones = 1
 
@@ -386,6 +416,10 @@ def main():
     ap.add_argument("--prefix", default="sans",
                     help="family/file name stem; the pixel cell height is "
                          "appended, e.g. 'sans' -> family and file 'sans-13'")
+    ap.add_argument("--bold", action="store_true",
+                    help="synthesize bold as GDI does for a raster font; the "
+                         "file gets a '-bold' suffix and the family name is "
+                         "unchanged, e.g. file 'sans-13-bold', family 'sans-13'")
     ap.add_argument("--ttf", action="store_true", help="also write .ttf alongside")
     ap.add_argument("--charset", choices=("auto", "ansi", "oem"), default="auto",
                     help="source encoding; 'auto' reads dfCharSet (0=ansi/cp1252, "
@@ -429,11 +463,12 @@ def main():
             charset = "oem" if f["charset"] == 255 else "ansi"
         # Named by pixel cell, not points: the cell is the font-size to use.
         family = f"{args.prefix}-{f['pix_height']}"
-        woff2 = os.path.join(args.outdir, f"{family}.woff2")
-        ttf = os.path.join(args.outdir, f"{family}.ttf") if args.ttf else None
-        n = build_strike(raw, f, src_name, family, charset, woff2, ttf)
+        stem = f"{family}-bold" if args.bold else family
+        woff2 = os.path.join(args.outdir, f"{stem}.woff2")
+        ttf = os.path.join(args.outdir, f"{stem}.ttf") if args.ttf else None
+        n = build_strike(raw, f, src_name, family, charset, woff2, ttf, args.bold)
         print(
-            f"{pt}pt strike -> {family}: {n} glyphs, {f['pix_height']}px cell, "
+            f"{pt}pt strike -> {stem}: {n} glyphs, {f['pix_height']}px cell, "
             f"{charset}, upem {f['pix_height'] * PPU}, "
             f"{os.path.getsize(woff2)} bytes -> {woff2}"
         )
