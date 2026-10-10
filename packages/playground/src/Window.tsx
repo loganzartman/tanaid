@@ -11,8 +11,8 @@ export type WindowProps = ParentProps & {
 export function Window(props: WindowProps) {
   const scale = createPixelPerfectScale();
   const mouseScale = createMemo(() => scale().globalScale * scale().unitScale);
-  const [x, setX] = createSignal(() => window.innerWidth / 2 / mouseScale());
-  const [y, setY] = createSignal(() => window.innerHeight / 2 / mouseScale());
+  const [x, setX] = createSignal(() => Math.round(window.innerWidth / 2 / mouseScale()));
+  const [y, setY] = createSignal(() => Math.round(window.innerHeight / 2 / mouseScale()));
 
   let pdown = false;
   let px0 = 0;
@@ -58,7 +58,7 @@ export function Window(props: WindowProps) {
       style={{
         left: `${x()}px`,
         top: `${y()}px`,
-        transform: `translate(-50%, -50%)`,
+        transform: `translate(round(-50%, 1px), round(-50%, 1px))`,
         display: props.open ? "block" : "none",
       }}
     >
