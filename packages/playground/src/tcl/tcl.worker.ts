@@ -86,8 +86,12 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
       requestAnimationFrame(redraw);
     });
 
+    let lastCountPending: number | undefined;
     const handleEventLoopStatus = (countPending: number) => {
-      self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
+      if (countPending !== lastCountPending) {
+        self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
+        lastCountPending = countPending;
+      }
       flushStdout();
     };
 
