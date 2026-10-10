@@ -4,6 +4,7 @@ pub(crate) mod canvas_coords;
 pub(crate) mod canvas_create;
 pub(crate) mod canvas_delete;
 pub(crate) mod pack;
+pub(crate) mod tkwait;
 
 use super::tk_context::TkContext;
 use tanaid::eval::EvalContext;
@@ -25,6 +26,12 @@ pub fn register_commands(context: &mut EvalContext, tk: &TkContext) {
     let tk = tk.clone();
     context.register_command("pack", move |args, ctx, frame| {
       pack::eval(args, ctx, frame, &tk)
+    });
+  }
+  {
+    let tk = tk.clone();
+    context.register_async_command("tkwait", async move |args, ctx, frame| {
+      tkwait::eval(args, ctx, frame, &tk).await
     });
   }
 }

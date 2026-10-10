@@ -86,13 +86,15 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
       requestAnimationFrame(redraw);
     });
 
-    const value = await tcl.run(source, {
-      handleEventLoopStatus(countPending: number) {
-        self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
-        flushStdout();
-      },
-    });
+    const handleEventLoopStatus = (countPending: number) => {
+      self.postMessage(workerMessage({ type: "event-loop-status", status: { countPending } }));
+      flushStdout();
+    };
 
+    const value = await tcl.run(source, { handleEventLoopStatus });
+    await tcl.run("tkwait window .", { handleEventLoopStatus });
+
+    // TODO: not reached if sitting in tkwait; split into result + done
     self.postMessage(
       workerMessage({
         type: "result",
