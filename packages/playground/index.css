@@ -17,7 +17,7 @@
    */
   --spacing: 4px;
 
-  --color-desktop: light-dark(rgb(87 168 168), rgb(16 42 42));
+  --color-desktop: light-dark(rgb(58 110 165), rgb(18 18 18));
   --color-error: light-dark(#a00, #f66);
 }
 

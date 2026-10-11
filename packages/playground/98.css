@@ -7,17 +7,17 @@
 :root {
   /* Color */
   --text-color: light-dark(rgb(34 34 34), rgb(221 221 221));
-  --surface: light-dark(rgb(192 192 192), rgb(48 48 48));
+  --surface: light-dark(rgb(192 192 192), rgb(40 40 40));
   --button-highlight: light-dark(rgb(255 255 255), rgb(128 128 128));
   --button-face: light-dark(rgb(223 223 223), rgb(93 93 93));
   --button-shadow: light-dark(rgb(128 128 128), rgb(16 16 16));
   --window-frame: light-dark(rgb(10 10 10), rgb(0 0 0));
   --field-background: light-dark(rgb(255 255 255), rgb(0 0 0));
-  --dialog-blue: light-dark(rgb(0 0 128), rgb(0 0 128));
-  --dialog-blue-light: light-dark(rgb(16 132 208), rgb(16 132 208));
-  --dialog-gray: light-dark(rgb(128 128 128), rgb(192 192 192));
-  --dialog-gray-light: light-dark(rgb(181 181 181), rgb(74 74 74));
-  --link-blue: light-dark(rgb(0 0 255), rgb(0 192 255));
+  --dialog-blue: light-dark(rgb(10 36 106), rgb(10 36 106));
+  --dialog-blue-light: light-dark(rgb(166 202 240), rgb(166, 202, 240));
+  --dialog-gray: light-dark(rgb(128 128 128), rgb(34 34 34));
+  --dialog-gray-light: light-dark(rgb(192 192 192), rgb(93 93 93));
+  --link-blue: light-dark(rgb(0 0 255), rgb(115, 204, 255));
 
   /* Spacing */
   --element-spacing: 8px;
