@@ -16,18 +16,6 @@ import { applyCursorStyles } from "./cursor.ts";
 
 const examples = loadExamples();
 
-const initialDoc = `proc fib {x} {
-  if {$x <= 0} {
-    return 0
-  }
-  if {$x == 1} {
-    return 1
-  }
-  return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
-}
-
-fib 8`;
-
 const loadSrc = () => {
   const hash = window.location.hash.substring(1).trim();
   if (!hash.length) {
@@ -60,7 +48,7 @@ export function App() {
   const [result, setResult] = createSignal<Result | Error | undefined>();
   const [stdout, setStdout] = createSignal<string>("");
   const [pendingTimers, setPendingTimers] = createSignal<number>(0);
-  const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
+  const [source, setSource] = createSignal(loadSrc() ?? "");
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
