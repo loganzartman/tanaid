@@ -30,11 +30,8 @@ export function Window(props: WindowProps) {
   // oxlint-disable-next-line no-unassigned-vars
   let titlebarRef!: HTMLDivElement;
 
-  const handleWindowPointerDown = () => {
-    windowRef.focus();
-  };
-
   const handleTitlebarDown = (event: PointerEvent) => {
+    windowRef.focus();
     if (!props.draggable) {
       return;
     }
@@ -89,7 +86,6 @@ export function Window(props: WindowProps) {
         transform: props.draggable ? `translate(round(-50%, 1px), round(-50%, 1px))` : "unset",
         display: (props.open ?? true) ? "flex" : "none",
       }}
-      onPointerDown={handleWindowPointerDown}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) {
           return;
