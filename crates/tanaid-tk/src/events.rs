@@ -235,7 +235,8 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
       "Control" => modifiers = modifiers.union(ModifiersState::CONTROL),
       "Alt" => modifiers = modifiers.union(ModifiersState::ALT),
       "Shift" => modifiers = modifiers.union(ModifiersState::SHIFT),
-      "Extended" => modifiers = modifiers.union(ModifiersState::SUPER),
+      // the Meta key: Command on macOS, the Windows key on Windows
+      "Meta" | "M" | "Command" => modifiers = modifiers.union(ModifiersState::SUPER),
       _ => break,
     }
     parts.next();
@@ -430,5 +431,13 @@ mod tests {
       parse_sequence("<Key-Left>").unwrap(),
       parse_sequence("<KeyPress-Left>").unwrap()
     );
+  }
+
+  #[test]
+  fn meta_aliases_bind_super() {
+    let meta = parse_sequence("<Meta-s>").unwrap();
+    assert_eq!(meta[0].modifiers, ModifiersState::SUPER);
+    assert_eq!(parse_sequence("<M-s>").unwrap(), meta);
+    assert_eq!(parse_sequence("<Command-s>").unwrap(), meta);
   }
 }
