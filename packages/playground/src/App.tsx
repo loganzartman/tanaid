@@ -13,7 +13,7 @@ import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
 import { impossible } from "./impossible.ts";
 import { applyCursorStyles } from "./cursor.ts";
-import { type TclModifierKeys } from "tanaid-tcl";
+import type { TclModifierKeys } from "tanaid-tcl";
 
 const examples = loadExamples();
 
