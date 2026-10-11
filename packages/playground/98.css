@@ -365,6 +365,11 @@ input[type="reset"]:disabled,
   outline: none;
 }
 
+.title-bar-controls button:focus-visible {
+  outline: 1px dotted light-dark(#000000, #ffffff);
+  outline-offset: -2px;
+}
+
 .title-bar-controls button[aria-label="Minimize"],
 .title-bar-controls button[aria-label].minimize {
   background-image: var(--icon-minimize);
