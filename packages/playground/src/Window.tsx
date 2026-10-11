@@ -90,8 +90,18 @@ export function Window(props: WindowProps) {
         display: (props.open ?? true) ? "flex" : "none",
       }}
       onPointerDown={handleWindowPointerDown}
-      onKeyDown={props.onKeyDown}
-      onKeyUp={props.onKeyUp}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+        props.onKeyDown?.(event);
+      }}
+      onKeyUp={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+        props.onKeyUp?.(event);
+      }}
     >
       <div
         ref={titlebarRef}
