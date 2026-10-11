@@ -81,12 +81,14 @@ export function App() {
       .run({ source })
       .then((result) => {
         setResult(result);
+        setWindowOpen(false);
       })
       .catch((err) => {
         if (err instanceof InterruptedError) {
           setResult(undefined);
         } else {
           setResult(err);
+          setWindowOpen(false);
         }
       })
       .finally(() => {
