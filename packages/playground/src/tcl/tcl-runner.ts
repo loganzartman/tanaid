@@ -2,7 +2,6 @@ import TclWorker from "./tcl.worker.ts?worker";
 import {
   hostMessage,
   type EventLoopStatus,
-  type KeyboardEventType,
   type SerializedKeyboardEvent,
   type WorkerMessage,
 } from "./messages";
@@ -17,10 +16,7 @@ export type TclRunner = {
   getState: () => State;
   run: (options: RunOptions) => Promise<string>;
   stop: () => void;
-  handleKeyEvent: (options: {
-    event: SerializedKeyboardEvent;
-    eventType: KeyboardEventType;
-  }) => void;
+  handleKeyEvent: (event: SerializedKeyboardEvent) => void;
 };
 
 /**
@@ -131,8 +127,8 @@ export function createTclRunner({
     return result;
   };
 
-  const handleKeyEvent: TclRunner["handleKeyEvent"] = ({ event, eventType }) => {
-    worker?.postMessage(hostMessage({ type: "key-event", event, eventType }));
+  const handleKeyEvent: TclRunner["handleKeyEvent"] = (event) => {
+    worker?.postMessage(hostMessage({ type: "key-event", event }));
   };
 
   return { run, stop, getState, handleKeyEvent };

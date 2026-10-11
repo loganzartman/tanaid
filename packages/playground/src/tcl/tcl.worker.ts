@@ -42,19 +42,13 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     stdoutLastFlush = performance.now();
   };
 
-  let didAttach = false;
+  let attach;
   let wasWindowOpen: boolean | undefined;
-  let af: number | undefined;
-  let updateWindow = async () => {
-    if (!tk) {
-      return;
-    }
-
+  let updateWindow = async (tk: Tk) => {
     const windowOpen = tk.hasWindow();
 
-    if (windowOpen && offscreenCanvas && !didAttach) {
-      didAttach = true;
-      await tk.attachCanvas(offscreenCanvas);
+    if (windowOpen && offscreenCanvas) {
+      await (attach ??= tk.attachCanvas(offscreenCanvas));
     }
 
     if (wasWindowOpen === undefined || windowOpen !== wasWindowOpen) {
@@ -65,7 +59,6 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     tk.redraw(1);
   };
 
-  let stopped = false;
   try {
     tcl = createTcl({
       handleStdout(value) {
@@ -79,14 +72,14 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     tk = Tk.create();
     tk.install(tcl);
 
-    af = requestAnimationFrame(function redraw() {
-      if (stopped) {
+    requestAnimationFrame(function redraw() {
+      if (!tk) {
         return;
       }
 
-      updateWindow()
+      updateWindow(tk)
         .then(() => {
-          af = requestAnimationFrame(redraw);
+          requestAnimationFrame(redraw);
         })
         .catch((error) => {
           reportError(error);
@@ -103,7 +96,7 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     };
 
     const value = await tcl.run(source, { handleEventLoopStatus });
-    await updateWindow();
+    await updateWindow(tk);
     await tcl.run("tkwait window .", { handleEventLoopStatus });
 
     // TODO: not reached if sitting in tkwait; split into result + done
@@ -121,31 +114,24 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
       }),
     );
   } finally {
-    stopped = true;
-    tcl?.free();
-    tcl = undefined;
-    tk?.free();
-    tk = undefined;
-    if (af !== undefined) {
-      cancelAnimationFrame(af);
-    }
     flushStdout();
+    self.close();
   }
 }
 
-function handleKeyEvent({ event, eventType }: Extract<HostMessage, { type: "key-event" }>) {
+function handleKeyEvent({ event }: Extract<HostMessage, { type: "key-event" }>) {
   if (!tk) {
     return;
   }
-  switch (eventType) {
+  switch (event.eventType) {
     case "down":
-      tk.handleKeyDown(".", event.key, event.location);
+      tk.handleKeyDown(".", event.key, event.location, event.modifiers);
       break;
     case "up":
-      tk.handleKeyUp(".", event.key, event.location);
+      tk.handleKeyUp(".", event.key, event.location, event.modifiers);
       break;
     default:
-      impossible(eventType);
+      impossible(event.eventType);
   }
 }
 

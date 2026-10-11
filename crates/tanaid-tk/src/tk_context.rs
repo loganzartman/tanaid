@@ -1,4 +1,4 @@
-use crate::events::EventBindings;
+use crate::events::{EventBindings, TclEventType};
 use crate::tk_renderer::TkRenderer;
 use crate::widget::Widget;
 use std::cell::RefCell;
@@ -13,15 +13,16 @@ use vello::kurbo::Affine;
 use vello::wgpu::SurfaceTarget;
 use winit::dpi::Size;
 use winit::event::WindowEvent;
+use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowAttributes};
 
 #[derive(Clone)]
 pub struct TkContext {
-  pub widgets: Rc<RefCell<HashMap<String, Rc<RefCell<dyn Widget>>>>>,
-  pub window_attributes: Rc<RefCell<Option<WindowAttributes>>>,
-  pub renderer: Rc<RefCell<Option<TkRenderer>>>,
-  pub window: Rc<RefCell<Option<Arc<Window>>>>,
-  pub event_bindings: Rc<RefCell<EventBindings>>,
+  pub(crate) widgets: Rc<RefCell<HashMap<String, Rc<RefCell<dyn Widget>>>>>,
+  pub(crate) window_attributes: Rc<RefCell<Option<WindowAttributes>>>,
+  pub(crate) renderer: Rc<RefCell<Option<TkRenderer>>>,
+  pub(crate) window: Rc<RefCell<Option<Arc<Window>>>>,
+  pub(crate) event_bindings: Rc<RefCell<EventBindings>>,
   scene: Rc<RefCell<Scene>>,
 }
 
@@ -171,6 +172,21 @@ impl TkContext {
     self.renderer.replace(None);
   }
 
+  pub fn handle_event(
+    &self,
+    event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
+    tag: &str,
+    event_type: TclEventType,
+    detail: &str,
+    modifiers: ModifiersState,
+  ) -> Result<(), EvalError> {
+    self.event_bindings.borrow_mut().handle_modifiers(modifiers);
+    self
+      .event_bindings
+      .borrow()
+      .handle_event(event_loop, tag, event_type, detail)
+  }
+
   pub fn handle_window_event(
     &mut self,
     _window_id: winit::window::WindowId,
@@ -209,15 +225,19 @@ impl TkContext {
       WindowEvent::CloseRequested => {
         self.handle_close_window();
       }
-      WindowEvent::ModifiersChanged(mods) => {
-        self.event_bindings.borrow_mut().handle_modifiers(mods);
+      WindowEvent::ModifiersChanged(modifiers) => {
+        self
+          .event_bindings
+          .borrow_mut()
+          .handle_modifiers(modifiers.state());
       }
       WindowEvent::KeyboardInput { event, .. } => {
-        if let Err(r) = self.event_bindings.borrow().handle_winit_key_event(
-          ".".to_string(),
-          event,
-          tcl_event_loop,
-        ) {
+        if let Err(r) =
+          self
+            .event_bindings
+            .borrow()
+            .handle_winit_key_event(tcl_event_loop, ".", event)
+        {
           eprintln!("Error: {}", r);
         }
       }

@@ -108,7 +108,7 @@ export function Window(props: WindowProps) {
         </div>
       </div>
       <div
-        class="window-body flex"
+        class="window-body flex flex-1"
         onPointerDown={props.onPointerDown}
         onPointerUp={props.onPointerUp}
       >

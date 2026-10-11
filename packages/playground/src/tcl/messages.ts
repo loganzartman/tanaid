@@ -1,13 +1,23 @@
+import type { TclModifierKeys } from "tanaid-tcl";
+
 export type Result = string;
 export type EventLoopStatus = { countPending: number };
 
-export type SerializedKeyboardEvent = { key: string; location: number };
+export type SerializedKeyboardEvent = {
+  eventType: KeyboardEventType;
+  key: string;
+  location: number;
+  modifiers: TclModifierKeys;
+};
 export type KeyboardEventType = "down" | "up";
 
 export type HostMessage =
   | { type: "init"; offscreenCanvas: OffscreenCanvas }
   | { type: "run"; source: string }
-  | { type: "key-event"; eventType: KeyboardEventType; event: SerializedKeyboardEvent };
+  | {
+      type: "key-event";
+      event: SerializedKeyboardEvent;
+    };
 export type WorkerMessage =
   | { type: "ready" }
   | { type: "init" }

@@ -2,11 +2,12 @@ mod key;
 
 use crate::{
   tcl::Tcl,
-  tk::key::{key_from_js, key_location_from_js},
+  tk::key::{TclModifierKeys, key_from_js, key_location_from_js, modifiers_from_js},
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 use tanaid::event_loop::EventLoop;
 use tanaid_tk::{SurfaceTarget, events::TclEventType, keysym::key_detail};
+use tsify::Ts;
 use wasm_bindgen::{JsError, prelude::wasm_bindgen};
 use web_sys::OffscreenCanvas;
 
@@ -58,29 +59,44 @@ impl Tk {
   }
 
   #[wasm_bindgen(js_name = "handleKeyDown")]
-  pub fn handle_key_down(&self, tag: &str, key: &str, location: u32) -> Result<(), JsError> {
-    self.handle_key(tag, key, location, TclEventType::KeyPress)
-  }
-
-  #[wasm_bindgen(js_name = "handleKeyUp")]
-  pub fn handle_key_up(&self, tag: &str, key: &str, location: u32) -> Result<(), JsError> {
-    self.handle_key(tag, key, location, TclEventType::KeyRelease)
-  }
-
-  fn handle_key(
+  pub fn handle_key_down(
     &self,
     tag: &str,
     key: &str,
     location: u32,
+    modifiers: Ts<TclModifierKeys>,
+  ) -> Result<(), JsError> {
+    self.handle_key_event(tag, TclEventType::KeyPress, key, location, modifiers)
+  }
+
+  #[wasm_bindgen(js_name = "handleKeyUp")]
+  pub fn handle_key_up(
+    &self,
+    tag: &str,
+    key: &str,
+    location: u32,
+    modifiers: Ts<TclModifierKeys>,
+  ) -> Result<(), JsError> {
+    self.handle_key_event(tag, TclEventType::KeyRelease, key, location, modifiers)
+  }
+
+  fn handle_key_event(
+    &self,
+    tag: &str,
     event_type: TclEventType,
+    key: &str,
+    location: u32,
+    modifiers: Ts<TclModifierKeys>,
   ) -> Result<(), JsError> {
     if let Some(event_loop) = &self.event_loop {
       let detail = key_detail(&key_from_js(key), key_location_from_js(location));
-      self.tk.context.event_bindings.borrow().handle_key_event(
-        tag.to_string(),
+      let modifiers = modifiers_from_js(modifiers.to_rust()?);
+      self.tk.context.handle_event(
+        Rc::clone(event_loop),
+        tag,
         event_type,
         detail.as_str(),
-        Rc::clone(event_loop),
+        modifiers,
       )?;
     }
     Ok(())

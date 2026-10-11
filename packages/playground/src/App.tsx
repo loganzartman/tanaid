@@ -13,6 +13,7 @@ import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
 import { impossible } from "./impossible.ts";
 import { applyCursorStyles } from "./cursor.ts";
+import { type TclModifierKeys } from "tanaid-tcl";
 
 const examples = loadExamples();
 
@@ -224,15 +225,27 @@ export function App() {
             stop();
           }}
           onKeyDown={(event) => {
+            if (event.key !== "Tab") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
             runner.handleKeyEvent({
-              event: { key: event.key, location: event.location },
               eventType: "down",
+              key: event.key,
+              location: event.location,
+              modifiers: modifiersFromEvent(event),
             });
           }}
           onKeyUp={(event) => {
+            if (event.key !== "Tab") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
             runner.handleKeyEvent({
-              event: { key: event.key, location: event.location },
               eventType: "up",
+              key: event.key,
+              location: event.location,
+              modifiers: modifiersFromEvent(event),
             });
           }}
         >
@@ -241,4 +254,13 @@ export function App() {
       </div>
     </PixelPerfect>
   );
+}
+
+function modifiersFromEvent(event: KeyboardEvent | PointerEvent): TclModifierKeys {
+  return {
+    alt: event.altKey,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    shift: event.shiftKey,
+  };
 }
