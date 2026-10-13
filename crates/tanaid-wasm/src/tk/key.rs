@@ -1,11 +1,18 @@
-//! Mapping from DOM `KeyboardEvent` attributes to winit keys.
-#![expect(dead_code, reason = "not yet wired into Tk event handling")]
-
 use serde::{
-  Deserialize,
+  Deserialize, Serialize,
   de::value::{Error, StrDeserializer},
 };
-use winit::keyboard::{Key, KeyLocation, NamedKey, NativeKey};
+use tsify::Tsify;
+use winit::keyboard::{Key, KeyLocation, ModifiersState, NamedKey, NativeKey};
+
+#[derive(Tsify, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TclModifierKeys {
+  shift: bool,
+  ctrl: bool,
+  alt: bool,
+  meta: bool,
+}
 
 /// Returns the winit key for a `KeyboardEvent.key` value.
 ///
@@ -31,4 +38,13 @@ pub(crate) fn key_location_from_js(location: u32) -> KeyLocation {
     3 => KeyLocation::Numpad,
     _ => KeyLocation::Standard,
   }
+}
+
+pub(crate) fn modifiers_from_js(modifiers: TclModifierKeys) -> ModifiersState {
+  let mut state = ModifiersState::empty();
+  state.set(ModifiersState::SHIFT, modifiers.shift);
+  state.set(ModifiersState::CONTROL, modifiers.ctrl);
+  state.set(ModifiersState::ALT, modifiers.alt);
+  state.set(ModifiersState::SUPER, modifiers.meta);
+  state
 }

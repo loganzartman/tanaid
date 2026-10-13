@@ -1,4 +1,4 @@
-use crate::events::EventBindings;
+use crate::events::{EventBindings, TclEventType};
 use crate::tk_renderer::TkRenderer;
 use crate::widget::Widget;
 use std::cell::RefCell;
@@ -13,6 +13,7 @@ use vello::kurbo::Affine;
 use vello::wgpu::SurfaceTarget;
 use winit::dpi::Size;
 use winit::event::WindowEvent;
+use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowAttributes};
 
 #[derive(Clone)]
@@ -165,6 +166,27 @@ impl TkContext {
       .and_then(|a| a.inner_size)
   }
 
+  pub fn handle_close_window(&self) {
+    self.window_attributes.replace(None);
+    self.window.replace(None);
+    self.renderer.replace(None);
+  }
+
+  pub fn handle_event(
+    &self,
+    event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
+    tag: &str,
+    event_type: TclEventType,
+    detail: &str,
+    modifiers: ModifiersState,
+  ) -> Result<(), EvalError> {
+    self.event_bindings.borrow_mut().handle_modifiers(modifiers);
+    self
+      .event_bindings
+      .borrow()
+      .handle_event(event_loop, tag, event_type, detail)
+  }
+
   pub fn handle_window_event(
     &mut self,
     _window_id: winit::window::WindowId,
@@ -201,19 +223,20 @@ impl TkContext {
         self.request_redraw_window();
       }
       WindowEvent::CloseRequested => {
-        self.window_attributes.replace(None);
-        self.window.replace(None);
-        self.renderer.replace(None);
+        self.handle_close_window();
       }
-      WindowEvent::ModifiersChanged(mods) => {
-        self.event_bindings.borrow_mut().handle_modifiers(mods)
+      WindowEvent::ModifiersChanged(modifiers) => {
+        self
+          .event_bindings
+          .borrow_mut()
+          .handle_modifiers(modifiers.state());
       }
       WindowEvent::KeyboardInput { event, .. } => {
         if let Err(r) =
           self
             .event_bindings
             .borrow()
-            .handle_key_event(".".to_string(), event, tcl_event_loop)
+            .handle_winit_key_event(tcl_event_loop, ".", event)
         {
           eprintln!("Error: {}", r);
         }

@@ -13,20 +13,9 @@ import type { Result } from "./tcl/messages.ts";
 import { Window } from "./Window.tsx";
 import { impossible } from "./impossible.ts";
 import { applyCursorStyles } from "./cursor.ts";
+import type { TclModifierKeys } from "tanaid-tcl";
 
 const examples = loadExamples();
-
-const initialDoc = `proc fib {x} {
-  if {$x <= 0} {
-    return 0
-  }
-  if {$x == 1} {
-    return 1
-  }
-  return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
-}
-
-fib 8`;
 
 const loadSrc = () => {
   const hash = window.location.hash.substring(1).trim();
@@ -56,11 +45,16 @@ const storeSrc = (src: string) => {
 };
 
 export function App() {
+  // oxlint-disable-next-line no-unassigned-vars
+  let tkWindowRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
+  let editorContainerRef!: HTMLDivElement;
+
   const [isAuto, setIsAuto] = createSignal(true);
   const [result, setResult] = createSignal<Result | Error | undefined>();
   const [stdout, setStdout] = createSignal<string>("");
   const [pendingTimers, setPendingTimers] = createSignal<number>(0);
-  const [source, setSource] = createSignal(loadSrc() ?? initialDoc);
+  const [source, setSource] = createSignal(loadSrc() ?? "");
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
@@ -92,16 +86,17 @@ export function App() {
       .run({ source })
       .then((result) => {
         setResult(result);
+        setWindowOpen(false);
       })
       .catch((err) => {
         if (err instanceof InterruptedError) {
           setResult(undefined);
         } else {
           setResult(err);
+          setWindowOpen(false);
         }
       })
       .finally(() => {
-        setWindowOpen(false);
         setPendingTimers(0);
       });
   };
@@ -116,6 +111,12 @@ export function App() {
     },
   );
 
+  createEffect(windowOpen, (windowOpen) => {
+    if (windowOpen && !editorContainerRef.contains(document.activeElement)) {
+      tkWindowRef.focus();
+    }
+  });
+
   const resultText = () => {
     const value = result();
     if (value instanceof Error) {
@@ -128,6 +129,7 @@ export function App() {
   };
 
   const stop = () => {
+    setWindowOpen(false);
     runner.stop();
   };
 
@@ -145,18 +147,25 @@ export function App() {
     }
   };
 
-  const handleCloseTkWindow = () => {
-    stop();
+  const keysDown = new Map<string, [string, number, TclModifierKeys]>();
+
+  const unPressPressedKeys = () => {
+    for (const [key, location, modifiers] of keysDown.values()) {
+      runner.handleKeyEvent({
+        eventType: "up",
+        key,
+        location,
+        modifiers,
+      });
+    }
+    keysDown.clear();
   };
 
   return (
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
-        <div class="window box-border flex size-full max-w-[1200px] flex-col">
-          <div class="title-bar">
-            <div class="title-bar-text">tanaid Tcl</div>
-          </div>
-          <div class="window-body flex min-h-0 flex-1 flex-col">
+        <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
+          <div class="flex min-h-0 flex-1 flex-col">
             <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
               <div class="flex flex-col gap-1">
                 <div>
@@ -167,7 +176,13 @@ export function App() {
                   in your browser
                 </div>
                 <div class="flex flex-row gap-2">
-                  <ExampleSelect examples={examples} onSelect={setSource} />
+                  <ExampleSelect
+                    examples={examples}
+                    onSelect={(source) => {
+                      stop();
+                      setSource(source);
+                    }}
+                  />
                   <div class="flex flex-row">
                     <button class="icon" onClick={handleStartStop}>
                       <Show when={tclState() === "idle"} fallback={<StopIcon />}>
@@ -182,7 +197,7 @@ export function App() {
                     checked={isAuto()}
                     onChange={(event) => setIsAuto(event.currentTarget.checked)}
                   />
-                  <label for="checkbox-auto">Auto</label>
+                  <label for="checkbox-auto">Auto-run</label>
                 </div>
               </div>
               <div class="flex-1" />
@@ -190,7 +205,10 @@ export function App() {
                 <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
               </a>
             </div>
-            <div class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full">
+            <div
+              ref={editorContainerRef}
+              class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full"
+            >
               <CodeEditor value={source()} onChange={setSource} />
             </div>
             <div>
@@ -226,19 +244,56 @@ export function App() {
                 </div>
               </div>
             </div>
-            <Window
-              draggable
-              title="tanaid-tk"
-              open={tclState() === "running" && windowOpen()}
-              onClose={() => {
-                handleCloseTkWindow();
-              }}
-            >
-              {tkCanvas()}
-            </Window>
           </div>
-        </div>
+        </Window>
+        <Window
+          ref={tkWindowRef}
+          draggable
+          title="tanaid-tk"
+          open={windowOpen()}
+          onClose={() => {
+            setIsAuto(false);
+            stop();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+            const { key, location } = event;
+            const modifiers = modifiersFromEvent(event);
+            keysDown.set(event.code, [key, location, modifiers]);
+            runner.handleKeyEvent({ eventType: "down", key, location, modifiers });
+          }}
+          onKeyUp={(event) => {
+            if (event.key !== "Tab") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+            if (!keysDown.delete(event.code)) {
+              // tk did not observe the keydown
+              return;
+            }
+            const { key, location } = event;
+            const modifiers = modifiersFromEvent(event);
+            runner.handleKeyEvent({ eventType: "up", key, location, modifiers });
+          }}
+          onFocusOut={() => {
+            unPressPressedKeys();
+          }}
+        >
+          {tkCanvas()}
+        </Window>
       </div>
     </PixelPerfect>
   );
+}
+
+function modifiersFromEvent(event: KeyboardEvent | PointerEvent): TclModifierKeys {
+  return {
+    alt: event.altKey,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    shift: event.shiftKey,
+  };
 }

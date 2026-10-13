@@ -6,10 +6,7 @@ use tanaid::{
   event_loop,
   parser::{self, ScriptNode},
 };
-use winit::{
-  event::{KeyEvent, Modifiers},
-  keyboard::ModifiersState,
-};
+use winit::{event::KeyEvent, keyboard::ModifiersState};
 
 use crate::keysym::key_detail;
 
@@ -48,7 +45,7 @@ pub type EventBindingsData = HashMap<Tag, HashMap<Vec<TclEvent>, ScriptStr>>;
 /// 3. Larger modifier set (<Control-Alt-a> beats <Alt-a>); this differs from Tk.
 pub struct EventBindings {
   bindings: EventBindingsData,
-  modifiers: Modifiers,
+  modifiers: ModifiersState,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -69,7 +66,7 @@ impl EventBindings {
   pub fn new() -> Self {
     EventBindings {
       bindings: HashMap::new(),
-      modifiers: Modifiers::default(),
+      modifiers: ModifiersState::empty(),
     }
   }
 
@@ -91,51 +88,49 @@ impl EventBindings {
       .or_insert(script_str.to_string());
   }
 
-  pub fn handle_modifiers(&mut self, mods: Modifiers) {
-    self.modifiers = mods;
+  pub fn handle_modifiers(&mut self, modifiers: ModifiersState) {
+    self.modifiers = modifiers;
   }
 
-  pub fn handle_key_event(
+  /// handle a key event encoded as a winit KeyEvent
+  pub fn handle_winit_key_event(
     &self,
-    tag: Tag,
-    key_event: KeyEvent,
     event_loop: Rc<RefCell<event_loop::EventLoop>>,
+    tag: &str,
+    key_event: KeyEvent,
   ) -> Result<(), EvalError> {
     let event_type = match key_event.state {
       winit::event::ElementState::Pressed => TclEventType::KeyPress,
       winit::event::ElementState::Released => TclEventType::KeyRelease,
     };
-    self.handle_key(
+    self.handle_event(
+      event_loop,
       tag,
       event_type,
       &key_detail(&key_event.logical_key, key_event.location),
-      event_loop,
     )
   }
 
-  fn handle_key(
+  /// handle an event
+  pub fn handle_event(
     &self,
-    tag: Tag,
+    event_loop: Rc<RefCell<event_loop::EventLoop>>,
+    tag: &str,
     event_type: TclEventType,
     detail: &str,
-    event_loop: Rc<RefCell<event_loop::EventLoop>>,
   ) -> Result<(), EvalError> {
     // TODO: record multi-key sequences
 
-    let tags: &[String] = if tag == "all" {
-      &[tag]
-    } else {
-      &[tag, "all".to_string()]
-    };
+    let tags: &[&str] = if tag == "all" { &[tag] } else { &[tag, "all"] };
 
     let event = TclEvent {
       event_type,
-      modifiers: self.modifiers.state(),
+      modifiers: self.modifiers,
       detail: Some(detail.to_string()),
     };
 
     for tag in tags {
-      let Some(bindings) = self.bindings.get(tag) else {
+      let Some(bindings) = self.bindings.get(*tag) else {
         continue;
       };
 
@@ -240,7 +235,8 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
       "Control" => modifiers = modifiers.union(ModifiersState::CONTROL),
       "Alt" => modifiers = modifiers.union(ModifiersState::ALT),
       "Shift" => modifiers = modifiers.union(ModifiersState::SHIFT),
-      "Extended" => modifiers = modifiers.union(ModifiersState::SUPER),
+      // the Meta key: Command on macOS, the Windows key on Windows
+      "Meta" | "M" | "Command" => modifiers = modifiers.union(ModifiersState::SUPER),
       _ => break,
     }
     parts.next();
@@ -323,7 +319,7 @@ mod tests {
   fn key(bindings: &EventBindings, event_type: TclEventType, detail: &str) -> usize {
     let event_loop = Rc::new(RefCell::new(event_loop::EventLoop::new(Duration::ZERO)));
     bindings
-      .handle_key(".".to_string(), event_type, detail, Rc::clone(&event_loop))
+      .handle_event(Rc::clone(&event_loop), ".", event_type, detail)
       .unwrap();
     event_loop.borrow().count_pending()
   }
@@ -336,11 +332,11 @@ mod tests {
   fn press_and_run(bindings: &EventBindings, detail: &str) -> String {
     let mut runner = TestRunner::new();
     bindings
-      .handle_key(
-        ".".to_string(),
+      .handle_event(
+        Rc::clone(&runner.context.event_loop),
+        ".",
         TclEventType::KeyPress,
         detail,
-        Rc::clone(&runner.context.event_loop),
       )
       .unwrap();
     runner.run(&parser::parse("update").unwrap()).unwrap();
@@ -435,5 +431,13 @@ mod tests {
       parse_sequence("<Key-Left>").unwrap(),
       parse_sequence("<KeyPress-Left>").unwrap()
     );
+  }
+
+  #[test]
+  fn meta_aliases_bind_super() {
+    let meta = parse_sequence("<Meta-s>").unwrap();
+    assert_eq!(meta[0].modifiers, ModifiersState::SUPER);
+    assert_eq!(parse_sequence("<M-s>").unwrap(), meta);
+    assert_eq!(parse_sequence("<Command-s>").unwrap(), meta);
   }
 }

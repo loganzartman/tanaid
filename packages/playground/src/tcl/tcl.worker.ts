@@ -2,6 +2,8 @@ import { createTcl, Tcl, Tk } from "tanaid-tcl";
 import { workerMessage, type HostMessage } from "./messages";
 import { impossible } from "../impossible";
 
+let tcl: Tcl | undefined;
+let tk: Tk | undefined;
 let offscreenCanvas: OffscreenCanvas | undefined;
 
 self.onmessage = async ({ data }: { data: HostMessage }) => {
@@ -11,6 +13,9 @@ self.onmessage = async ({ data }: { data: HostMessage }) => {
       break;
     case "run":
       await handleRun(data);
+      break;
+    case "key-event":
+      handleKeyEvent(data);
       break;
     default:
       impossible(data);
@@ -27,10 +32,6 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     throw new Error("not initialized");
   }
 
-  let tcl: Tcl | undefined;
-  let tk: Tk | undefined;
-  let stopped = false;
-
   let stdoutBuf = "";
   let stdoutLastFlush = performance.now();
   const flushStdout = () => {
@@ -39,6 +40,23 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
       stdoutBuf = "";
     }
     stdoutLastFlush = performance.now();
+  };
+
+  let attach;
+  let wasWindowOpen: boolean | undefined;
+  let updateWindow = async (tk: Tk) => {
+    const windowOpen = tk.hasWindow();
+
+    if (windowOpen && offscreenCanvas) {
+      await (attach ??= tk.attachCanvas(offscreenCanvas));
+    }
+
+    if (wasWindowOpen === undefined || windowOpen !== wasWindowOpen) {
+      wasWindowOpen = windowOpen;
+      self.postMessage(workerMessage({ type: "window-change", open: windowOpen }));
+    }
+
+    tk.redraw(1);
   };
 
   try {
@@ -54,36 +72,18 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     tk = Tk.create();
     tk.install(tcl);
 
-    let wasWindowOpen = false;
-    let didAttach = false;
-
-    requestAnimationFrame(async function redraw() {
-      if (stopped) {
+    requestAnimationFrame(function redraw() {
+      if (!tk) {
         return;
       }
 
-      try {
-        if (tk) {
-          const windowOpen = tk.hasWindow();
-
-          if (windowOpen && offscreenCanvas && !didAttach) {
-            didAttach = true;
-            await tk.attachCanvas(offscreenCanvas);
-          }
-
-          if (windowOpen !== wasWindowOpen) {
-            wasWindowOpen = windowOpen;
-            self.postMessage(workerMessage({ type: "window-change", open: windowOpen }));
-          }
-
-          tk.redraw(1);
-        }
-      } catch (error) {
-        reportError(error);
-        return;
-      }
-
-      requestAnimationFrame(redraw);
+      updateWindow(tk)
+        .then(() => {
+          requestAnimationFrame(redraw);
+        })
+        .catch((error) => {
+          reportError(error);
+        });
     });
 
     let lastCountPending: number | undefined;
@@ -96,6 +96,7 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     };
 
     const value = await tcl.run(source, { handleEventLoopStatus });
+    await updateWindow(tk);
     await tcl.run("tkwait window .", { handleEventLoopStatus });
 
     // TODO: not reached if sitting in tkwait; split into result + done
@@ -114,9 +115,23 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     );
   } finally {
     flushStdout();
-    stopped = true;
-    tcl?.free();
-    tk?.free();
+    self.close();
+  }
+}
+
+function handleKeyEvent({ event }: Extract<HostMessage, { type: "key-event" }>) {
+  if (!tk) {
+    return;
+  }
+  switch (event.eventType) {
+    case "down":
+      tk.handleKeyDown(".", event.key, event.location, event.modifiers);
+      break;
+    case "up":
+      tk.handleKeyUp(".", event.key, event.location, event.modifiers);
+      break;
+    default:
+      impossible(event.eventType);
   }
 }
 

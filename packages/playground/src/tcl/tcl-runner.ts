@@ -1,5 +1,10 @@
 import TclWorker from "./tcl.worker.ts?worker";
-import { hostMessage, type EventLoopStatus, type WorkerMessage } from "./messages";
+import {
+  hostMessage,
+  type EventLoopStatus,
+  type SerializedKeyboardEvent,
+  type WorkerMessage,
+} from "./messages";
 import { impossible } from "../impossible";
 import { raceAbort } from "../race-abort";
 
@@ -11,6 +16,7 @@ export type TclRunner = {
   getState: () => State;
   run: (options: RunOptions) => Promise<string>;
   stop: () => void;
+  handleKeyEvent: (event: SerializedKeyboardEvent) => void;
 };
 
 /**
@@ -121,7 +127,11 @@ export function createTclRunner({
     return result;
   };
 
-  return { run, stop, getState };
+  const handleKeyEvent: TclRunner["handleKeyEvent"] = (event) => {
+    worker?.postMessage(hostMessage({ type: "key-event", event }));
+  };
+
+  return { run, stop, getState, handleKeyEvent };
 }
 
 export class InterruptedError extends Error {}
