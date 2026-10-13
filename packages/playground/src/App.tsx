@@ -165,7 +165,7 @@ export function App() {
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
         <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
-          <div class="flex min-h-0 flex-1 flex-col">
+          <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
               <div class="flex flex-col gap-1">
                 <div>
