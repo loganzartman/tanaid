@@ -341,9 +341,13 @@ input[type="reset"]:disabled,
 
 .title-bar-text {
   font-weight: bold;
-  color: white;
+  color: rgb(208 208 208);
   letter-spacing: 0;
   margin-right: 24px;
+}
+
+.window:focus-within .title-bar-text {
+  color: white;
 }
 
 .title-bar-controls {
