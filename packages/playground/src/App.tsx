@@ -270,9 +270,12 @@ export function App() {
               event.preventDefault();
               event.stopPropagation();
             }
+            if (!keysDown.delete(event.code)) {
+              // tk did not observe the keydown
+              return;
+            }
             const { key, location } = event;
             const modifiers = modifiersFromEvent(event);
-            keysDown.delete(event.code);
             runner.handleKeyEvent({ eventType: "up", key, location, modifiers });
           }}
           onFocusOut={() => {
