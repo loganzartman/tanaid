@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Show, type ParentProps } from "solid-js";
+import { createMemo, createSignal, Show, type ParentProps, type Ref } from "solid-js";
 import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
@@ -12,6 +12,7 @@ export type WindowProps = ParentProps & {
   title?: string;
   open?: boolean;
   class?: string;
+  ref?: Ref<HTMLDivElement>;
 };
 
 export function Window(props: WindowProps) {
@@ -26,7 +27,6 @@ export function Window(props: WindowProps) {
   let wx0 = 0;
   let wy0 = 0;
 
-  // oxlint-disable-next-line no-unassigned-vars
   let windowRef!: HTMLDivElement;
   // oxlint-disable-next-line no-unassigned-vars
   let titlebarRef!: HTMLDivElement;
@@ -63,18 +63,14 @@ export function Window(props: WindowProps) {
     setY(Math.round(wy0 + (py - py0) / mouseScale()));
   };
 
-  createEffect(
-    () => props.open,
-    (open) => {
-      if (open) {
-        windowRef.focus();
-      }
-    },
-  );
-
   return (
     <div
-      ref={windowRef}
+      ref={[
+        props.ref,
+        (ref) => {
+          windowRef = ref;
+        },
+      ]}
       class={`window m-0 flex flex-col ${props.class ?? ""}`}
       tabindex={0}
       style={{

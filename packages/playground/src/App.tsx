@@ -45,6 +45,11 @@ const storeSrc = (src: string) => {
 };
 
 export function App() {
+  // oxlint-disable-next-line no-unassigned-vars
+  let tkWindowRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
+  let editorContainerRef!: HTMLDivElement;
+
   const [isAuto, setIsAuto] = createSignal(true);
   const [result, setResult] = createSignal<Result | Error | undefined>();
   const [stdout, setStdout] = createSignal<string>("");
@@ -105,6 +110,12 @@ export function App() {
       }
     },
   );
+
+  createEffect(windowOpen, (windowOpen) => {
+    if (windowOpen && !editorContainerRef.contains(document.activeElement)) {
+      tkWindowRef.focus();
+    }
+  });
 
   const resultText = () => {
     const value = result();
@@ -194,7 +205,10 @@ export function App() {
                 <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
               </a>
             </div>
-            <div class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full">
+            <div
+              ref={editorContainerRef}
+              class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full"
+            >
               <CodeEditor value={source()} onChange={setSource} />
             </div>
             <div>
@@ -233,6 +247,7 @@ export function App() {
           </div>
         </Window>
         <Window
+          ref={tkWindowRef}
           draggable
           title="tanaid-tk"
           open={windowOpen()}
@@ -245,26 +260,20 @@ export function App() {
               event.preventDefault();
               event.stopPropagation();
             }
-            keysDown.set(event.code, [event.key, event.location, modifiersFromEvent(event)]);
-            runner.handleKeyEvent({
-              eventType: "down",
-              key: event.key,
-              location: event.location,
-              modifiers: modifiersFromEvent(event),
-            });
+            const { key, location } = event;
+            const modifiers = modifiersFromEvent(event);
+            keysDown.set(event.code, [key, location, modifiers]);
+            runner.handleKeyEvent({ eventType: "down", key, location, modifiers });
           }}
           onKeyUp={(event) => {
             if (event.key !== "Tab") {
               event.preventDefault();
               event.stopPropagation();
             }
+            const { key, location } = event;
+            const modifiers = modifiersFromEvent(event);
             keysDown.delete(event.code);
-            runner.handleKeyEvent({
-              eventType: "up",
-              key: event.key,
-              location: event.location,
-              modifiers: modifiersFromEvent(event),
-            });
+            runner.handleKeyEvent({ eventType: "up", key, location, modifiers });
           }}
           onFocusOut={() => {
             unPressPressedKeys();
