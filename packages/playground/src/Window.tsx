@@ -67,15 +67,12 @@ export function Window(props: WindowProps) {
     (open) => {
       if (open) {
         windowRef.focus();
-      } else {
-        windowRef.blur();
       }
     },
   );
 
   return (
     <div
-      autofocus
       ref={windowRef}
       class={`window m-0 flex flex-col ${props.class ?? ""}`}
       tabindex={0}
