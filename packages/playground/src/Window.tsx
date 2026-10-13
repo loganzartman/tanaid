@@ -4,6 +4,7 @@ import { createPixelPerfectScale } from "./PixelPerfect";
 export type WindowProps = ParentProps & {
   draggable?: boolean;
   onClose?: () => void;
+  onFocusOut?: (event: FocusEvent) => void;
   onPointerDown?: (event: PointerEvent) => void;
   onPointerUp?: (event: PointerEvent) => void;
   onKeyDown?: (event: KeyboardEvent) => void;
@@ -82,6 +83,12 @@ export function Window(props: WindowProps) {
         top: props.draggable ? `${y()}px` : "unset",
         transform: props.draggable ? `translate(round(-50%, 1px), round(-50%, 1px))` : "unset",
         display: (props.open ?? true) ? "flex" : "none",
+      }}
+      onFocusOut={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+        props.onFocusOut?.(event);
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) {

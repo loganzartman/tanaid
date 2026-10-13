@@ -136,6 +136,20 @@ export function App() {
     }
   };
 
+  const keysDown = new Map<string, [string, number, TclModifierKeys]>();
+
+  const unPressPressedKeys = () => {
+    for (const [key, location, modifiers] of keysDown.values()) {
+      runner.handleKeyEvent({
+        eventType: "up",
+        key,
+        location,
+        modifiers,
+      });
+    }
+    keysDown.clear();
+  };
+
   return (
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
@@ -231,6 +245,7 @@ export function App() {
               event.preventDefault();
               event.stopPropagation();
             }
+            keysDown.set(event.code, [event.key, event.location, modifiersFromEvent(event)]);
             runner.handleKeyEvent({
               eventType: "down",
               key: event.key,
@@ -243,12 +258,16 @@ export function App() {
               event.preventDefault();
               event.stopPropagation();
             }
+            keysDown.delete(event.code);
             runner.handleKeyEvent({
               eventType: "up",
               key: event.key,
               location: event.location,
               modifiers: modifiersFromEvent(event),
             });
+          }}
+          onFocusOut={() => {
+            unPressPressedKeys();
           }}
         >
           {tkCanvas()}
