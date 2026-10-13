@@ -130,7 +130,7 @@ impl EventBindings {
     };
 
     for tag in tags {
-      let Some(bindings) = self.bindings.get(&tag.to_string()) else {
+      let Some(bindings) = self.bindings.get(*tag) else {
         continue;
       };
 
