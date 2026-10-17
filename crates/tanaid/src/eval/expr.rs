@@ -106,7 +106,7 @@ pub async fn eval_expr_fncall(
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   let resolved_name = format!("::tcl::mathfunc::{}", func);
-  let mut name_and_args = Vec::with_capacity(args.len());
+  let mut name_and_args = Vec::with_capacity(args.len() + 1);
   name_and_args.push(Value::from(resolved_name));
   for arg in args {
     name_and_args.push(eval_expr(arg, context, frame).await?);
