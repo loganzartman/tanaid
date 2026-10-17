@@ -63,7 +63,7 @@ impl Value {
 
     match &self.repr {
       Repr::Int(i) => Ok(i.to_string().into()),
-      Repr::Float(f) => Ok(f.to_string().into()),
+      Repr::Float(f) => Ok(format_float_tcl(*f).into()),
       Repr::List(l) => {
         let mut result = String::new();
         for v in l.iter() {
@@ -451,5 +451,33 @@ impl ops::Not for Value {
     return Err(EvalError::ArgumentError(format!(
       "can't use non-numeric string as operand of !"
     )));
+  }
+}
+
+fn format_float_tcl(x: f64) -> String {
+  if x.is_nan() {
+    return "NaN".into();
+  }
+  if x.is_infinite() {
+    if x.is_sign_positive() {
+      return "Inf".into();
+    } else {
+      return "-Inf".into();
+    }
+  }
+
+  let sci = format!("{x:e}");
+  let (_, exponent) = sci.split_once('e').unwrap();
+  match exponent.parse::<i32>().unwrap() {
+    ..-4 => sci,
+    17.. => sci.replace("e", "e+"),
+    _ => {
+      let fixed = x.to_string();
+      if fixed.contains('.') {
+        fixed
+      } else {
+        fixed + ".0"
+      }
+    }
   }
 }
