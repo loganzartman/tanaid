@@ -172,10 +172,10 @@ pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
     }
   }
 
-  Ok((word, src))
+  Ok((ExprNode::Word(word), src))
 }
 
-fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
+fn parse_expr_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
   let mut part_buffer = String::new();
   let mut parts: Vec<WordPart> = vec![];
 
@@ -191,9 +191,9 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
       let (parsed, rest) = parser::parse_braced_string(src)?;
 
       return Ok((
-        ExprNode::Word(WordNode {
+        WordNode {
           parts: vec![WordPart::BracedLiteral(parsed)],
-        }),
+        },
         rest,
       ));
     }
@@ -201,9 +201,9 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
       let (parsed, rest) = parser::parse_quoted(src)?;
 
       return Ok((
-        ExprNode::Word(WordNode {
+        WordNode {
           parts: vec![parsed],
-        }),
+        },
         rest,
       ));
     }
@@ -226,7 +226,7 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
           return Err(ParseError::Generic("expected word".to_string()));
         }
 
-        return Ok((ExprNode::Word(WordNode { parts }), src));
+        return Ok((WordNode { parts }, src));
       }
 
       Some('$') => {
@@ -279,24 +279,9 @@ pub fn parse_expr_group(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
 }
 
 pub fn parse_expr_fncall<'a>(
-  expr_node: &ExprNode,
-  mut src: &'a str,
+  word: &WordNode,
+  src: &'a str,
 ) -> Result<(ExprNode, &'a str), ParseError> {
-  if let Ok((_, rest)) = parser::parse_ws(src) {
-    src = rest;
-  }
-
-  let Some(src) = src.strip_prefix('(') else {
-    return Err(ParseError::Generic(
-      "expected open paren for function call".to_string(),
-    ));
-  };
-
-  let word = match expr_node {
-    ExprNode::Word(word) => word,
-    _ => return Err(ParseError::Generic("expected a word".to_string())),
-  };
-
   let [part] = word.parts.as_slice() else {
     return Err(ParseError::Generic(
       "expected a word with one part".to_string(),
@@ -312,60 +297,62 @@ pub fn parse_expr_fncall<'a>(
     }
   };
 
-  let (args, mut src) = parse_expr_arglist(src)?;
-
-  if let Ok((_, rest)) = parser::parse_ws(src) {
-    src = rest;
-  }
-
-  let Some(src) = src.strip_prefix(')') else {
-    return Err(ParseError::Continuable(format!(
-      "expected close paren for function call, got: {}",
-      src
-    )));
-  };
-
+  let (args, src) = parse_expr_arglist(src)?;
   Ok((ExprNode::FnCall(func.to_string(), args), src))
 }
 
-pub fn parse_expr_arglist(mut src: &str) -> Result<(Vec<ExprNode>, &str), ParseError> {
+pub fn parse_expr_arglist(src: &str) -> Result<(Vec<ExprNode>, &str), ParseError> {
+  let Some(mut src) = src.strip_prefix('(') else {
+    return Err(ParseError::Generic(
+      "expected ( for function call".to_string(),
+    ));
+  };
+
   let mut args = vec![];
 
-  let mut first = true;
   loop {
     if let Ok((_, rest)) = parser::parse_ws(src) {
       src = rest;
     }
 
-    if src.starts_with(')') {
+    if src.is_empty() {
       break;
     }
 
+    if let Some(src) = src.strip_prefix(')') {
+      return Ok((args, src));
+    }
+
     // require comma after first arg
-    if !first {
+    if !args.is_empty() {
       let Some(rest) = src.strip_prefix(',') else {
         return Err(ParseError::Generic("expected , after argument".to_string()));
       };
       src = rest;
-    } else {
-      first = false;
     }
 
-    let arg = match parse_expr(src) {
-      Ok((word, rest)) => {
-        src = rest;
-        word
-      }
-      Err(err) => return Err(err),
-    };
+    if let Ok((_, rest)) = parser::parse_ws(src) {
+      src = rest;
+    }
+
+    if src.is_empty() {
+      break;
+    }
+
+    let (arg, rest) = parse_expr(src)?;
     args.push(arg);
+    src = rest;
   }
 
-  Ok((args, src))
+  Err(ParseError::Continuable(
+    "expected ) after argument list".to_string(),
+  ))
 }
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use super::*;
 
   macro_rules! lit {
@@ -665,5 +652,46 @@ mod tests {
     );
     assert_eq!(rest, "");
     Ok(())
+  }
+
+  #[test]
+  fn parses_fncall_multiple_args() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("fn(a, b,c)")?;
+    assert_eq!(
+      node,
+      ExprNode::FnCall("fn".to_string(), vec![lit!("a"), lit!("b"), lit!("c")])
+    );
+    assert_eq!(rest, "");
+    Ok(())
+  }
+
+  #[test]
+  fn parses_fncall_rejects_trailing_comma() {
+    assert!(parse_expr("fn(a,)").is_err());
+  }
+
+  #[test]
+  fn parses_fncall_rejects_leading_comma() {
+    assert!(parse_expr("fn(,a)").is_err());
+  }
+
+  #[test]
+  fn parses_fncall_rejects_missing_comma() {
+    assert!(parse_expr("fn(a b)").is_err());
+  }
+
+  #[test]
+  fn parses_fncall_rejects_missing_close_paren() {
+    assert_matches!(parse_expr("fn(a"), Err(ParseError::Continuable(_)));
+  }
+
+  #[test]
+  fn parses_fncall_rejects_missing_close_paren_2() {
+    assert_matches!(parse_expr("fn(a "), Err(ParseError::Continuable(_)));
+  }
+
+  #[test]
+  fn parses_fncall_rejects_missing_close_paren_3() {
+    assert_matches!(parse_expr("fn(a,"), Err(ParseError::Continuable(_)));
   }
 }
