@@ -82,12 +82,19 @@ pub fn register_commands(context: &mut EvalContext) {
 
   context.register_command(
     "::tcl::mathfunc::int",
-    mf_int1_1("int", |x| Ok(x as i32 as i64), |x| x.trunc() as i64),
+    mf_int1_1("int", |x| Ok(x), |x| x.trunc() as i64),
   );
 
   context.register_command(
     "::tcl::mathfunc::isqrt",
-    mf_int1_1("isqrt", |x| Ok(x.isqrt()), |x| x.trunc() as i64),
+    mf_int1_1(
+      "isqrt",
+      |x| {
+        x.checked_isqrt()
+          .ok_or_else(|| EvalError::ArgumentError("argument not in range".to_string()))
+      },
+      |x| x.trunc() as i64,
+    ),
   );
 
   context.register_command("::tcl::mathfunc::log", mf_float1_1("log", |x| Ok(x.ln())));
@@ -100,11 +107,6 @@ pub fn register_commands(context: &mut EvalContext) {
   context.register_command(
     "::tcl::mathfunc::pow",
     mf_float2_1("pow", |x, y| Ok(x.powf(y))),
-  );
-
-  context.register_command(
-    "::tcl::mathfunc::isqrt",
-    mf_int1_1("isqrt", |x| Ok(x.isqrt()), |x| x.trunc() as i64),
   );
 
   context.register_command("::tcl::mathfunc::rand", |args, context, _| {

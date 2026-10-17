@@ -10,7 +10,7 @@ pub async fn eval_expr(
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   use ExprNode::*;
-  match node {
+  let result = match node {
     Word(w) => eval_word(w, context, frame).await,
     UnaryOp(o, x) => Box::pin(eval_expr_unary_op(o, x.as_ref(), context, frame)).await,
     BinaryOp(o, a, b) => {
@@ -25,6 +25,14 @@ pub async fn eval_expr(
     }
     Ternary(_c, _i, _e) => todo!(),
     FnCall(func, args) => Box::pin(eval_expr_fncall(func, args, context, frame)).await,
+  }?;
+
+  if result.is_nan() {
+    Err(EvalError::ArgumentError(
+      "argument not in valid range".to_string(),
+    ))
+  } else {
+    Ok(result)
   }
 }
 
@@ -104,12 +112,5 @@ pub async fn eval_expr_fncall(
     name_and_args.push(eval_expr(arg, context, frame).await?);
   }
 
-  let result = eval_command_inner(&mut name_and_args, context, frame).await?;
-  if result.is_nan() {
-    Err(EvalError::Generic(
-      "argument not in valid range".to_string(),
-    ))
-  } else {
-    Ok(result)
-  }
+  eval_command_inner(&mut name_and_args, context, frame).await
 }
