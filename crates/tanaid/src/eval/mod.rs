@@ -33,6 +33,7 @@ mod context;
 mod eval;
 pub mod event_loop;
 mod expr;
+mod mathfunc;
 mod proc;
 mod script;
 mod sleep;

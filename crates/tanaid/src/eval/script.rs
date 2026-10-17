@@ -47,10 +47,17 @@ pub async fn eval_command(
   }
   let name_and_args = words_evaled.as_mut_slice();
 
+  eval_command_inner(name_and_args, context, frame).await
+}
+
+pub async fn eval_command_inner(
+  name_and_args: &mut [Value],
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
   let [name, args @ ..] = name_and_args else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
-
   let name_str = name.repr_str()?;
 
   // user-defined proc

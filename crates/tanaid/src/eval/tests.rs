@@ -1741,3 +1741,269 @@ async fn eval_register_command_overrides_builtin() -> Result<(), Box<dyn std::er
   assert_eq!(result.repr_str()?, "overridden");
   Ok(())
 }
+
+#[pollster::test]
+async fn eval_expr_mathfunc() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  // expected values from tclsh 8.6
+  for (src, expected) in [
+    ("expr {abs(-3)}", "3"),
+    ("expr {abs(-2.5)}", "2.5"),
+    ("expr {abs(-0.0)}", "0.0"),
+    ("expr {acos(1)}", "0.0"),
+    ("expr {asin(1)}", "1.5707963267948966"),
+    ("expr {atan(0)}", "0.0"),
+    ("expr {atan2(1, 1)}", "0.7853981633974483"),
+    ("expr {bool(2)}", "1"),
+    ("expr {bool(0)}", "0"),
+    ("expr {bool(0.0)}", "0"),
+    ("expr {bool(0.5)}", "1"),
+    ("expr {bool(\"yes\")}", "1"),
+    ("expr {bool(\"off\")}", "0"),
+    ("expr {ceil(1.2)}", "2.0"),
+    ("expr {cos(0)}", "1.0"),
+    ("expr {cosh(0)}", "1.0"),
+    ("expr {double(1)}", "1.0"),
+    ("expr {entier(3.7)}", "3"),
+    ("expr {exp(0)}", "1.0"),
+    ("expr {exp(1000)}", "Inf"),
+    ("expr {floor(-1.5)}", "-2.0"),
+    ("expr {fmod(7, 3)}", "1.0"),
+    ("expr {hypot(3, 4)}", "5.0"),
+    ("expr {int(-3.7)}", "-3"),
+    ("expr {int(2147483648)}", "2147483648"),
+    ("expr {isqrt(10)}", "3"),
+    ("expr {isqrt(10.9)}", "3"),
+    ("expr {isqrt(-0.0)}", "0"),
+    ("expr {log(1)}", "0.0"),
+    ("expr {log(0)}", "-Inf"),
+    ("expr {log10(1000)}", "3.0"),
+    ("expr {max(1, 3, 2)}", "3"),
+    ("expr {max(1.0, 1)}", "1.0"),
+    ("expr {max(-Inf, 1)}", "1"),
+    ("expr {min(3)}", "3"),
+    ("expr {min(3, 1, 2)}", "1"),
+    ("expr {min(1, 2.0)}", "1"),
+    ("expr {min(2, 1.5)}", "1.5"),
+    ("expr {min(1.0, 1)}", "1.0"),
+    ("expr {min(-0.0, 0.0)}", "-0.0"),
+    ("expr {min(0.0, -0.0)}", "0.0"),
+    (
+      "expr {min(9223372036854775807, 9223372036854775806)}",
+      "9223372036854775806",
+    ),
+    ("expr {min(1, 2) + 0.5}", "1.5"),
+    ("expr {pow(2, 10)}", "1024.0"),
+    ("expr {round(2.5)}", "3"),
+    ("expr {round(-2.5)}", "-3"),
+    ("expr {sin(0)}", "0.0"),
+    ("expr {sinh(0)}", "0.0"),
+    ("expr {sqrt(4)}", "2.0"),
+    ("expr {tan(0)}", "0.0"),
+    ("expr {tanh(0)}", "0.0"),
+    ("expr {wide(10000000000.0)}", "10000000000"),
+    ("expr {1 + abs(-2) * 3}", "7"),
+    ("expr {fmod(abs(-7), 2 + 1)}", "1.0"),
+  ] {
+    assert_eq!(
+      eval(&parser::parse(src)?, &mut ctx).await?.repr_str()?,
+      expected,
+      "{src}"
+    );
+  }
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_expr_mathfunc_errors() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  // expected messages from tclsh 8.6
+  for (src, expected) in [
+    (
+      "expr {sqrt(-1)}",
+      "domain error: argument not in valid range",
+    ),
+    (
+      "expr {log(-1)}",
+      "domain error: argument not in valid range",
+    ),
+    (
+      "expr {acos(2)}",
+      "domain error: argument not in valid range",
+    ),
+    (
+      "expr {fmod(1, 0)}",
+      "domain error: argument not in valid range",
+    ),
+    (
+      "expr {0.0 / 0}",
+      "domain error: argument not in valid range",
+    ),
+    (
+      "expr {Inf - Inf}",
+      "domain error: argument not in valid range",
+    ),
+    ("expr {isqrt(-1)}", "square root of negative argument"),
+    ("expr {isqrt(-0.5)}", "square root of negative argument"),
+    (
+      "expr {abs()}",
+      "not enough arguments for math function \"abs\"",
+    ),
+    (
+      "expr {fmod(1)}",
+      "not enough arguments for math function \"fmod\"",
+    ),
+    (
+      "expr {abs(1, 2)}",
+      "too many arguments for math function \"abs\"",
+    ),
+    (
+      "expr {rand(1)}",
+      "too many arguments for math function \"rand\"",
+    ),
+    ("expr {abs(\"abc\")}", "expected number but got \"abc\""),
+    ("expr {int(\"abc\")}", "expected number but got \"abc\""),
+    (
+      "expr {sqrt(\"abc\")}",
+      "expected floating-point number but got \"abc\"",
+    ),
+    (
+      "expr {fmod(1, \"b\")}",
+      "expected floating-point number but got \"b\"",
+    ),
+    ("expr {srand(1.5)}", "expected integer but got \"1.5\""),
+    ("expr {bool(\"x\")}", "expected boolean value but got \"x\""),
+    (
+      "expr {bool()}",
+      "not enough arguments for math function \"bool\"",
+    ),
+    (
+      "expr {bool(1, 2)}",
+      "too many arguments for math function \"bool\"",
+    ),
+    // tclsh words these differently
+    (
+      "expr {min()}",
+      "not enough arguments for math function \"min\"",
+    ),
+    ("expr {min(\"x\", 1)}", "expected number but got \"x\""),
+    ("expr {max(1, 2, \"x\")}", "expected number but got \"x\""),
+    (
+      "expr {min(\"NaN\", 1, 0)}",
+      "expected number but got \"NaN\"",
+    ),
+    (
+      "expr {min(1, \"NaN\", 0)}",
+      "expected number but got \"NaN\"",
+    ),
+  ] {
+    assert_matches!(
+      eval(&parser::parse(src)?, &mut ctx).await,
+      Err(EvalError::ArgumentError(message)) if message == expected,
+      "{src}"
+    );
+  }
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_expr_mathfunc_undefined() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("expr {nope(1)}")?, &mut ctx).await;
+  assert_matches!(result, Err(EvalError::UndefinedCommand(name)) if name == "::tcl::mathfunc::nope");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_expr_mathfunc_proc() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("proc ::tcl::mathfunc::twice {x} {expr {$x * 2}}; expr {twice(3) + 1}")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_int()?, 7);
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_expr_srand_matches_tcl() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  // sequences from tclsh 8.6. seed 251 catches dividing by IM instead of
+  // multiplying by its reciprocal, which differs in the last bit.
+  for (seed, expected) in [
+    (
+      1,
+      [
+        7.826369259425611e-6,
+        0.13153778814316625,
+        0.7556053221950332,
+      ],
+    ),
+    (
+      251,
+      [0.001964418684115828, 0.0159848239347268, 0.65693587095334],
+    ),
+  ] {
+    let srand = format!("expr {{srand({seed})}}");
+    let actual = [
+      eval(&parser::parse(&srand)?, &mut ctx)
+        .await?
+        .repr_float()?,
+      eval(&parser::parse("expr {rand()}")?, &mut ctx)
+        .await?
+        .repr_float()?,
+      eval(&parser::parse("expr {rand()}")?, &mut ctx)
+        .await?
+        .repr_float()?,
+    ];
+    assert_eq!(actual, expected, "srand({seed})");
+  }
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_expr_rand_seeds_from_clock() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new().with_clock_unixtime(|| std::time::Duration::from_secs(1));
+  for _ in 0..100 {
+    let x = eval(&parser::parse("expr {rand()}")?, &mut ctx)
+      .await?
+      .repr_float()?;
+    assert!(x > 0.0 && x < 1.0, "{x}");
+  }
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_expr_double_stays_float() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let mut result = eval(
+    &parser::parse("set x [expr {double(1)}]; expr {$x / 2}")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_float()?, 0.5);
+  Ok(())
+}
+
+#[test]
+fn value_formats_floats_like_tcl() -> Result<(), Box<dyn std::error::Error>> {
+  // expected strings from tclsh 8.6
+  for (x, expected) in [
+    (1.0, "1.0"),
+    (-0.0, "-0.0"),
+    (0.1, "0.1"),
+    (0.0001, "0.0001"),
+    (1e-5, "1e-5"),
+    (1.5e-7, "1.5e-7"),
+    (1e16, "10000000000000000.0"),
+    (1e17, "1e+17"),
+    (1.2345678901234568e17, "1.2345678901234568e+17"),
+    (f64::INFINITY, "Inf"),
+    (f64::NEG_INFINITY, "-Inf"),
+    (f64::NAN, "NaN"),
+  ] {
+    assert_eq!(Value::from(x).repr_str()?, expected, "{x:?}");
+  }
+  Ok(())
+}

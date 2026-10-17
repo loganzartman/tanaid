@@ -107,26 +107,8 @@ implements a small subset of Tcl. the supported subset is Tcl-compatible (runs i
   - `upvar ?level? otherVar myVar ?otherVar myVar ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/upvar.html)
   - `vwait varName` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/vwait.html)
   - `while test body` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/while.html)
-
-this is enough to write simple scripts like:
-
-```tcl
-proc fib {x} {
-  if {$x <= 0} {
-    return 0
-  }
-  if {$x == 1} {
-    return 1
-  }
-  return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
-}
-
-set i 1
-while {$i < 30} {
-  puts [fib $i]
-  set i [expr {$i + 1}]
-}
-```
+  - mathfunc [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/mathfunc.html)
+- an absolutely tiny bit of Tk
 
 ## development
 

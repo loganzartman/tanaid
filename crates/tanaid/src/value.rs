@@ -63,7 +63,7 @@ impl Value {
 
     match &self.repr {
       Repr::Int(i) => Ok(i.to_string().into()),
-      Repr::Float(f) => Ok(f.to_string().into()),
+      Repr::Float(f) => Ok(format_float_tcl(*f).into()),
       Repr::List(l) => {
         let mut result = String::new();
         for v in l.iter() {
@@ -307,6 +307,28 @@ impl Value {
       Ok(Value::from(0))
     }
   }
+
+  pub(crate) fn is_nan(&self) -> bool {
+    match self.repr {
+      Repr::Float(x) => x.is_nan(),
+      Repr::None | Repr::Int(_) | Repr::Dict(_) | Repr::List(_) => false,
+    }
+  }
+
+  pub fn is_numeric(&mut self) -> bool {
+    match self.repr {
+      Repr::Int(_) => return true,
+      Repr::Float(x) => return !x.is_nan(),
+      Repr::None | Repr::Dict(_) | Repr::List(_) => {}
+    }
+    if self.repr_int().is_ok() {
+      return true;
+    }
+    if let Ok(x) = self.repr_float() {
+      return !x.is_nan();
+    }
+    false
+  }
 }
 
 impl Display for Value {
@@ -444,5 +466,33 @@ impl ops::Not for Value {
     return Err(EvalError::ArgumentError(format!(
       "can't use non-numeric string as operand of !"
     )));
+  }
+}
+
+fn format_float_tcl(x: f64) -> String {
+  if x.is_nan() {
+    return "NaN".into();
+  }
+  if x.is_infinite() {
+    if x.is_sign_positive() {
+      return "Inf".into();
+    } else {
+      return "-Inf".into();
+    }
+  }
+
+  let sci = format!("{x:e}");
+  let (_, exponent) = sci.split_once('e').unwrap();
+  match exponent.parse::<i32>().unwrap() {
+    ..-4 => sci,
+    17.. => sci.replace("e", "e+"),
+    _ => {
+      let fixed = x.to_string();
+      if fixed.contains('.') {
+        fixed
+      } else {
+        fixed + ".0"
+      }
+    }
   }
 }
