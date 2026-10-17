@@ -307,6 +307,13 @@ impl Value {
       Ok(Value::from(0))
     }
   }
+
+  pub fn is_nan(&self) -> bool {
+    match self.repr {
+      Repr::Float(x) => x.is_nan(),
+      _ => false,
+    }
+  }
 }
 
 impl Display for Value {

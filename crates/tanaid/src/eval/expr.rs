@@ -104,5 +104,12 @@ pub async fn eval_expr_fncall(
     name_and_args.push(eval_expr(arg, context, frame).await?);
   }
 
-  eval_command_inner(&mut name_and_args, context, frame).await
+  let result = eval_command_inner(&mut name_and_args, context, frame).await?;
+  if result.is_nan() {
+    Err(EvalError::Generic(
+      "argument not in valid range".to_string(),
+    ))
+  } else {
+    Ok(result)
+  }
 }
