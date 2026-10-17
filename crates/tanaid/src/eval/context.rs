@@ -38,6 +38,7 @@ pub struct EvalContext {
   parse_cache_script: LruCache<String, Rc<(ScriptNode, String)>>,
   parse_cache_expr: LruCache<String, Rc<(ExprNode, String)>>,
 
+  pub(crate) random_state: Option<i32>,
   pub(crate) stdout: OutputSink,
 }
 
@@ -80,6 +81,8 @@ impl EvalContext {
 
       parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
       parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
+
+      random_state: None,
       stdout: Rc::new(|output: &str| {
         print!("{}", output);
         Ok(())

@@ -1,4 +1,5 @@
 use super::{EvalContext, FrameId, eval_word};
+use crate::eval::script::eval_command_inner;
 use crate::eval_error::EvalError;
 use crate::parser_expr::{BinaryOp, ExprNode, UnaryOp};
 use crate::value::Value;
@@ -23,6 +24,7 @@ pub async fn eval_expr(
       .await
     }
     Ternary(_c, _i, _e) => todo!(),
+    FnCall(func, args) => Box::pin(eval_expr_fncall(func, args, context, frame)).await,
   }
 }
 
@@ -87,4 +89,20 @@ pub async fn eval_expr_binary_op(
     Rem => a % b,
     And | Or => unreachable!(),
   }
+}
+
+pub async fn eval_expr_fncall(
+  func: &String,
+  args: &Vec<ExprNode>,
+  context: &mut EvalContext,
+  frame: FrameId,
+) -> Result<Value, EvalError> {
+  let resolved_name = format!("::tcl::mathfunc::{}", func);
+  let mut name_and_args = Vec::with_capacity(args.len());
+  name_and_args.push(Value::from(resolved_name));
+  for arg in args {
+    name_and_args.push(eval_expr(arg, context, frame).await?);
+  }
+
+  eval_command_inner(&mut name_and_args, context, frame).await
 }

@@ -12,6 +12,7 @@ pub enum ExprNode {
   UnaryOp(UnaryOp, Box<ExprNode>),
   BinaryOp(BinaryOp, Box<ExprNode>, Box<ExprNode>),
   Ternary(Box<ExprNode>, Box<ExprNode>, Box<ExprNode>),
+  FnCall(String, Vec<ExprNode>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -159,8 +160,19 @@ pub fn parse_expr_atom(src: &str) -> Result<(ExprNode, &str), ParseError> {
     Err(_) => {}
   }
 
-  let (word, rest) = parse_expr_word(src)?;
-  Ok((word, rest))
+  let (word, src) = parse_expr_word(src)?;
+
+  {
+    let mut src = src;
+    if let Ok((_, rest)) = parser::parse_ws(src) {
+      src = rest;
+    }
+    if src.starts_with('(') {
+      return parse_expr_fncall(&word, src);
+    }
+  }
+
+  Ok((word, src))
 }
 
 fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
@@ -203,7 +215,8 @@ fn parse_expr_word(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
       None
       | Some(' ' | '\t' | '\r' | '\n')
       | Some(
-        '(' | ')' | '+' | '-' | '*' | '/' | '%' | '<' | '>' | '=' | '!' | '&' | '|' | '?' | ':',
+        '(' | ')' | '+' | '-' | '*' | '/' | '%' | '<' | '>' | '=' | '!' | '&' | '|' | '?' | ':'
+        | ',',
       ) => {
         if !part_buffer.is_empty() {
           parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
@@ -263,6 +276,92 @@ pub fn parse_expr_group(mut src: &str) -> Result<(ExprNode, &str), ParseError> {
   };
 
   Ok((node, src))
+}
+
+pub fn parse_expr_fncall<'a>(
+  expr_node: &ExprNode,
+  mut src: &'a str,
+) -> Result<(ExprNode, &'a str), ParseError> {
+  if let Ok((_, rest)) = parser::parse_ws(src) {
+    src = rest;
+  }
+
+  let Some(src) = src.strip_prefix('(') else {
+    return Err(ParseError::Generic(
+      "expected open paren for function call".to_string(),
+    ));
+  };
+
+  let word = match expr_node {
+    ExprNode::Word(word) => word,
+    _ => return Err(ParseError::Generic("expected a word".to_string())),
+  };
+
+  let [part] = word.parts.as_slice() else {
+    return Err(ParseError::Generic(
+      "expected a word with one part".to_string(),
+    ));
+  };
+
+  let func = match part {
+    WordPart::BareLiteral(func) => func,
+    _ => {
+      return Err(ParseError::Generic(
+        "expected a bare literal word".to_string(),
+      ));
+    }
+  };
+
+  let (args, mut src) = parse_expr_arglist(src)?;
+
+  if let Ok((_, rest)) = parser::parse_ws(src) {
+    src = rest;
+  }
+
+  let Some(src) = src.strip_prefix(')') else {
+    return Err(ParseError::Continuable(format!(
+      "expected close paren for function call, got: {}",
+      src
+    )));
+  };
+
+  Ok((ExprNode::FnCall(func.to_string(), args), src))
+}
+
+pub fn parse_expr_arglist(mut src: &str) -> Result<(Vec<ExprNode>, &str), ParseError> {
+  let mut args = vec![];
+
+  let mut first = true;
+  loop {
+    if let Ok((_, rest)) = parser::parse_ws(src) {
+      src = rest;
+    }
+
+    if src.starts_with(')') {
+      break;
+    }
+
+    // require comma after first arg
+    if !first {
+      let Some(rest) = src.strip_prefix(',') else {
+        return Err(ParseError::Generic("expected , after argument".to_string()));
+      };
+      src = rest;
+    } else {
+      first = false;
+    }
+
+    let arg = match parse_expr(src) {
+      Ok((word, rest)) => {
+        src = rest;
+        word
+      }
+      Err(err) => return Err(err),
+    };
+    args.push(arg);
+  }
+
+  Ok((args, src))
 }
 
 #[cfg(test)]
@@ -535,6 +634,36 @@ mod tests {
     let (node, rest) = parse_expr("0&1")?;
     assert_eq!(node, lit!("0"));
     assert_eq!(rest, "&1");
+    Ok(())
+  }
+
+  #[test]
+  fn parses_fncall() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("fn(arg)")?;
+    assert_eq!(node, ExprNode::FnCall("fn".to_string(), vec![lit!("arg")]));
+    assert_eq!(rest, "");
+    Ok(())
+  }
+
+  #[test]
+  fn parses_fncall_no_args() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("fn()")?;
+    assert_eq!(node, ExprNode::FnCall("fn".to_string(), vec![]));
+    assert_eq!(rest, "");
+    Ok(())
+  }
+
+  #[test]
+  fn parses_fncall_nested() -> Result<(), ParseError> {
+    let (node, rest) = parse_expr("fn(fn(arg))")?;
+    assert_eq!(
+      node,
+      ExprNode::FnCall(
+        "fn".to_string(),
+        vec![ExprNode::FnCall("fn".to_string(), vec![lit!("arg")])]
+      )
+    );
+    assert_eq!(rest, "");
     Ok(())
   }
 }
