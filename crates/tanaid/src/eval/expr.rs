@@ -29,7 +29,7 @@ pub async fn eval_expr(
 
   if result.is_nan() {
     Err(EvalError::ArgumentError(
-      "argument not in valid range".to_string(),
+      "domain error: argument not in valid range".to_string(),
     ))
   } else {
     Ok(result)

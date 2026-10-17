@@ -7,9 +7,7 @@ use crate::{
 pub fn register_commands(context: &mut EvalContext) {
   context.register_command("::tcl::mathfunc::abs", |args, _, _| {
     let [x] = args else {
-      return Err(EvalError::ArgumentError(
-        "abs expects 1 argument".to_string(),
-      ));
+      return Err(arity_error("abs", 1, args.len()));
     };
     if let Some(x) = x.repr_int().ok().and_then(|x| x.checked_abs()) {
       return Ok(x.into());
@@ -17,10 +15,7 @@ pub fn register_commands(context: &mut EvalContext) {
     if let Ok(x) = x.repr_float() {
       return Ok(x.abs().into());
     }
-    Err(EvalError::ArgumentError(format!(
-      "expected number but got: {}",
-      x.to_string()
-    )))
+    Err(type_error("number", x))
   });
 
   context.register_command(
@@ -90,10 +85,12 @@ pub fn register_commands(context: &mut EvalContext) {
     mf_int1_1(
       "isqrt",
       |x| {
-        x.checked_isqrt()
-          .ok_or_else(|| EvalError::ArgumentError("argument not in range".to_string()))
+        x.checked_isqrt().ok_or_else(|| {
+          EvalError::ArgumentError("square root of negative argument".to_string())
+        })
       },
-      |x| x.trunc() as i64,
+      // floor rather than trunc so that negative floats stay negative
+      |x| x.floor() as i64,
     ),
   );
 
@@ -111,9 +108,7 @@ pub fn register_commands(context: &mut EvalContext) {
 
   context.register_command("::tcl::mathfunc::rand", |args, context, _| {
     if !args.is_empty() {
-      return Err(EvalError::ArgumentError(
-        "rand expects 0 arguments".to_string(),
-      ));
+      return Err(arity_error("rand", 0, args.len()));
     };
 
     rand(context)
@@ -138,13 +133,14 @@ pub fn register_commands(context: &mut EvalContext) {
 
   context.register_command("::tcl::mathfunc::srand", |args, context, _| {
     let [seed] = args else {
-      return Err(EvalError::ArgumentError(
-        "srand expects 1 argument".to_string(),
-      ));
+      return Err(arity_error("srand", 1, args.len()));
+    };
+    let Ok(seed) = seed.repr_int() else {
+      return Err(type_error("integer", seed));
     };
 
     // https://github.com/tcltk/tcl/blob/102a512d4f61d457a239d8c56f1514bffb52d08f/generic/tclBasic.c#L7966
-    let state = normalize_rand_seed(seed.repr_int()? as i32);
+    let state = normalize_rand_seed(seed as i32);
     context.random_state = Some(state);
 
     rand(context)
@@ -198,72 +194,69 @@ fn normalize_rand_seed(mut seed: i32) -> i32 {
   seed
 }
 
+fn arity_error(name: &str, expected: usize, got: usize) -> EvalError {
+  let problem = if got < expected {
+    "not enough"
+  } else {
+    "too many"
+  };
+  EvalError::ArgumentError(format!(
+    "{problem} arguments for math function \"{name}\""
+  ))
+}
+
+fn type_error(expected: &str, got: &Value) -> EvalError {
+  EvalError::ArgumentError(format!("expected {expected} but got \"{got}\""))
+}
+
 fn mf_int1_1(
-  name: &str,
+  name: &'static str,
   f: impl Fn(i64) -> Result<i64, EvalError> + 'static,
   to_int: impl Fn(f64) -> i64 + 'static,
 ) -> impl Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError> + 'static {
-  let arg_error = format!("{} expects 1 argument", name);
-
   move |args, _, _| {
     let [x] = args else {
-      return Err(EvalError::ArgumentError(arg_error.clone()));
+      return Err(arity_error(name, 1, args.len()));
     };
     if let Ok(x) = x.repr_int() {
       return Ok(f(x)?.into());
     }
     let Ok(x) = x.repr_float() else {
-      return Err(EvalError::ArgumentError(format!(
-        "expected number but got: {}",
-        x.to_string()
-      )));
+      return Err(type_error("number", x));
     };
     Ok(f(to_int(x))?.into())
   }
 }
 
 fn mf_float1_1(
-  name: &str,
+  name: &'static str,
   f: impl Fn(f64) -> Result<f64, EvalError> + 'static,
 ) -> impl Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError> + 'static {
-  let arg_error = format!("{} expects 1 argument", name);
-
   move |args, _, _| {
     let [x] = args else {
-      return Err(EvalError::ArgumentError(arg_error.clone()));
+      return Err(arity_error(name, 1, args.len()));
     };
     let Ok(x) = x.repr_float() else {
-      return Err(EvalError::ArgumentError(format!(
-        "expected number but got: {}",
-        x.to_string()
-      )));
+      return Err(type_error("floating-point number", x));
     };
-    return Ok(f(x)?.into());
+    Ok(f(x)?.into())
   }
 }
 
 fn mf_float2_1(
-  name: &str,
+  name: &'static str,
   f: impl Fn(f64, f64) -> Result<f64, EvalError> + 'static,
 ) -> impl Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError> + 'static {
-  let arg_error = format!("{} expects 2 arguments", name);
-
   move |args, _, _| {
     let [x, y] = args else {
-      return Err(EvalError::ArgumentError(arg_error.clone()));
+      return Err(arity_error(name, 2, args.len()));
     };
     let Ok(x) = x.repr_float() else {
-      return Err(EvalError::ArgumentError(format!(
-        "expected number but got: {}",
-        x.to_string()
-      )));
+      return Err(type_error("floating-point number", x));
     };
     let Ok(y) = y.repr_float() else {
-      return Err(EvalError::ArgumentError(format!(
-        "expected number but got: {}",
-        y.to_string()
-      )));
+      return Err(type_error("floating-point number", y));
     };
-    return Ok(f(x, y)?.into());
+    Ok(f(x, y)?.into())
   }
 }
