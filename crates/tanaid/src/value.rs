@@ -308,11 +308,26 @@ impl Value {
     }
   }
 
-  pub fn is_nan(&self) -> bool {
+  pub(crate) fn is_nan(&self) -> bool {
     match self.repr {
       Repr::Float(x) => x.is_nan(),
-      _ => false,
+      Repr::None | Repr::Int(_) | Repr::Dict(_) | Repr::List(_) => false,
     }
+  }
+
+  pub fn is_numeric(&mut self) -> bool {
+    match self.repr {
+      Repr::Int(_) => return true,
+      Repr::Float(x) => return !x.is_nan(),
+      Repr::None | Repr::Dict(_) | Repr::List(_) => {}
+    }
+    if self.repr_int().is_ok() {
+      return true;
+    }
+    if let Ok(x) = self.repr_float() {
+      return !x.is_nan();
+    }
+    false
   }
 }
 

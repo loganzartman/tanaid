@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::{
   eval::{EvalContext, FrameId},
   eval_error::EvalError,
@@ -98,6 +100,10 @@ pub fn register_commands(context: &mut EvalContext) {
     "::tcl::mathfunc::log10",
     mf_float1_1("log10", |x| Ok(x.log10())),
   );
+
+  context.register_command("::tcl::mathfunc::max", mf_min_max("max", Ordering::Greater));
+
+  context.register_command("::tcl::mathfunc::min", mf_min_max("min", Ordering::Less));
 
   context.register_command(
     "::tcl::mathfunc::pow",
@@ -254,5 +260,30 @@ fn mf_float2_1(
       return Err(type_error("floating-point number", y));
     };
     Ok(f(x, y)?.into())
+  }
+}
+
+fn mf_min_max(
+  name: &'static str,
+  ordering: Ordering,
+) -> impl Fn(&mut [Value], &mut EvalContext, FrameId) -> Result<Value, EvalError> + 'static {
+  move |args, _, _| {
+    let Some((mut result, rest)) = args.split_first_mut() else {
+      return Err(arity_error(name, 1, args.len()));
+    };
+    if !result.is_numeric() {
+      return Err(type_error("number", result));
+    }
+
+    for arg in rest {
+      if !arg.is_numeric() {
+        return Err(type_error("number", arg));
+      }
+      if arg.compare(result)? == Some(ordering) {
+        result = arg;
+      }
+    }
+
+    Ok(result.clone())
   }
 }
