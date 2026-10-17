@@ -85,11 +85,9 @@ pub fn register_commands(context: &mut EvalContext) {
     mf_int1_1(
       "isqrt",
       |x| {
-        x.checked_isqrt().ok_or_else(|| {
-          EvalError::ArgumentError("square root of negative argument".to_string())
-        })
+        x.checked_isqrt()
+          .ok_or_else(|| EvalError::ArgumentError("square root of negative argument".to_string()))
       },
-      // floor rather than trunc so that negative floats stay negative
       |x| x.floor() as i64,
     ),
   );
@@ -200,9 +198,7 @@ fn arity_error(name: &str, expected: usize, got: usize) -> EvalError {
   } else {
     "too many"
   };
-  EvalError::ArgumentError(format!(
-    "{problem} arguments for math function \"{name}\""
-  ))
+  EvalError::ArgumentError(format!("{problem} arguments for math function \"{name}\""))
 }
 
 fn type_error(expected: &str, got: &Value) -> EvalError {
