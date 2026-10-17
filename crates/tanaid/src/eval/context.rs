@@ -7,13 +7,17 @@ use crate::event_loop::{Event, EventId, WaitForEvent};
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
-use lru::LruCache;
+use foldhash::fast::RandomState;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
+
+// Name lookups are on the hot path of every command, and std's SipHash is
+// slow for short keys. Scripts are trusted, so we don't need DoS resistance.
+type HashMap<K, V> = std::collections::HashMap<K, V, RandomState>;
+type LruCache<K, V> = lru::LruCache<K, V, RandomState>;
 
 pub type FrameId = usize;
 pub const GLOBAL_FRAME: FrameId = 0;
@@ -70,17 +74,23 @@ impl std::fmt::Debug for EvalContext {
 impl EvalContext {
   pub fn new() -> EvalContext {
     let mut context = EvalContext {
-      procs: HashMap::new(),
-      commands: HashMap::new(),
+      procs: HashMap::default(),
+      commands: HashMap::default(),
       frame_id: GLOBAL_FRAME,
-      frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
+      frames: HashMap::from_iter([(GLOBAL_FRAME, EvalFrame::new())]),
       event_loop: Rc::new(RefCell::new(EventLoop::new(Duration::from_millis(15)))),
 
       clock_monotonic: None,
       clock_unixtime: None,
 
-      parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
-      parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
+      parse_cache_script: LruCache::with_hasher(
+        NonZeroUsize::new(1024).unwrap(),
+        RandomState::default(),
+      ),
+      parse_cache_expr: LruCache::with_hasher(
+        NonZeroUsize::new(1024).unwrap(),
+        RandomState::default(),
+      ),
 
       random_state: None,
       stdout: Rc::new(|output: &str| {
@@ -402,16 +412,16 @@ impl EvalFrame {
   pub fn new() -> EvalFrame {
     EvalFrame {
       caller: None,
-      variables: HashMap::new(),
-      variable_revs: HashMap::new(),
+      variables: HashMap::default(),
+      variable_revs: HashMap::default(),
     }
   }
 
   pub fn new_from(frame: FrameId) -> EvalFrame {
     EvalFrame {
       caller: Some(frame),
-      variables: HashMap::new(),
-      variable_revs: HashMap::new(),
+      variables: HashMap::default(),
+      variable_revs: HashMap::default(),
     }
   }
 
