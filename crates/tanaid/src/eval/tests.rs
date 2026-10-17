@@ -1754,6 +1754,12 @@ async fn eval_expr_mathfunc() -> Result<(), Box<dyn std::error::Error>> {
     ("expr {asin(1)}", "1.5707963267948966"),
     ("expr {atan(0)}", "0.0"),
     ("expr {atan2(1, 1)}", "0.7853981633974483"),
+    ("expr {bool(2)}", "1"),
+    ("expr {bool(0)}", "0"),
+    ("expr {bool(0.0)}", "0"),
+    ("expr {bool(0.5)}", "1"),
+    ("expr {bool(\"yes\")}", "1"),
+    ("expr {bool(\"off\")}", "0"),
     ("expr {ceil(1.2)}", "2.0"),
     ("expr {cos(0)}", "1.0"),
     ("expr {cosh(0)}", "1.0"),
@@ -1866,6 +1872,15 @@ async fn eval_expr_mathfunc_errors() -> Result<(), Box<dyn std::error::Error>> {
       "expected floating-point number but got \"b\"",
     ),
     ("expr {srand(1.5)}", "expected integer but got \"1.5\""),
+    ("expr {bool(\"x\")}", "expected boolean value but got \"x\""),
+    (
+      "expr {bool()}",
+      "not enough arguments for math function \"bool\"",
+    ),
+    (
+      "expr {bool(1, 2)}",
+      "too many arguments for math function \"bool\"",
+    ),
     // tclsh words these differently
     (
       "expr {min()}",

@@ -40,6 +40,13 @@ pub fn register_commands(context: &mut EvalContext) {
     mf_float2_1("atan2", |x, y| Ok(x.atan2(y))),
   );
 
+  context.register_command("::tcl::mathfunc::bool", |args, _, _| {
+    let [x] = args else {
+      return Err(arity_error("bool", 1, args.len()));
+    };
+    Ok(x.repr_bool()?.into())
+  });
+
   context.register_command(
     "::tcl::mathfunc::ceil",
     mf_float1_1("ceil", |x| Ok(x.ceil())),
