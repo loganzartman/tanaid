@@ -11,6 +11,10 @@ use std::sync::LazyLock;
 
 pub type List = Vec<Value>;
 pub type Dict = HashMap<String, Value>;
+pub enum Number {
+  Int(i64),
+  Float(f64),
+}
 
 #[derive(Clone, Debug)]
 pub enum Repr {
@@ -157,6 +161,23 @@ impl Value {
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Float(x);
     Ok(x)
+  }
+
+  pub fn repr_number(&mut self) -> Result<Number, EvalError> {
+    match self.repr {
+      Repr::Int(x) => return Ok(Number::Int(x)),
+      Repr::Float(x) => return Ok(Number::Float(x)),
+      Repr::None | Repr::Dict(_) | Repr::List(_) => {}
+    }
+    if let Ok(x) = self.repr_int() {
+      return Ok(Number::Int(x));
+    }
+    if let Ok(x) = self.repr_float() {
+      return Ok(Number::Float(x));
+    }
+    Err(EvalError::NotNumericError(format!(
+      "expected number, got {self}"
+    )))
   }
 
   pub fn repr_dict(&mut self) -> Result<Rc<Dict>, EvalError> {
@@ -409,17 +430,17 @@ macro_rules! arithmetic_binop {
       type Output = Result<Value, EvalError>;
 
       fn $name(mut self, mut rhs: Self) -> Self::Output {
-        if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
-          return Ok(Value::from(a $op b));
-        }
-
-        let Ok(a) = self.repr_float() else {
+        let Ok(a) = self.repr_number() else {
           return Err(EvalError::NotNumericError(self.to_string()));
         };
-        let Ok(b) = rhs.repr_float() else {
+        let Ok(b) = rhs.repr_number() else {
           return Err(EvalError::NotNumericError(rhs.to_string()));
         };
-        Ok(Value::from(a $op b))
+
+        match (a, b) {
+          (Number::Int(a), Number::Int(b)) => Ok(Value::from(a $op b)),
+          _ => Ok(Value::from(self.repr_float()? $op rhs.repr_float()?)),
+        }
       }
     }
   };
