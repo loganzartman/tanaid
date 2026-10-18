@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use crate::{
   eval::{EvalContext, FrameId},
   eval_error::EvalError,
-  value::Value,
+  value::{Number, Value},
 };
 
 pub fn register_commands(context: &mut EvalContext) {
@@ -11,13 +11,15 @@ pub fn register_commands(context: &mut EvalContext) {
     let [x] = args else {
       return Err(arity_error("abs", 1, args.len()));
     };
-    if let Some(x) = x.repr_int().ok().and_then(|x| x.checked_abs()) {
-      return Ok(x.into());
+    match x.repr_number() {
+      Ok(Number::Int(x)) => Ok(
+        x.checked_abs()
+          .map(Value::from)
+          .unwrap_or_else(|| (x as f64).abs().into()),
+      ),
+      Ok(Number::Float(x)) => Ok(x.abs().into()),
+      Err(_) => Err(type_error("number", x)),
     }
-    if let Ok(x) = x.repr_float() {
-      return Ok(x.abs().into());
-    }
-    Err(type_error("number", x))
   });
 
   context.register_command(
@@ -227,13 +229,11 @@ fn mf_int1_1(
     let [x] = args else {
       return Err(arity_error(name, 1, args.len()));
     };
-    if let Ok(x) = x.repr_int() {
-      return Ok(f(x)?.into());
+    match x.repr_number() {
+      Ok(Number::Int(x)) => Ok(f(x)?.into()),
+      Ok(Number::Float(x)) => Ok(f(to_int(x))?.into()),
+      Err(_) => Err(type_error("number", x)),
     }
-    let Ok(x) = x.repr_float() else {
-      return Err(type_error("number", x));
-    };
-    Ok(f(to_int(x))?.into())
   }
 }
 
