@@ -60,7 +60,7 @@ pub(super) async fn eval(
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
     let (body_parsed, _) = body_parse_result.as_ref();
 
-    if eval_expr(&cond_parsed, context, frame).await?.repr_int()? != 0 {
+    if eval_expr(&cond_parsed, context, frame).await?.repr_bool()? {
       return eval_script(&body_parsed, context, frame).await;
     }
   }
