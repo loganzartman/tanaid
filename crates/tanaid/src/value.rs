@@ -11,6 +11,10 @@ use std::sync::LazyLock;
 
 pub type List = Vec<Value>;
 pub type Dict = HashMap<String, Value>;
+pub enum Number {
+  Int(i64),
+  Float(f64),
+}
 
 #[derive(Clone, Debug)]
 pub enum Repr {
@@ -102,12 +106,10 @@ impl Value {
   }
 
   pub fn repr_bool(&mut self) -> Result<bool, EvalError> {
-    if let Ok(x) = self.repr_int() {
-      return Ok(x != 0);
-    }
-
-    if let Ok(x) = self.repr_float() {
-      return Ok(x != 0.);
+    match self.repr_number() {
+      Ok(Number::Int(x)) => return Ok(x != 0),
+      Ok(Number::Float(x)) => return Ok(x != 0.),
+      Err(_) => {}
     }
 
     let s = self.repr_str()?;
@@ -157,6 +159,21 @@ impl Value {
       .map_err(|e| EvalError::Generic(e.to_string()))?;
     self.repr = Repr::Float(x);
     Ok(x)
+  }
+
+  pub fn repr_number(&mut self) -> Result<Number, EvalError> {
+    match self.repr {
+      Repr::Int(x) => return Ok(Number::Int(x)),
+      Repr::Float(x) => return Ok(Number::Float(x)),
+      Repr::None | Repr::Dict(_) | Repr::List(_) => {}
+    }
+    if let Ok(x) = self.repr_int() {
+      return Ok(Number::Int(x));
+    }
+    if let Ok(x) = self.repr_float() {
+      return Ok(Number::Float(x));
+    }
+    Err(EvalError::NotNumericError(self.to_string()))
   }
 
   pub fn repr_dict(&mut self) -> Result<Rc<Dict>, EvalError> {
@@ -220,17 +237,13 @@ impl Value {
   }
 
   pub fn unary_plus(&mut self) -> Result<Value, EvalError> {
-    if let Ok(x) = self.repr_int() {
-      return Ok(Value::from(x));
+    match self.repr_number() {
+      Ok(Number::Int(x)) => Ok(Value::from(x)),
+      Ok(Number::Float(x)) => Ok(Value::from(x)),
+      Err(_) => Err(EvalError::ArgumentError(
+        "can't use non-numeric string as operand of +".to_string(),
+      )),
     }
-
-    if let Ok(x) = self.repr_float() {
-      return Ok(Value::from(x));
-    }
-
-    Err(EvalError::ArgumentError(
-      "can't use non-numeric string as operand of +".to_string(),
-    ))
   }
 
   pub fn bit_not(&mut self) -> Result<Value, EvalError> {
@@ -244,11 +257,11 @@ impl Value {
   }
 
   pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
-    if let (Ok(a), Ok(b)) = (self.repr_int(), other.repr_int()) {
-      return Ok(Some(a.cmp(&b)));
-    }
-    if let (Ok(a), Ok(b)) = (self.repr_float(), other.repr_float()) {
-      return Ok(a.partial_cmp(&b));
+    if let (Ok(a), Ok(b)) = (self.repr_number(), other.repr_number()) {
+      return match (a, b) {
+        (Number::Int(a), Number::Int(b)) => Ok(Some(a.cmp(&b))),
+        _ => Ok(self.repr_float()?.partial_cmp(&other.repr_float()?)),
+      };
     }
 
     return Ok(Some(self.repr_str()?.cmp(other.repr_str()?)));
@@ -316,18 +329,11 @@ impl Value {
   }
 
   pub fn is_numeric(&mut self) -> bool {
-    match self.repr {
-      Repr::Int(_) => return true,
-      Repr::Float(x) => return !x.is_nan(),
-      Repr::None | Repr::Dict(_) | Repr::List(_) => {}
+    match self.repr_number() {
+      Ok(Number::Int(_)) => true,
+      Ok(Number::Float(x)) => !x.is_nan(),
+      Err(_) => false,
     }
-    if self.repr_int().is_ok() {
-      return true;
-    }
-    if let Ok(x) = self.repr_float() {
-      return !x.is_nan();
-    }
-    false
   }
 }
 
@@ -409,17 +415,13 @@ macro_rules! arithmetic_binop {
       type Output = Result<Value, EvalError>;
 
       fn $name(mut self, mut rhs: Self) -> Self::Output {
-        if let (Ok(a), Ok(b)) = (self.repr_int(), rhs.repr_int()) {
-          return Ok(Value::from(a $op b));
-        }
+        let a = self.repr_number()?;
+        let b = rhs.repr_number()?;
 
-        let Ok(a) = self.repr_float() else {
-          return Err(EvalError::NotNumericError(self.to_string()));
-        };
-        let Ok(b) = rhs.repr_float() else {
-          return Err(EvalError::NotNumericError(rhs.to_string()));
-        };
-        Ok(Value::from(a $op b))
+        match (a, b) {
+          (Number::Int(a), Number::Int(b)) => Ok(Value::from(a $op b)),
+          _ => Ok(Value::from(self.repr_float()? $op rhs.repr_float()?)),
+        }
       }
     }
   };
@@ -444,15 +446,13 @@ impl ops::Neg for Value {
   type Output = Result<Value, EvalError>;
 
   fn neg(mut self) -> Self::Output {
-    if let Ok(x) = self.repr_int() {
-      return Ok(Value::from(-x));
+    match self.repr_number() {
+      Ok(Number::Int(x)) => Ok(Value::from(-x)),
+      Ok(Number::Float(x)) => Ok(Value::from(-x)),
+      Err(_) => Err(EvalError::ArgumentError(format!(
+        "can't use non-numeric string as operand of -"
+      ))),
     }
-    if let Ok(x) = self.repr_float() {
-      return Ok(Value::from(-x));
-    }
-    return Err(EvalError::ArgumentError(format!(
-      "can't use non-numeric string as operand of -"
-    )));
   }
 }
 

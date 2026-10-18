@@ -7,13 +7,17 @@ use crate::event_loop::{Event, EventId, WaitForEvent};
 use crate::parser::{self, ParseError, ScriptNode};
 use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
-use lru::LruCache;
+use foldhash::fast::RandomState;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
+
+// Name lookups are on the hot path of every command, and std's SipHash is
+// slow for short keys. Scripts are trusted, so we don't need DoS resistance.
+type HashMap<K, V> = std::collections::HashMap<K, V, RandomState>;
+type LruCache<K, V> = lru::LruCache<K, V, RandomState>;
 
 pub type FrameId = usize;
 pub const GLOBAL_FRAME: FrameId = 0;
@@ -46,13 +50,14 @@ pub struct EvalContext {
 pub struct EvalFrame {
   caller: Option<FrameId>,
   variables: HashMap<String, Binding>,
-  variable_revs: HashMap<String, u64>,
 }
+
+pub type Revision = u64;
 
 #[derive(Clone, Debug)]
 pub enum Binding {
-  Val(Value),
-  Ref(FrameId, String),
+  Val(Value, Revision),
+  Ref(FrameId, Rc<str>),
 }
 
 impl std::fmt::Debug for EvalContext {
@@ -70,17 +75,23 @@ impl std::fmt::Debug for EvalContext {
 impl EvalContext {
   pub fn new() -> EvalContext {
     let mut context = EvalContext {
-      procs: HashMap::new(),
-      commands: HashMap::new(),
+      procs: HashMap::default(),
+      commands: HashMap::default(),
       frame_id: GLOBAL_FRAME,
-      frames: HashMap::from([(GLOBAL_FRAME, EvalFrame::new())]),
+      frames: HashMap::from_iter([(GLOBAL_FRAME, EvalFrame::new())]),
       event_loop: Rc::new(RefCell::new(EventLoop::new(Duration::from_millis(15)))),
 
       clock_monotonic: None,
       clock_unixtime: None,
 
-      parse_cache_script: LruCache::new(NonZeroUsize::new(1024).unwrap()),
-      parse_cache_expr: LruCache::new(NonZeroUsize::new(1024).unwrap()),
+      parse_cache_script: LruCache::with_hasher(
+        NonZeroUsize::new(1024).unwrap(),
+        RandomState::default(),
+      ),
+      parse_cache_expr: LruCache::with_hasher(
+        NonZeroUsize::new(1024).unwrap(),
+        RandomState::default(),
+      ),
 
       random_state: None,
       stdout: Rc::new(|output: &str| {
@@ -332,13 +343,13 @@ impl EvalContext {
     loop {
       match self.frame(cur_frame).get_binding(cur_name)? {
         Binding::Ref(ref_frame, ref_name) => {
-          if *ref_frame == frame && ref_name == name {
+          if *ref_frame == frame && &**ref_name == name {
             panic!("circular reference to {}", ref_name);
           }
           cur_frame = *ref_frame;
           cur_name = ref_name;
         }
-        Binding::Val(v) => return Some(v),
+        Binding::Val(v, _) => return Some(v),
       }
     }
   }
@@ -349,13 +360,13 @@ impl EvalContext {
     loop {
       match self.frame(cur_frame).get_binding(cur_name) {
         Some(Binding::Ref(ref_frame, ref_name)) => {
-          if *ref_frame == frame && ref_name == name {
+          if *ref_frame == frame && &**ref_name == name {
             panic!("circular reference to {}", ref_name);
           }
           cur_frame = *ref_frame;
           cur_name = ref_name;
         }
-        Some(Binding::Val(_)) => return self.frame(cur_frame).get_rev(cur_name),
+        Some(Binding::Val(_, revision)) => return *revision,
         None => return 0,
       }
     }
@@ -363,21 +374,27 @@ impl EvalContext {
 
   pub fn set_variable(&mut self, frame: FrameId, name: &str, value: Value) {
     let mut cur_frame = frame;
-    let mut cur_name = name;
+    let mut cur_name: Option<Rc<str>> = None;
     loop {
-      match self.frame(cur_frame).get_binding(cur_name) {
+      let cur_name_resolved = cur_name.as_deref().unwrap_or(name);
+      let binding = self.frame_mut(cur_frame).get_binding_mut(cur_name_resolved);
+      match binding {
         Some(Binding::Ref(ref_frame, ref_name)) => {
-          if *ref_frame == frame && ref_name == name {
+          if *ref_frame == frame && &**ref_name == name {
             panic!("circular reference to {}", ref_name);
           }
           cur_frame = *ref_frame;
-          cur_name = ref_name;
+          cur_name = Some(Rc::clone(ref_name));
         }
-        Some(Binding::Val(_)) | None => {
-          let name = cur_name.to_string();
+        Some(Binding::Val(binding_value, revision)) => {
+          *binding_value = value;
+          *revision += 1;
+          return;
+        }
+        None => {
           self
             .frame_mut(cur_frame)
-            .set_binding(name.as_ref(), Binding::Val(value));
+            .set_binding(cur_name_resolved, Binding::Val(value, 1));
           return;
         }
       }
@@ -391,10 +408,9 @@ impl EvalContext {
     target_frame: FrameId,
     target_name: &str,
   ) {
-    self.frame_mut(ref_frame).set_binding(
-      ref_name,
-      Binding::Ref(target_frame, target_name.to_string()),
-    );
+    self
+      .frame_mut(ref_frame)
+      .set_binding(ref_name, Binding::Ref(target_frame, Rc::from(target_name)));
   }
 }
 
@@ -402,16 +418,14 @@ impl EvalFrame {
   pub fn new() -> EvalFrame {
     EvalFrame {
       caller: None,
-      variables: HashMap::new(),
-      variable_revs: HashMap::new(),
+      variables: HashMap::default(),
     }
   }
 
   pub fn new_from(frame: FrameId) -> EvalFrame {
     EvalFrame {
       caller: Some(frame),
-      variables: HashMap::new(),
-      variable_revs: HashMap::new(),
+      variables: HashMap::default(),
     }
   }
 
@@ -425,17 +439,6 @@ impl EvalFrame {
 
   pub fn set_binding(&mut self, name: &str, binding: Binding) {
     self.variables.insert(name.to_string(), binding);
-
-    self
-      .variable_revs
-      .entry(name.to_string())
-      .and_modify(|v| *v += 1)
-      .or_insert(1);
-  }
-
-  /// monotonically increasing counter that increases when variable is written
-  pub fn get_rev(&self, name: &str) -> u64 {
-    *self.variable_revs.get(name).unwrap_or(&0)
   }
 }
 
