@@ -241,6 +241,31 @@ impl TkContext {
           eprintln!("Error: {}", r);
         }
       }
+      WindowEvent::MouseInput { state, button, .. } => {
+        if let Err(err) =
+          self
+            .event_bindings
+            .borrow()
+            .handle_winit_mouse_event(tcl_event_loop, ".", state, button)
+        {
+          eprintln!("Error: {err}");
+        }
+      }
+      WindowEvent::CursorMoved { position, .. } => {
+        self
+          .event_bindings
+          .borrow_mut()
+          .handle_mouse_pos((position.x.trunc() as i64, position.y.trunc() as i64));
+
+        if let Err(err) =
+          self
+            .event_bindings
+            .borrow()
+            .handle_event(tcl_event_loop, ".", TclEventType::Motion, "")
+        {
+          eprintln!("Error: {err}");
+        }
+      }
       _ => {}
     }
   }
