@@ -50,13 +50,14 @@ pub struct EvalContext {
 pub struct EvalFrame {
   caller: Option<FrameId>,
   variables: HashMap<String, Binding>,
-  variable_revs: HashMap<String, u64>,
 }
+
+pub type Revision = u64;
 
 #[derive(Clone, Debug)]
 pub enum Binding {
-  Val(Value),
-  Ref(FrameId, String),
+  Val(Value, Revision),
+  Ref(FrameId, Rc<str>),
 }
 
 impl std::fmt::Debug for EvalContext {
@@ -342,13 +343,13 @@ impl EvalContext {
     loop {
       match self.frame(cur_frame).get_binding(cur_name)? {
         Binding::Ref(ref_frame, ref_name) => {
-          if *ref_frame == frame && ref_name == name {
+          if *ref_frame == frame && &**ref_name == name {
             panic!("circular reference to {}", ref_name);
           }
           cur_frame = *ref_frame;
           cur_name = ref_name;
         }
-        Binding::Val(v) => return Some(v),
+        Binding::Val(v, _) => return Some(v),
       }
     }
   }
@@ -359,13 +360,13 @@ impl EvalContext {
     loop {
       match self.frame(cur_frame).get_binding(cur_name) {
         Some(Binding::Ref(ref_frame, ref_name)) => {
-          if *ref_frame == frame && ref_name == name {
+          if *ref_frame == frame && &**ref_name == name {
             panic!("circular reference to {}", ref_name);
           }
           cur_frame = *ref_frame;
           cur_name = ref_name;
         }
-        Some(Binding::Val(_)) => return self.frame(cur_frame).get_rev(cur_name),
+        Some(Binding::Val(_, revision)) => return *revision,
         None => return 0,
       }
     }
@@ -373,21 +374,27 @@ impl EvalContext {
 
   pub fn set_variable(&mut self, frame: FrameId, name: &str, value: Value) {
     let mut cur_frame = frame;
-    let mut cur_name = name;
+    let mut cur_name: Option<Rc<str>> = None;
     loop {
-      match self.frame(cur_frame).get_binding(cur_name) {
+      let cur_name_resolved = cur_name.as_deref().unwrap_or(name);
+      let binding = self.frame_mut(cur_frame).get_binding_mut(cur_name_resolved);
+      match binding {
         Some(Binding::Ref(ref_frame, ref_name)) => {
-          if *ref_frame == frame && ref_name == name {
+          if *ref_frame == frame && &**ref_name == name {
             panic!("circular reference to {}", ref_name);
           }
           cur_frame = *ref_frame;
-          cur_name = ref_name;
+          cur_name = Some(Rc::clone(ref_name));
         }
-        Some(Binding::Val(_)) | None => {
-          let name = cur_name.to_string();
+        Some(Binding::Val(binding_value, revision)) => {
+          *binding_value = value;
+          *revision += 1;
+          return;
+        }
+        None => {
           self
             .frame_mut(cur_frame)
-            .set_binding(name.as_ref(), Binding::Val(value));
+            .set_binding(cur_name_resolved, Binding::Val(value, 1));
           return;
         }
       }
@@ -401,10 +408,9 @@ impl EvalContext {
     target_frame: FrameId,
     target_name: &str,
   ) {
-    self.frame_mut(ref_frame).set_binding(
-      ref_name,
-      Binding::Ref(target_frame, target_name.to_string()),
-    );
+    self
+      .frame_mut(ref_frame)
+      .set_binding(ref_name, Binding::Ref(target_frame, Rc::from(target_name)));
   }
 }
 
@@ -413,7 +419,6 @@ impl EvalFrame {
     EvalFrame {
       caller: None,
       variables: HashMap::default(),
-      variable_revs: HashMap::default(),
     }
   }
 
@@ -421,7 +426,6 @@ impl EvalFrame {
     EvalFrame {
       caller: Some(frame),
       variables: HashMap::default(),
-      variable_revs: HashMap::default(),
     }
   }
 
@@ -435,17 +439,6 @@ impl EvalFrame {
 
   pub fn set_binding(&mut self, name: &str, binding: Binding) {
     self.variables.insert(name.to_string(), binding);
-
-    self
-      .variable_revs
-      .entry(name.to_string())
-      .and_modify(|v| *v += 1)
-      .or_insert(1);
-  }
-
-  /// monotonically increasing counter that increases when variable is written
-  pub fn get_rev(&self, name: &str) -> u64 {
-    *self.variable_revs.get(name).unwrap_or(&0)
   }
 }
 
