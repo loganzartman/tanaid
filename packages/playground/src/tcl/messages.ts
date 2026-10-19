@@ -14,6 +14,8 @@ export type SerializedMouseButtonEvent = {
   eventType: MouseButtonEventType;
   button: number;
   modifiers: TclModifierKeys;
+  x: number;
+  y: number;
 };
 export type MouseButtonEventType = "down" | "up";
 export type SerializedMouseMotionEvent = {

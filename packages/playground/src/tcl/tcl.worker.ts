@@ -170,10 +170,10 @@ function handleMouseButtonEvent({ event }: Extract<HostMessage, { type: "mouse-b
   }
   switch (event.eventType) {
     case "down":
-      tk.handleMouseDown(".", event.button, event.modifiers);
+      tk.handleMouseDown(".", event.button, event.modifiers, event.x, event.y);
       break;
     case "up":
-      tk.handleMouseUp(".", event.button, event.modifiers);
+      tk.handleMouseUp(".", event.button, event.modifiers, event.x, event.y);
       break;
     default:
       impossible(event.eventType);
