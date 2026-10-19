@@ -265,10 +265,18 @@ impl TkContext {
         }
       }
       WindowEvent::CursorMoved { position, .. } => {
+        let pos = position.to_logical::<f64>(
+          self
+            .window
+            .borrow()
+            .as_ref()
+            .expect("window should be available in CursorMoved")
+            .scale_factor(),
+        );
         self
           .event_bindings
           .borrow_mut()
-          .handle_mouse_pos((position.x.trunc() as i32, position.y.trunc() as i32));
+          .handle_mouse_pos((pos.x.trunc() as i32, pos.y.trunc() as i32));
 
         if let Err(err) =
           self
