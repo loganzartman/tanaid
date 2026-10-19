@@ -5,8 +5,8 @@ export type WindowProps = ParentProps & {
   draggable?: boolean;
   onClose?: () => void;
   onFocusOut?: (event: FocusEvent) => void;
-  onPointerDown?: (event: PointerEvent) => void;
-  onPointerUp?: (event: PointerEvent) => void;
+  onPointerDown?: (event: PointerEvent, data: { x: number; y: number }) => void;
+  onPointerUp?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onPointerMove?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onKeyDown?: (event: KeyboardEvent) => void;
   onKeyUp?: (event: KeyboardEvent) => void;
@@ -66,15 +66,19 @@ export function Window(props: WindowProps) {
     setY(Math.round(wy0 + (py - py0) / mouseScale()));
   };
 
+  const dataFromPointerEvent = (event: PointerEvent) => {
+    const rect = childrenContainerRef.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) / mouseScale(),
+      y: (event.clientY - rect.top) / mouseScale(),
+    };
+  };
+
   createEffect(
     () => props.onPointerMove,
     (onPointerMove) => {
       const handlePointerMove = (event: PointerEvent) => {
-        const rect = childrenContainerRef.getBoundingClientRect();
-        onPointerMove?.(event, {
-          x: (event.clientX - rect.left) / mouseScale(),
-          y: (event.clientY - rect.top) / mouseScale(),
-        });
+        onPointerMove?.(event, dataFromPointerEvent(event));
       };
       document.addEventListener("pointermove", handlePointerMove, false);
       return () => {
@@ -136,8 +140,8 @@ export function Window(props: WindowProps) {
       <div
         ref={childrenContainerRef}
         class="window-body flex flex-1"
-        onPointerDown={props.onPointerDown}
-        onPointerUp={props.onPointerUp}
+        onPointerDown={(event) => props.onPointerDown?.(event, dataFromPointerEvent(event))}
+        onPointerUp={(event) => props.onPointerUp?.(event, dataFromPointerEvent(event))}
         onContextMenu={(e) => e.preventDefault()}
       >
         {props.children}
