@@ -3,6 +3,8 @@ import {
   hostMessage,
   type EventLoopStatus,
   type SerializedKeyboardEvent,
+  type SerializedMouseButtonEvent,
+  type SerializedMouseMotionEvent,
   type WorkerMessage,
 } from "./messages";
 import { impossible } from "../impossible";
@@ -17,6 +19,8 @@ export type TclRunner = {
   run: (options: RunOptions) => Promise<string>;
   stop: () => void;
   handleKeyEvent: (event: SerializedKeyboardEvent) => void;
+  handleMouseButtonEvent: (event: SerializedMouseButtonEvent) => void;
+  handleMouseMotionEvent: (event: SerializedMouseMotionEvent) => void;
 };
 
 /**
@@ -131,7 +135,15 @@ export function createTclRunner({
     worker?.postMessage(hostMessage({ type: "key-event", event }));
   };
 
-  return { run, stop, getState, handleKeyEvent };
+  const handleMouseButtonEvent: TclRunner["handleMouseButtonEvent"] = (event) => {
+    worker?.postMessage(hostMessage({ type: "mouse-button-event", event }));
+  };
+
+  const handleMouseMotionEvent: TclRunner["handleMouseMotionEvent"] = (event) => {
+    worker?.postMessage(hostMessage({ type: "mouse-motion-event", event }));
+  };
+
+  return { run, stop, getState, handleKeyEvent, handleMouseButtonEvent, handleMouseMotionEvent };
 }
 
 export class InterruptedError extends Error {}

@@ -32,7 +32,7 @@ pub struct Value {
 }
 
 /// Return "s" if it's a valid Tcl bare word, else return "{s}"
-fn maybe_quote(s: &str) -> String {
+pub fn maybe_quote(s: &str) -> String {
   static RE_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^[^$\[\]{}()";\s]+$"#).unwrap());
 
   if RE_WORD.is_match(s) {

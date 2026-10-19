@@ -172,6 +172,21 @@ impl TkContext {
     self.renderer.replace(None);
   }
 
+  pub fn set_mouse_pos(&self, pos: (i32, i32)) {
+    self.event_bindings.borrow_mut().handle_mouse_pos(pos);
+  }
+
+  pub fn handle_motion_event(
+    &self,
+    event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
+    tag: &str,
+    pos: (i32, i32),
+    modifiers: ModifiersState,
+  ) -> Result<(), EvalError> {
+    self.set_mouse_pos(pos);
+    self.handle_event(event_loop, tag, TclEventType::Motion, "", modifiers)
+  }
+
   pub fn handle_event(
     &self,
     event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
@@ -239,6 +254,35 @@ impl TkContext {
             .handle_winit_key_event(tcl_event_loop, ".", event)
         {
           eprintln!("Error: {}", r);
+        }
+      }
+      WindowEvent::MouseInput { state, button, .. } => {
+        if let Err(err) =
+          self
+            .event_bindings
+            .borrow()
+            .handle_winit_mouse_event(tcl_event_loop, ".", state, button)
+        {
+          eprintln!("Error: {err}");
+        }
+      }
+      WindowEvent::CursorMoved { position, .. } => {
+        let Some(scale_factor) = self.window.borrow().as_ref().map(|w| w.scale_factor()) else {
+          return;
+        };
+        let pos = position.to_logical::<f64>(scale_factor);
+        self
+          .event_bindings
+          .borrow_mut()
+          .handle_mouse_pos((pos.x.trunc() as i32, pos.y.trunc() as i32));
+
+        if let Err(err) =
+          self
+            .event_bindings
+            .borrow()
+            .handle_event(tcl_event_loop, ".", TclEventType::Motion, "")
+        {
+          eprintln!("Error: {err}");
         }
       }
       _ => {}

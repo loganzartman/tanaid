@@ -23,7 +23,7 @@ pub(super) async fn eval(
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
   let (body_script, _) = body_parsed.as_ref();
 
-  while eval_expr(&test_expr, context, frame).await?.repr_int()? != 0 {
+  while eval_expr(&test_expr, context, frame).await?.repr_bool()? {
     match eval_script(&body_script, context, frame).await {
       Err(EvalError::BreakError) => break,
       Err(EvalError::ContinueError) => {}

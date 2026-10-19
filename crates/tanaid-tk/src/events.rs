@@ -1,12 +1,16 @@
-use regex::Regex;
+use regex::{Captures, Regex};
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::LazyLock};
 use tanaid::{
   eval::{GLOBAL_FRAME, eval_returnable_script},
   eval_error::EvalError,
   event_loop,
   parser::{self, ScriptNode},
+  value::maybe_quote,
 };
-use winit::{event::KeyEvent, keyboard::ModifiersState};
+use winit::{
+  event::{ElementState, KeyEvent, MouseButton},
+  keyboard::ModifiersState,
+};
 
 use crate::keysym::key_detail;
 
@@ -46,6 +50,7 @@ pub type EventBindingsData = HashMap<Tag, HashMap<Vec<TclEvent>, ScriptStr>>;
 pub struct EventBindings {
   bindings: EventBindingsData,
   modifiers: ModifiersState,
+  mouse_pos: (i32, i32),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -58,6 +63,9 @@ type TclEventDetail = String;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum TclEventType {
+  ButtonPress,
+  ButtonRelease,
+  Motion,
   KeyPress,
   KeyRelease,
 }
@@ -67,6 +75,7 @@ impl EventBindings {
     EventBindings {
       bindings: HashMap::new(),
       modifiers: ModifiersState::empty(),
+      mouse_pos: (0, 0),
     }
   }
 
@@ -90,6 +99,33 @@ impl EventBindings {
 
   pub fn handle_modifiers(&mut self, modifiers: ModifiersState) {
     self.modifiers = modifiers;
+  }
+
+  pub fn handle_mouse_pos(&mut self, pos: (i32, i32)) {
+    self.mouse_pos = pos;
+  }
+
+  pub fn handle_winit_mouse_event(
+    &self,
+    event_loop: Rc<RefCell<event_loop::EventLoop>>,
+    tag: &str,
+    state: ElementState,
+    button: MouseButton,
+  ) -> Result<(), EvalError> {
+    let event_type = match state {
+      ElementState::Pressed => TclEventType::ButtonPress,
+      ElementState::Released => TclEventType::ButtonRelease,
+    };
+    let detail = match button {
+      MouseButton::Left => "1",
+      MouseButton::Middle => "2",
+      MouseButton::Right => "3",
+      MouseButton::Back => "8",
+      MouseButton::Forward => "9",
+      // needs more complicated mapping; ignore
+      MouseButton::Other(_) => return Ok(()),
+    };
+    self.handle_event(event_loop, tag, event_type, detail)
   }
 
   /// handle a key event encoded as a winit KeyEvent
@@ -150,10 +186,10 @@ impl EventBindings {
         });
 
       if let Some((_, script_str)) = most_specific_matching_binding {
-        // TODO: template substitutions for key codes etc.
         // TODO: parse with caching
-        let script =
-          parser::parse(script_str).map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
+        let script_str = self.format_substitutions(script_str, &event.event_type, detail);
+        let script = parser::parse(script_str.as_ref())
+          .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
 
         event_loop
           .borrow_mut()
@@ -162,6 +198,33 @@ impl EventBindings {
     }
 
     Ok(())
+  }
+
+  fn format_substitutions(
+    &self,
+    script_src: &str,
+    event_type: &TclEventType,
+    detail: &str,
+  ) -> String {
+    static RE_SUB: LazyLock<Regex> = LazyLock::new(|| Regex::new("(?s)%(.)").unwrap());
+    RE_SUB
+      .replace_all(script_src, |caps: &Captures| {
+        let replaced = match caps[1].chars().next().unwrap() {
+          'b' => match event_type {
+            TclEventType::ButtonPress | TclEventType::ButtonRelease => detail.into(),
+            _ => "??".into(),
+          },
+          'K' => match event_type {
+            TclEventType::KeyPress | TclEventType::KeyRelease => detail.into(),
+            _ => "??".into(),
+          },
+          'x' => self.mouse_pos.0.to_string(),
+          'y' => self.mouse_pos.1.to_string(),
+          ch => ch.into(),
+        };
+        maybe_quote(&replaced)
+      })
+      .to_string()
   }
 }
 
@@ -246,6 +309,10 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
   let mut detail: Option<TclEventDetail> = None;
 
   match parts.next() {
+    Some(&"Button") => event_type = Some(TclEventType::ButtonPress),
+    Some(&"ButtonPress") => event_type = Some(TclEventType::ButtonPress),
+    Some(&"ButtonRelease") => event_type = Some(TclEventType::ButtonRelease),
+    Some(&"Motion") => event_type = Some(TclEventType::Motion),
     Some(&"Key") => event_type = Some(TclEventType::KeyPress),
     Some(&"KeyPress") => event_type = Some(TclEventType::KeyPress),
     Some(&"KeyRelease") => event_type = Some(TclEventType::KeyRelease),
@@ -267,6 +334,14 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
     return Err(EvalError::ArgumentError(
       "bind: extra characters after detail".to_string(),
     ));
+  }
+
+  if event_type.is_none()
+    && let Some(detail) = &detail
+    && let Some(ch) = detail.chars().next()
+    && ('1'..='5').contains(&ch)
+  {
+    event_type = Some(TclEventType::ButtonPress);
   }
 
   let e = TclEvent {

@@ -1,12 +1,14 @@
-import { createMemo, createSignal, Show, type ParentProps, type Ref } from "solid-js";
+import { createEffect, createMemo, createSignal, Show, type ParentProps, type Ref } from "solid-js";
 import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
   draggable?: boolean;
   onClose?: () => void;
   onFocusOut?: (event: FocusEvent) => void;
-  onPointerDown?: (event: PointerEvent) => void;
-  onPointerUp?: (event: PointerEvent) => void;
+  onPointerDown?: (event: PointerEvent, data: { x: number; y: number }) => void;
+  onPointerUp?: (event: PointerEvent, data: { x: number; y: number }) => void;
+  onPointerMove?: (event: PointerEvent, data: { x: number; y: number }) => void;
+  onPointerCancel?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onKeyDown?: (event: KeyboardEvent) => void;
   onKeyUp?: (event: KeyboardEvent) => void;
   title?: string;
@@ -30,6 +32,8 @@ export function Window(props: WindowProps) {
   let windowRef!: HTMLDivElement;
   // oxlint-disable-next-line no-unassigned-vars
   let titlebarRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
+  let childrenContainerRef!: HTMLDivElement;
 
   const handleTitlebarDown = (event: PointerEvent) => {
     windowRef.focus();
@@ -62,6 +66,27 @@ export function Window(props: WindowProps) {
     setX(Math.round(wx0 + (px - px0) / mouseScale()));
     setY(Math.round(wy0 + (py - py0) / mouseScale()));
   };
+
+  const dataFromPointerEvent = (event: PointerEvent) => {
+    const rect = childrenContainerRef.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) / mouseScale(),
+      y: (event.clientY - rect.top) / mouseScale(),
+    };
+  };
+
+  createEffect(
+    () => props.onPointerMove,
+    (onPointerMove) => {
+      const handlePointerMove = (event: PointerEvent) => {
+        onPointerMove?.(event, dataFromPointerEvent(event));
+      };
+      document.addEventListener("pointermove", handlePointerMove, false);
+      return () => {
+        document.removeEventListener("pointermove", handlePointerMove);
+      };
+    },
+  );
 
   return (
     <div
@@ -114,9 +139,15 @@ export function Window(props: WindowProps) {
         </div>
       </div>
       <div
+        ref={childrenContainerRef}
         class="window-body flex flex-1"
-        onPointerDown={props.onPointerDown}
-        onPointerUp={props.onPointerUp}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          props.onPointerDown?.(event, dataFromPointerEvent(event));
+        }}
+        onPointerUp={(event) => props.onPointerUp?.(event, dataFromPointerEvent(event))}
+        onPointerCancel={(event) => props.onPointerCancel?.(event, dataFromPointerEvent(event))}
+        onContextMenu={(e) => e.preventDefault()}
       >
         {props.children}
       </div>

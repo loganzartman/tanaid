@@ -10,6 +10,19 @@ export type SerializedKeyboardEvent = {
   modifiers: TclModifierKeys;
 };
 export type KeyboardEventType = "down" | "up";
+export type SerializedMouseButtonEvent = {
+  eventType: MouseButtonEventType;
+  button: number;
+  modifiers: TclModifierKeys;
+  x: number;
+  y: number;
+};
+export type MouseButtonEventType = "down" | "up";
+export type SerializedMouseMotionEvent = {
+  modifiers: TclModifierKeys;
+  x: number;
+  y: number;
+};
 
 export type HostMessage =
   | { type: "init"; offscreenCanvas: OffscreenCanvas }
@@ -17,6 +30,14 @@ export type HostMessage =
   | {
       type: "key-event";
       event: SerializedKeyboardEvent;
+    }
+  | {
+      type: "mouse-button-event";
+      event: SerializedMouseButtonEvent;
+    }
+  | {
+      type: "mouse-motion-event";
+      event: SerializedMouseMotionEvent;
     };
 export type WorkerMessage =
   | { type: "ready" }

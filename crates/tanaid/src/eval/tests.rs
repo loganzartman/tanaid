@@ -383,6 +383,27 @@ async fn eval_if_simple() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[pollster::test]
+async fn eval_if_boolean_string() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("if {$x} {expr yes} {expr no}")?;
+  for (x, expected) in [("true", "yes"), ("false", "no"), ("on", "yes"), ("no", "no")] {
+    let mut ctx = EvalContext::new();
+    ctx.set_variable(GLOBAL_FRAME, "x", x.into());
+    let mut result = eval(&ast, &mut ctx).await?;
+    assert_eq!(result.repr_str()?, expected, "x = {x}");
+  }
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_while_boolean_string() -> Result<(), Box<dyn std::error::Error>> {
+  let ast = parser::parse("set go true; set n 0; while {$go} {incr n; set go false}; set n")?;
+  let mut ctx = EvalContext::new();
+  let mut result = eval(&ast, &mut ctx).await?;
+  assert_eq!(result.repr_str()?, "1");
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_if_verbose() -> Result<(), Box<dyn std::error::Error>> {
   let ast = parser::parse("if {$x} then {expr yes} else {expr no}")?;
   {
