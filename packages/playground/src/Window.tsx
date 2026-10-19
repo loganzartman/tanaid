@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show, type ParentProps, type Ref } from "solid-js";
+import { createEffect, createMemo, createSignal, Show, type ParentProps, type Ref } from "solid-js";
 import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
@@ -7,6 +7,7 @@ export type WindowProps = ParentProps & {
   onFocusOut?: (event: FocusEvent) => void;
   onPointerDown?: (event: PointerEvent) => void;
   onPointerUp?: (event: PointerEvent) => void;
+  onPointerMove?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onKeyDown?: (event: KeyboardEvent) => void;
   onKeyUp?: (event: KeyboardEvent) => void;
   title?: string;
@@ -30,6 +31,8 @@ export function Window(props: WindowProps) {
   let windowRef!: HTMLDivElement;
   // oxlint-disable-next-line no-unassigned-vars
   let titlebarRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
+  let childrenContainerRef!: HTMLDivElement;
 
   const handleTitlebarDown = (event: PointerEvent) => {
     windowRef.focus();
@@ -62,6 +65,23 @@ export function Window(props: WindowProps) {
     setX(Math.round(wx0 + (px - px0) / mouseScale()));
     setY(Math.round(wy0 + (py - py0) / mouseScale()));
   };
+
+  createEffect(
+    () => props.onPointerMove,
+    (onPointerMove) => {
+      const handlePointerMove = (event: PointerEvent) => {
+        const rect = childrenContainerRef.getBoundingClientRect();
+        onPointerMove?.(event, {
+          x: (event.clientX - rect.left) / mouseScale(),
+          y: (event.clientY - rect.top) / mouseScale(),
+        });
+      };
+      document.addEventListener("pointermove", handlePointerMove, false);
+      return () => {
+        document.removeEventListener("pointermove", handlePointerMove);
+      };
+    },
+  );
 
   return (
     <div
@@ -114,6 +134,7 @@ export function Window(props: WindowProps) {
         </div>
       </div>
       <div
+        ref={childrenContainerRef}
         class="window-body flex flex-1"
         onPointerDown={props.onPointerDown}
         onPointerUp={props.onPointerUp}

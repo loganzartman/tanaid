@@ -172,6 +172,19 @@ impl TkContext {
     self.renderer.replace(None);
   }
 
+  pub fn handle_motion_event(
+    &self,
+    event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
+    tag: &str,
+    pos: (i32, i32),
+  ) -> Result<(), EvalError> {
+    self.event_bindings.borrow_mut().handle_mouse_pos(pos);
+    self
+      .event_bindings
+      .borrow()
+      .handle_event(event_loop, tag, TclEventType::Motion, "")
+  }
+
   pub fn handle_event(
     &self,
     event_loop: Rc<RefCell<tanaid::event_loop::EventLoop>>,
@@ -255,7 +268,7 @@ impl TkContext {
         self
           .event_bindings
           .borrow_mut()
-          .handle_mouse_pos((position.x.trunc() as i64, position.y.trunc() as i64));
+          .handle_mouse_pos((position.x.trunc() as i32, position.y.trunc() as i32));
 
         if let Err(err) =
           self

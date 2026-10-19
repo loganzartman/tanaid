@@ -278,6 +278,17 @@ export function App() {
             const modifiers = modifiersFromEvent(event);
             runner.handleKeyEvent({ eventType: "up", key, location, modifiers });
           }}
+          onPointerDown={(event) => {
+            const modifiers = modifiersFromEvent(event);
+            runner.handleMouseButtonEvent({ eventType: "down", button: event.button, modifiers });
+          }}
+          onPointerUp={(event) => {
+            const modifiers = modifiersFromEvent(event);
+            runner.handleMouseButtonEvent({ eventType: "up", button: event.button, modifiers });
+          }}
+          onPointerMove={(_, { x, y }) => {
+            runner.handleMouseMotionEvent({ x, y });
+          }}
           onFocusOut={() => {
             unPressPressedKeys();
           }}

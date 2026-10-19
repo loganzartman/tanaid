@@ -1,8 +1,12 @@
 mod key;
+mod mouse;
 
 use crate::{
   tcl::Tcl,
-  tk::key::{TclModifierKeys, key_from_js, key_location_from_js, modifiers_from_js},
+  tk::{
+    key::{TclModifierKeys, key_from_js, key_location_from_js, modifiers_from_js},
+    mouse::mouse_button_detail_from_js,
+  },
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 use tanaid::event_loop::EventLoop;
@@ -98,6 +102,60 @@ impl Tk {
         detail.as_str(),
         modifiers,
       )?;
+    }
+    Ok(())
+  }
+
+  #[wasm_bindgen(js_name = "handleMouseDown")]
+  pub fn handle_mouse_down(
+    &self,
+    tag: &str,
+    button: u8,
+
+    modifiers: Ts<TclModifierKeys>,
+  ) -> Result<(), JsError> {
+    self.handle_mouse_event(tag, TclEventType::ButtonPress, button, modifiers)
+  }
+
+  #[wasm_bindgen(js_name = "handleMouseUp")]
+  pub fn handle_mouse_up(
+    &self,
+    tag: &str,
+    button: u8,
+
+    modifiers: Ts<TclModifierKeys>,
+  ) -> Result<(), JsError> {
+    self.handle_mouse_event(tag, TclEventType::ButtonRelease, button, modifiers)
+  }
+
+  #[wasm_bindgen(js_name = "handleMouseMove")]
+  pub fn handle_mouse_move(&self, tag: &str, x: i32, y: i32) -> Result<(), JsError> {
+    if let Some(event_loop) = &self.event_loop {
+      self
+        .tk
+        .context
+        .handle_motion_event(Rc::clone(event_loop), tag, (x, y))?;
+    }
+    Ok(())
+  }
+
+  fn handle_mouse_event(
+    &self,
+    tag: &str,
+    event_type: TclEventType,
+    button: u8,
+    modifiers: Ts<TclModifierKeys>,
+  ) -> Result<(), JsError> {
+    if let Some(event_loop) = &self.event_loop {
+      let Some(detail) = mouse_button_detail_from_js(button) else {
+        // unsupported button
+        return Ok(());
+      };
+      let modifiers = modifiers_from_js(modifiers.to_rust()?);
+      self
+        .tk
+        .context
+        .handle_event(Rc::clone(event_loop), tag, event_type, &detail, modifiers)?;
     }
     Ok(())
   }

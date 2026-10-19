@@ -17,6 +17,12 @@ self.onmessage = async ({ data }: { data: HostMessage }) => {
     case "key-event":
       handleKeyEvent(data);
       break;
+    case "mouse-button-event":
+      handleMouseButtonEvent(data);
+      break;
+    case "mouse-motion-event":
+      handleMouseMotionEvent(data);
+      break;
     default:
       impossible(data);
   }
@@ -156,6 +162,29 @@ function handleKeyEvent({ event }: Extract<HostMessage, { type: "key-event" }>) 
     default:
       impossible(event.eventType);
   }
+}
+
+function handleMouseButtonEvent({ event }: Extract<HostMessage, { type: "mouse-button-event" }>) {
+  if (!tk) {
+    return;
+  }
+  switch (event.eventType) {
+    case "down":
+      tk.handleMouseDown(".", event.button, event.modifiers);
+      break;
+    case "up":
+      tk.handleMouseUp(".", event.button, event.modifiers);
+      break;
+    default:
+      impossible(event.eventType);
+  }
+}
+
+function handleMouseMotionEvent({ event }: Extract<HostMessage, { type: "mouse-motion-event" }>) {
+  if (!tk) {
+    return;
+  }
+  tk.handleMouseMove(".", event.x, event.y);
 }
 
 self.postMessage(workerMessage({ type: "ready" }));

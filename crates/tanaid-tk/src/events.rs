@@ -49,7 +49,7 @@ pub type EventBindingsData = HashMap<Tag, HashMap<Vec<TclEvent>, ScriptStr>>;
 pub struct EventBindings {
   bindings: EventBindingsData,
   modifiers: ModifiersState,
-  mouse_pos: (i64, i64),
+  mouse_pos: (i32, i32),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -100,7 +100,7 @@ impl EventBindings {
     self.modifiers = modifiers;
   }
 
-  pub fn handle_mouse_pos(&mut self, pos: (i64, i64)) {
+  pub fn handle_mouse_pos(&mut self, pos: (i32, i32)) {
     self.mouse_pos = pos;
   }
 
