@@ -1,4 +1,4 @@
-use crate::eval::{self, EvalCmdResult, EvalContext};
+use crate::eval::{self, EvalContext};
 use crate::eval_error::EvalError;
 use crate::event_loop::{EventAction, EventLoop};
 use crate::parser::ScriptNode;
@@ -43,7 +43,7 @@ enum InterpreterState {
   Idle(EvalContext),
   Running(
     Rc<RefCell<EventLoop>>,
-    Pin<Box<dyn Future<Output = (EvalContext, EvalCmdResult)>>>,
+    Pin<Box<dyn Future<Output = (EvalContext, Result<StepResult, EvalError>)>>>,
   ),
 }
 
@@ -54,7 +54,8 @@ pub enum StepResult {
   WaitDuration(Duration),
   /// The host should wait indefinitely
   Wait,
-  /// The interpreter finished running and yielded a result. The host should wait indefinitely.
+  /// The script passed to [Interpreter::start] finished and yielded a result.
+  /// The host should call step() again to dispatch any queued events.
   Done(Value),
 }
 
@@ -109,7 +110,7 @@ impl Interpreter {
       Box::pin(async move {
         let result = async {
           while context.poll_ready_event().await? && !event_loop.borrow().past_yield_deadline() {}
-          Ok(Value::none())
+          next_step(&event_loop)
         }
         .await;
         (context, result)
@@ -135,19 +136,13 @@ impl Interpreter {
         let mut cx = Context::from_waker(waker);
         match result_future.as_mut().poll(&mut cx) {
           Poll::Ready(v) => v,
-          Poll::Pending => {
-            return match event_loop.borrow_mut().next_action()? {
-              EventAction::Ready => Ok(StepResult::Again),
-              EventAction::WaitDuration(duration) => Ok(StepResult::WaitDuration(duration)),
-              EventAction::Idle => Ok(StepResult::Wait),
-            };
-          }
+          Poll::Pending => return next_step(event_loop),
         }
       }
     };
 
     self.state = InterpreterState::Idle(context);
-    Ok(StepResult::Done(result?))
+    result
   }
 
   fn event_loop(&self) -> Option<Rc<RefCell<EventLoop>>> {
@@ -191,13 +186,24 @@ impl Interpreter {
     self.state = InterpreterState::Running(
       Rc::clone(&context.event_loop),
       Box::pin(async move {
-        let result = eval::eval(&script, &mut context).await;
+        let result = eval::eval(&script, &mut context)
+          .await
+          .map(StepResult::Done);
         (context, result)
       }),
     );
 
     Ok(())
   }
+}
+
+/// What the host should do next, given the events queued in `event_loop`.
+fn next_step(event_loop: &RefCell<EventLoop>) -> Result<StepResult, EvalError> {
+  Ok(match event_loop.borrow_mut().next_action()? {
+    EventAction::Ready => StepResult::Again,
+    EventAction::WaitDuration(duration) => StepResult::WaitDuration(duration),
+    EventAction::Idle => StepResult::Wait,
+  })
 }
 
 #[cfg(all(test, not(target_family = "wasm")))]
@@ -406,7 +412,7 @@ mod tests {
     // the timer outlived the sleep, and the idle interpreter runs it
     assert!(matches!(
       interpreter.step(Waker::noop()),
-      Ok(StepResult::Done(_))
+      Ok(StepResult::Wait)
     ));
     let context = interpreter.take_context().unwrap();
     assert!(context.get_variable(GLOBAL_FRAME, "x").is_some());
@@ -417,10 +423,6 @@ mod tests {
     let (context, _clock) = context_with_manual_clock();
     let mut interpreter = start(context, "after 0 {set a 1}; after 0 {set b 1}");
 
-    assert!(matches!(
-      interpreter.step(Waker::noop()),
-      Ok(StepResult::Done(_))
-    ));
     assert!(matches!(
       interpreter.step(Waker::noop()),
       Ok(StepResult::Done(_))
@@ -445,10 +447,10 @@ mod tests {
       interpreter.step(Waker::noop()),
       Ok(StepResult::Done(_))
     ));
-    // the second event crosses the deadline
+    // the second event crosses the deadline, and the host is asked to step again for the third
     assert!(matches!(
       interpreter.step(Waker::noop()),
-      Ok(StepResult::Done(_))
+      Ok(StepResult::Again)
     ));
     let context = interpreter.take_context().unwrap();
     assert!(context.get_variable(GLOBAL_FRAME, "done").is_none());
@@ -456,7 +458,7 @@ mod tests {
 
     assert!(matches!(
       interpreter.step(Waker::noop()),
-      Ok(StepResult::Done(_))
+      Ok(StepResult::Wait)
     ));
     let context = interpreter.take_context().unwrap();
     assert!(context.get_variable(GLOBAL_FRAME, "done").is_some());
