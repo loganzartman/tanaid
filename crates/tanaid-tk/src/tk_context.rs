@@ -267,14 +267,10 @@ impl TkContext {
         }
       }
       WindowEvent::CursorMoved { position, .. } => {
-        let pos = position.to_logical::<f64>(
-          self
-            .window
-            .borrow()
-            .as_ref()
-            .expect("window should be available in CursorMoved")
-            .scale_factor(),
-        );
+        let Some(scale_factor) = self.window.borrow().as_ref().map(|w| w.scale_factor()) else {
+          return;
+        };
+        let pos = position.to_logical::<f64>(scale_factor);
         self
           .event_bindings
           .borrow_mut()
