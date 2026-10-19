@@ -138,6 +138,7 @@ export function Window(props: WindowProps) {
         class="window-body flex flex-1"
         onPointerDown={props.onPointerDown}
         onPointerUp={props.onPointerUp}
+        onContextMenu={(e) => e.preventDefault()}
       >
         {props.children}
       </div>
