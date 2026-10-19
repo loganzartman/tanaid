@@ -213,14 +213,12 @@ impl EventBindings {
             TclEventType::ButtonPress | TclEventType::ButtonRelease => detail.into(),
             _ => "??".into(),
           },
-          'd' => match event_type {
+          'K' => match event_type {
             TclEventType::KeyPress | TclEventType::KeyRelease => detail.into(),
             _ => "??".into(),
           },
           'x' => self.mouse_pos.0.to_string(),
-          'X' => self.mouse_pos.0.to_string(),
           'y' => self.mouse_pos.1.to_string(),
-          'Y' => self.mouse_pos.1.to_string(),
           ch => ch.into(),
         }
       })
