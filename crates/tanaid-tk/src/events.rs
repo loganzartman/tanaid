@@ -336,7 +336,8 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
     ));
   }
 
-  if let Some(detail) = &detail
+  if event_type.is_none()
+    && let Some(detail) = &detail
     && let Some(ch) = detail.chars().next()
     && ('1'..='5').contains(&ch)
   {
