@@ -336,6 +336,13 @@ fn parse_sequence_pattern(raw: &str) -> Result<TclEvent, EvalError> {
     ));
   }
 
+  if let Some(detail) = &detail
+    && let Some(ch) = detail.chars().next()
+    && ('1'..='5').contains(&ch)
+  {
+    event_type = Some(TclEventType::ButtonPress);
+  }
+
   let e = TclEvent {
     event_type: event_type.unwrap_or(TclEventType::KeyPress),
     modifiers,
