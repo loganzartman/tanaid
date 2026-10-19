@@ -1,16 +1,8 @@
+use crate::item::canvas_item::CanvasItem;
 use tanaid::eval_error::EvalError;
 use vello::Scene;
 use vello::kurbo::{self, Affine};
 use vello::peniko::{Color, Fill};
-
-pub trait CanvasItem {
-  /// Render the item in the scene
-  fn redraw(&self, scene: &mut Scene, transform: Affine);
-  /// Get the coordinates of the item
-  fn get_coords(&self) -> Vec<f64>;
-  /// Set the coordinates of the item. Errors on invalid coordinates.
-  fn set_coords(&mut self, coords: &[f64]) -> Result<(), EvalError>;
-}
 
 pub struct CanvasItemRect {
   pub x: f64,

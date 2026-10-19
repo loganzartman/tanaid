@@ -1,5 +1,5 @@
 use crate::canvas::CanvasWidget;
-use crate::canvas_item::CanvasItemRect;
+use crate::item::rect::CanvasItemRect;
 use crate::tk_context::TkContext;
 use tanaid::eval::EvalCmdResult;
 use tanaid::eval::EvalContext;
