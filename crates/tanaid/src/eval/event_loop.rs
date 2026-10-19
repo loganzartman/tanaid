@@ -87,6 +87,11 @@ impl EventLoop {
     self.waker = None;
   }
 
+  /// whether the current execution step has used up its time
+  pub fn past_yield_deadline(&self) -> bool {
+    matches!(self.clock_monotonic(), Ok(time) if time >= self.yield_deadline)
+  }
+
   /// mark the end of an execution step
   pub fn end_step(&mut self, waker: &Waker) {
     match &mut self.waker {
@@ -209,14 +214,9 @@ impl Future for WaitForEvent {
   type Output = Result<Box<dyn Event>, EvalError>;
 
   fn poll(mut self: Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-    if !self.yielded_once {
-      let event_loop = Rc::clone(&self.event_loop);
-      if let Ok(time) = event_loop.borrow().clock_monotonic()
-        && time >= event_loop.borrow().yield_deadline
-      {
-        self.yielded_once = true;
-        return Poll::Pending;
-      }
+    if !self.yielded_once && self.event_loop.borrow().past_yield_deadline() {
+      self.yielded_once = true;
+      return Poll::Pending;
     }
 
     match self.event_loop.borrow_mut().take_event() {

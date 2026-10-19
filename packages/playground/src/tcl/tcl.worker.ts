@@ -59,6 +59,20 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
     tk.redraw(1);
   };
 
+  let lastDrawTime: number | undefined;
+  let lastDraw: Promise<void> | undefined;
+  const drawFrame = async (time: number) => {
+    // the redraw loop and yield can both run in one animation frame; draw once
+    if (!tk) {
+      return;
+    }
+    if (time !== lastDrawTime) {
+      lastDrawTime = time;
+      lastDraw = undefined;
+    }
+    await (lastDraw ??= updateWindow(tk));
+  };
+
   try {
     tcl = createTcl({
       handleStdout(value) {
@@ -67,17 +81,26 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
           flushStdout();
         }
       },
+      yield(resume) {
+        requestAnimationFrame((time) => {
+          drawFrame(time)
+            .catch((error) => {
+              reportError(error);
+            })
+            .finally(resume);
+        });
+      },
     });
 
     tk = Tk.create();
     tk.install(tcl);
 
-    requestAnimationFrame(function redraw() {
+    requestAnimationFrame(function redraw(time) {
       if (!tk) {
         return;
       }
 
-      updateWindow(tk)
+      drawFrame(time)
         .then(() => {
           requestAnimationFrame(redraw);
         })

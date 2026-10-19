@@ -1,5 +1,6 @@
 use js_sys::{Date, Function, Reflect, global};
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::future::poll_fn;
 use std::task::{Poll, Waker};
 use std::time::Duration;
@@ -20,6 +21,8 @@ pub struct Tcl {
   wake_timeout: Option<(JsValue, Closure<dyn FnMut()>)>,
   set_timeout: Function,
   clear_timeout: Function,
+  yield_to_host: Function,
+  yield_pending: Rc<Cell<bool>>,
 }
 
 #[derive(Tsify, Serialize, Deserialize)]
@@ -36,6 +39,10 @@ pub struct TclOptions {
   #[serde(with = "serde_wasm_bindgen::preserve")]
   #[tsify(type = "(timeoutId: unknown) => void")]
   pub clear_timeout: Function,
+
+  #[serde(rename = "yield", with = "serde_wasm_bindgen::preserve")]
+  #[tsify(type = "(resume: () => void) => void")]
+  pub yield_to_host: Function,
 }
 
 #[derive(Tsify, Serialize, Deserialize)]
@@ -93,6 +100,8 @@ impl Tcl {
       wake_timeout: None,
       set_timeout: opts.set_timeout,
       clear_timeout: opts.clear_timeout,
+      yield_to_host: opts.yield_to_host,
+      yield_pending: Rc::new(Cell::new(false)),
     })
   }
 
@@ -116,6 +125,10 @@ impl Tcl {
     self.interpreter.start(&parsed)?;
 
     let result: Result<Value, EvalError> = poll_fn(|cx| {
+      if self.yield_pending.get() {
+        return Poll::Pending;
+      }
+
       let step = self.interpreter.step(cx.waker())?;
 
       if let Some(handler) = &handle_event_loop_status {
@@ -130,7 +143,7 @@ impl Tcl {
       match step {
         // need to do more work; yield and re-run immediately
         StepResult::Again => {
-          self.set_wake_timeout(cx.waker(), Duration::ZERO)?;
+          self.yield_to_host(cx.waker())?;
           Poll::Pending
         }
         // done; resolve future
@@ -152,12 +165,28 @@ impl Tcl {
     }
   }
 
+  fn yield_to_host(&mut self, waker: &Waker) -> Result<(), EvalError> {
+    self.clear_wake_timeout();
+    self.yield_pending.set(true);
+
+    let yield_pending = Rc::clone(&self.yield_pending);
+    let waker = waker.clone();
+    // frees itself when called
+    let resume = Closure::once_into_js(move || {
+      yield_pending.set(false);
+      waker.wake();
+    });
+    if let Err(err) = self.yield_to_host.call1(&JsValue::UNDEFINED, &resume) {
+      self.yield_pending.set(false);
+      return Err(js_value_to_evalerror(err));
+    }
+
+    Ok(())
+  }
+
   fn set_wake_timeout(&mut self, waker: &Waker, duration: Duration) -> Result<(), EvalError> {
     // avoid accumulating timeouts
-    if let Some((id, _closure)) = self.wake_timeout.take() {
-      // clearTimeout failure shouldn't occur; if it does, continue.
-      let _ = self.clear_timeout.call1(&JsValue::UNDEFINED, &id);
-    }
+    self.clear_wake_timeout();
 
     let waker = waker.clone();
     let closure = Closure::once(move || waker.wake());
@@ -173,12 +202,17 @@ impl Tcl {
 
     Ok(())
   }
+
+  fn clear_wake_timeout(&mut self) {
+    if let Some((id, _closure)) = self.wake_timeout.take() {
+      // clearTimeout failure shouldn't occur; if it does, continue.
+      let _ = self.clear_timeout.call1(&JsValue::UNDEFINED, &id);
+    }
+  }
 }
 
 impl Drop for Tcl {
   fn drop(&mut self) {
-    if let Some((id, _closure)) = self.wake_timeout.take() {
-      let _ = self.clear_timeout.call1(&JsValue::UNDEFINED, &id);
-    }
+    self.clear_wake_timeout();
   }
 }
