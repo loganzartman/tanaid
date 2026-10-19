@@ -18,6 +18,10 @@ export function createTcl(options: CreateTclOptions = {}): Tcl {
       globalThis.clearTimeout(timeoutId as number);
     },
 
+    yield: (resume) => {
+      globalThis.setTimeout(resume, 0);
+    },
+
     ...options,
   } satisfies TclOptions);
 }
