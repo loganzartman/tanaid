@@ -306,7 +306,7 @@ export function App() {
             }
           }}
           onPointerMove={(event, position) => {
-            runner.handleMouseMotionEvent(position);
+            runner.handleMouseMotionEvent({ ...position, modifiers: modifiersFromEvent(event) });
             // presses and releases while another button is down arrive as pointermove
             if (event.isPrimary && buttonsDown !== 0) {
               setButtonsDown(event.buttons, event, position);

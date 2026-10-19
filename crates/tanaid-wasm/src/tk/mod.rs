@@ -131,12 +131,19 @@ impl Tk {
   }
 
   #[wasm_bindgen(js_name = "handleMouseMove")]
-  pub fn handle_mouse_move(&self, tag: &str, x: i32, y: i32) -> Result<(), JsError> {
+  pub fn handle_mouse_move(
+    &self,
+    tag: &str,
+    modifiers: Ts<TclModifierKeys>,
+    x: i32,
+    y: i32,
+  ) -> Result<(), JsError> {
     if let Some(event_loop) = &self.event_loop {
+      let modifiers = modifiers_from_js(modifiers.to_rust()?);
       self
         .tk
         .context
-        .handle_motion_event(Rc::clone(event_loop), tag, (x, y))?;
+        .handle_motion_event(Rc::clone(event_loop), tag, (x, y), modifiers)?;
     }
     Ok(())
   }
@@ -151,10 +158,7 @@ impl Tk {
     y: i32,
   ) -> Result<(), JsError> {
     if let Some(event_loop) = &self.event_loop {
-      self
-        .tk
-        .context
-        .handle_motion_event(Rc::clone(event_loop), tag, (x, y))?;
+      self.tk.context.set_mouse_pos((x, y));
 
       let Some(detail) = mouse_button_detail_from_js(button) else {
         // unsupported button

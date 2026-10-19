@@ -184,7 +184,7 @@ function handleMouseMotionEvent({ event }: Extract<HostMessage, { type: "mouse-m
   if (!tk) {
     return;
   }
-  tk.handleMouseMove(".", event.x, event.y);
+  tk.handleMouseMove(".", event.modifiers, event.x, event.y);
 }
 
 self.postMessage(workerMessage({ type: "ready" }));
