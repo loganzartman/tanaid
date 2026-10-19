@@ -5,6 +5,7 @@ use tanaid::{
   eval_error::EvalError,
   event_loop,
   parser::{self, ScriptNode},
+  value::maybe_quote,
 };
 use winit::{
   event::{ElementState, KeyEvent, MouseButton},
@@ -208,7 +209,7 @@ impl EventBindings {
     static RE_SUB: LazyLock<Regex> = LazyLock::new(|| Regex::new("(?s)%(.)").unwrap());
     RE_SUB
       .replace_all(script_src, |caps: &Captures| {
-        match caps[1].chars().next().unwrap() {
+        let replaced = match caps[1].chars().next().unwrap() {
           'b' => match event_type {
             TclEventType::ButtonPress | TclEventType::ButtonRelease => detail.into(),
             _ => "??".into(),
@@ -220,7 +221,8 @@ impl EventBindings {
           'x' => self.mouse_pos.0.to_string(),
           'y' => self.mouse_pos.1.to_string(),
           ch => ch.into(),
-        }
+        };
+        maybe_quote(&replaced)
       })
       .to_string()
   }
