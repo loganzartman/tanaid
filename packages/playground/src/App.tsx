@@ -161,6 +161,23 @@ export function App() {
     keysDown.clear();
   };
 
+  let buttonsDown = 0;
+  const setButtonsDown = (
+    buttons: number,
+    event: PointerEvent,
+    { x, y }: { x: number; y: number },
+  ) => {
+    const changed = buttonsDown ^ buttons;
+    buttonsDown = buttons;
+    const modifiers = modifiersFromEvent(event);
+    BUTTON_FOR_BIT.forEach((button, bit) => {
+      if (changed & (1 << bit)) {
+        const eventType = buttons & (1 << bit) ? "down" : "up";
+        runner.handleMouseButtonEvent({ eventType, button, modifiers, x, y });
+      }
+    });
+  };
+
   return (
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
@@ -278,28 +295,27 @@ export function App() {
             const modifiers = modifiersFromEvent(event);
             runner.handleKeyEvent({ eventType: "up", key, location, modifiers });
           }}
-          onPointerDown={(event, { x, y }) => {
-            const modifiers = modifiersFromEvent(event);
-            runner.handleMouseButtonEvent({
-              eventType: "down",
-              button: event.button,
-              modifiers,
-              x,
-              y,
-            });
+          onPointerDown={(event, position) => {
+            if (event.isPrimary) {
+              setButtonsDown(event.buttons, event, position);
+            }
           }}
-          onPointerUp={(event, { x, y }) => {
-            const modifiers = modifiersFromEvent(event);
-            runner.handleMouseButtonEvent({
-              eventType: "up",
-              button: event.button,
-              modifiers,
-              x,
-              y,
-            });
+          onPointerUp={(event, position) => {
+            if (event.isPrimary) {
+              setButtonsDown(event.buttons, event, position);
+            }
           }}
-          onPointerMove={(_, { x, y }) => {
-            runner.handleMouseMotionEvent({ x, y });
+          onPointerMove={(event, position) => {
+            runner.handleMouseMotionEvent(position);
+            // presses and releases while another button is down arrive as pointermove
+            if (event.isPrimary && buttonsDown !== 0) {
+              setButtonsDown(event.buttons, event, position);
+            }
+          }}
+          onPointerCancel={(event, position) => {
+            if (event.isPrimary) {
+              setButtonsDown(0, event, position);
+            }
           }}
           onFocusOut={() => {
             unPressPressedKeys();
@@ -311,6 +327,9 @@ export function App() {
     </PixelPerfect>
   );
 }
+
+/** Bit `i` of `PointerEvent.buttons` is the button with this `PointerEvent.button` value. */
+const BUTTON_FOR_BIT = [0, 2, 1, 3, 4];
 
 function modifiersFromEvent(event: KeyboardEvent | PointerEvent): TclModifierKeys {
   return {

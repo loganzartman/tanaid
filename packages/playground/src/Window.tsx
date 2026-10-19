@@ -8,6 +8,7 @@ export type WindowProps = ParentProps & {
   onPointerDown?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onPointerUp?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onPointerMove?: (event: PointerEvent, data: { x: number; y: number }) => void;
+  onPointerCancel?: (event: PointerEvent, data: { x: number; y: number }) => void;
   onKeyDown?: (event: KeyboardEvent) => void;
   onKeyUp?: (event: KeyboardEvent) => void;
   title?: string;
@@ -140,8 +141,12 @@ export function Window(props: WindowProps) {
       <div
         ref={childrenContainerRef}
         class="window-body flex flex-1"
-        onPointerDown={(event) => props.onPointerDown?.(event, dataFromPointerEvent(event))}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          props.onPointerDown?.(event, dataFromPointerEvent(event));
+        }}
         onPointerUp={(event) => props.onPointerUp?.(event, dataFromPointerEvent(event))}
+        onPointerCancel={(event) => props.onPointerCancel?.(event, dataFromPointerEvent(event))}
         onContextMenu={(e) => e.preventDefault()}
       >
         {props.children}
