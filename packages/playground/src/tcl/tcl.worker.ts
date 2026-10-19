@@ -60,13 +60,17 @@ async function handleRun({ source }: Extract<HostMessage, { type: "run" }>) {
   };
 
   let lastDrawTime: number | undefined;
+  let lastDraw: Promise<void> | undefined;
   const drawFrame = async (time: number) => {
     // the redraw loop and yield can both run in one animation frame; draw once
-    if (!tk || time === lastDrawTime) {
+    if (!tk) {
       return;
     }
-    lastDrawTime = time;
-    await updateWindow(tk);
+    if (time !== lastDrawTime) {
+      lastDrawTime = time;
+      lastDraw = undefined;
+    }
+    await (lastDraw ??= updateWindow(tk));
   };
 
   try {
