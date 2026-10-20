@@ -141,10 +141,7 @@ export function Window(props: WindowProps) {
       <div
         ref={childrenContainerRef}
         class="window-body flex flex-1"
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId);
-          props.onPointerDown?.(event, dataFromPointerEvent(event));
-        }}
+        onPointerDown={(event) => props.onPointerDown?.(event, dataFromPointerEvent(event))}
         onPointerUp={(event) => props.onPointerUp?.(event, dataFromPointerEvent(event))}
         onPointerCancel={(event) => props.onPointerCancel?.(event, dataFromPointerEvent(event))}
         onContextMenu={(e) => e.preventDefault()}

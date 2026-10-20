@@ -296,6 +296,7 @@ export function App() {
             runner.handleKeyEvent({ eventType: "up", key, location, modifiers });
           }}
           onPointerDown={(event, position) => {
+            (event.currentTarget as Element).setPointerCapture(event.pointerId);
             if (event.isPrimary) {
               setButtonsDown(event.buttons, event, position);
             }
