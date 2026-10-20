@@ -107,3 +107,52 @@ fn create_line(opts: &mut [Value], widget: &mut CanvasWidget) -> EvalCmdResult {
   let (coords, _options) = parse_coords_and_options("line", opts)?;
   insert_item(widget, CanvasItemLine::default().with_coords(&coords)?)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// parse args as `create line` would, returning coords and option names
+  fn parse(args: &[&str]) -> Result<(Vec<f64>, Vec<String>), EvalError> {
+    let mut args: Vec<Value> = args.iter().map(|s| Value::from(*s)).collect();
+    let (coords, options) = parse_coords_and_options("line", &mut args)?;
+    let names = options.iter().map(|[name, _]| name.to_string()).collect();
+    Ok((coords, names))
+  }
+
+  #[test]
+  fn splits_coords_and_options() {
+    let (coords, names) = parse(&["0", "0", "10", "10", "-fill", "red", "-width", "2"]).unwrap();
+    assert_eq!(coords, [0., 0., 10., 10.]);
+    assert_eq!(names, ["-fill", "-width"]);
+  }
+
+  #[test]
+  fn negative_coords_are_not_options() {
+    let (coords, names) = parse(&["-5", "-5.5", "10", "-Inf"]).unwrap();
+    assert_eq!(coords, [-5., -5.5, 10., f64::NEG_INFINITY]);
+    assert!(names.is_empty());
+  }
+
+  #[test]
+  fn coords_as_single_list() {
+    let (coords, names) = parse(&["0 0 10 10", "-fill", "red"]).unwrap();
+    assert_eq!(coords, [0., 0., 10., 10.]);
+    assert_eq!(names, ["-fill"]);
+  }
+
+  #[test]
+  fn rejects_missing_option_value() {
+    assert!(parse(&["0", "0", "10", "10", "-fill"]).is_err());
+  }
+
+  #[test]
+  fn rejects_bad_coord() {
+    assert!(parse(&["0", "0", "10", "1O"]).is_err());
+  }
+
+  #[test]
+  fn rejects_no_coords() {
+    assert!(parse(&["-fill", "red"]).is_err());
+  }
+}
