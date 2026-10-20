@@ -1,4 +1,4 @@
-use crate::{canvas_item::CanvasItem, widget::Widget};
+use crate::{item::canvas_item::CanvasItem, widget::Widget};
 use indexmap::IndexMap;
 use vello::{Scene, kurbo::Affine};
 

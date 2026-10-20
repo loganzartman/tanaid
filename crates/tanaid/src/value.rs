@@ -140,7 +140,7 @@ impl Value {
     let x = self
       .repr_str()?
       .parse::<i64>()
-      .map_err(|e| EvalError::Generic(e.to_string()))?;
+      .map_err(|e| EvalError::Generic(format!("{}: {}", e, self)))?;
     self.repr = Repr::Int(x);
     Ok(x)
   }
@@ -156,7 +156,7 @@ impl Value {
     let x: f64 = self
       .repr_str()?
       .parse::<f64>()
-      .map_err(|e| EvalError::Generic(e.to_string()))?;
+      .map_err(|e| EvalError::Generic(format!("{}: {}", e, self)))?;
     self.repr = Repr::Float(x);
     Ok(x)
   }
@@ -174,6 +174,15 @@ impl Value {
       return Ok(Number::Float(x));
     }
     Err(EvalError::NotNumericError(self.to_string()))
+  }
+
+  /// may or may not return a number if this Value is a number, otherwise returns None.
+  pub fn peek_number(&self) -> Option<Number> {
+    match self.repr {
+      Repr::Int(x) => Some(Number::Int(x)),
+      Repr::Float(x) => Some(Number::Float(x)),
+      Repr::None | Repr::Dict(_) | Repr::List(_) => None,
+    }
   }
 
   pub fn repr_dict(&mut self) -> Result<Rc<Dict>, EvalError> {

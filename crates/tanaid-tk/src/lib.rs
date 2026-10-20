@@ -1,7 +1,7 @@
 pub mod canvas;
-pub mod canvas_item;
 mod cmd;
 pub mod events;
+pub mod item;
 pub mod keysym;
 pub mod tk;
 pub mod tk_context;
