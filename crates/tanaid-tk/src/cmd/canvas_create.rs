@@ -53,7 +53,7 @@ fn is_option_name(value: &mut Value) -> bool {
   }
 
   match value.repr_str() {
-    Ok(val) => matches!(val.as_bytes(), [b'-', b'a'..b'z']),
+    Ok(val) => matches!(val.as_bytes(), [b'-', b'a'..=b'z', ..]),
     Err(_) => false,
   }
 }
