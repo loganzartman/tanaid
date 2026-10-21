@@ -50,7 +50,11 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         # The CLI opens a winit event loop at startup, which needs a display.
-        run: xvfb-run -a scripts/bench.sh "$BASE"
+        shell: bash # adds pipefail
+        run: xvfb-run -a scripts/bench.sh "$BASE" 2>&1 | tee "$RUNNER_TEMP/bench.log"
+      - name: Annotate failure
+        if: failure()
+        run: grep -iE '^(error|fatal)' "$RUNNER_TEMP/bench.log" | head -n 5 | sed 's/^/::error::/' || true
       - name: Write job summary
         run: cat target/bench/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on pull request
