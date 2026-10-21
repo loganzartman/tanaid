@@ -6,7 +6,7 @@ on:
     paths:
       - "crates/**"
       - "bench/**"
-      - "scripts/bench.sh"
+      - "scripts/bench*"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -39,7 +39,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tcl xvfb libxkbcommon-x11-0
       - name: Benchmark
         # The CLI's event loop needs a display even for non-GUI scripts.
-        run: xvfb-run -a scripts/bench.sh ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Allow user-space hardware counters when the runner exposes them.
+          sudo sysctl -w kernel.perf_event_paranoid=2
+          xvfb-run -a scripts/bench.sh ${{ github.event.pull_request.base.sha }}
       - name: Comment on pull request
         # Pull requests from forks get a read-only token.
         if: github.event.pull_request.head.repo.full_name == github.repository
