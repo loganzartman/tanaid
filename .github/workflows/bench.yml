@@ -6,7 +6,7 @@ on:
     paths:
       - "crates/**"
       - "bench/**"
-      - "scripts/bench*"
+      - "scripts/bench.py"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -42,7 +42,7 @@ jobs:
         run: |
           # Allow user-space hardware counters when the runner exposes them.
           sudo sysctl -w kernel.perf_event_paranoid=2
-          xvfb-run -a scripts/bench.sh ${{ github.event.pull_request.base.sha }}
+          xvfb-run -a python3 scripts/bench.py ${{ github.event.pull_request.base.sha }}
       - name: Comment on pull request
         # Pull requests from forks get a read-only token.
         if: github.event.pull_request.head.repo.full_name == github.repository
