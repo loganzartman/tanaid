@@ -15,6 +15,10 @@ pub trait CanvasItem {
   }
   /// Render the item in the scene
   fn redraw(&self, scene: &mut Scene, transform: Affine);
+  /// Update computed values
+  fn recompute(&mut self) -> Result<(), EvalError> {
+    Ok(())
+  }
   /// Get the coordinates of the item
   fn get_coords(&self) -> Vec<f64>;
   /// Set the coordinates of the item. Errors on invalid coordinates.
@@ -29,6 +33,7 @@ pub trait CanvasItem {
     Self: Sized,
   {
     self.set_coords(coords)?;
+    self.recompute()?;
     Ok(self)
   }
 }

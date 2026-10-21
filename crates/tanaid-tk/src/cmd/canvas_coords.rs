@@ -39,6 +39,7 @@ pub(crate) fn eval(
         .map(|c| c.repr_float())
         .collect::<Result<Vec<f64>, _>>()?;
       item.set_coords(&coords)?;
+      item.recompute()?;
 
       Ok(Value::none())
     }

@@ -111,6 +111,7 @@ fn apply_options(item: &mut impl CanvasItem, options: &mut [[Value; 2]]) -> Resu
       "unsupported option: {name} = {value}"
     )));
   }
+  item.recompute()?;
   Ok(())
 }
 
