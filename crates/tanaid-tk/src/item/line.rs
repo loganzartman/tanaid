@@ -1,21 +1,25 @@
-use crate::item::canvas_item::CanvasItem;
+use crate::item::canvas_item::{CanvasItem, CanvasItemCommonOptions};
 use tanaid::eval_error::EvalError;
 use vello::Scene;
-use vello::kurbo::{Affine, BezPath, Stroke};
-use vello::peniko::Color;
+use vello::kurbo::{Affine, BezPath};
 
 #[derive(Default)]
 pub struct CanvasItemLine {
   pub coords: Vec<f64>,
   path: BezPath,
+  pub common_options: CanvasItemCommonOptions,
 }
 
 impl CanvasItem for CanvasItemLine {
+  fn common_options(&mut self) -> &mut CanvasItemCommonOptions {
+    &mut self.common_options
+  }
+
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
     scene.stroke(
-      &Stroke::new(1.0),
+      &self.common_options.stroke,
       transform,
-      Color::new([1., 1., 1., 1.]),
+      &self.common_options.fill_brush,
       None,
       &self.path,
     );

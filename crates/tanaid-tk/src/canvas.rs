@@ -1,6 +1,10 @@
 use crate::{item::canvas_item::CanvasItem, widget::Widget};
 use indexmap::IndexMap;
-use vello::{Scene, kurbo::Affine};
+use vello::{
+  Scene,
+  kurbo::{Affine, Rect},
+  peniko::{Brush, Color, Fill},
+};
 
 pub struct CanvasWidget {
   pub attrs: CanvasAttributes,
@@ -18,6 +22,15 @@ impl CanvasWidget {
 
 impl Widget for CanvasWidget {
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
+    let (width, height) = self.requested_size();
+    scene.fill(
+      Fill::NonZero,
+      transform,
+      &self.attrs.background,
+      None,
+      &Rect::new(0., 0., width as f64, height as f64),
+    );
+
     for item in self.items.values() {
       item.redraw(scene, transform);
     }
@@ -34,6 +47,7 @@ impl Widget for CanvasWidget {
 pub struct CanvasAttributes {
   pub width: Option<u32>,
   pub height: Option<u32>,
+  pub background: Brush,
 }
 
 impl CanvasAttributes {
@@ -41,6 +55,7 @@ impl CanvasAttributes {
     Self {
       width: None,
       height: None,
+      background: Color::new([1., 1., 1., 0.0]).into(),
     }
   }
 }

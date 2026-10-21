@@ -1,5 +1,6 @@
 pub mod canvas;
 mod cmd;
+pub mod color;
 pub mod events;
 pub mod item;
 pub mod keysym;
