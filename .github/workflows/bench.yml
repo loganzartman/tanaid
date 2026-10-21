@@ -14,7 +14,6 @@ on:
       - "rust-toolchain.toml"
       - ".cargo/**"
       - ".github/workflows/bench.yml"
-  workflow_dispatch:
 
 concurrency:
   group: bench-${{ github.ref }}
@@ -26,7 +25,6 @@ env:
 jobs:
   bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: write
@@ -47,17 +45,11 @@ jobs:
         # winit loads libxkbcommon-x11 at runtime and panics without it.
         run: sudo apt-get update && sudo apt-get install -y tcl xvfb libxkbcommon-x11-0
       - name: Benchmark
-        # On pull requests, the checkout is the merge commit, so its base is the PR's base commit.
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         # The CLI opens a winit event loop at startup, which needs a display.
-        run: xvfb-run -a scripts/bench.sh "$BASE"
-      - name: Write job summary
-        run: cat target/bench/summary.md >> "$GITHUB_STEP_SUMMARY"
+        run: xvfb-run -a scripts/bench.sh ${{ github.event.pull_request.base.sha }}
       - name: Comment on pull request
         # Pull requests from forks get a read-only token.
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: gh pr comment "$PR" --edit-last --create-if-none --body-file target/bench/summary.md
+        run: gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body-file target/bench/summary.md

@@ -22,10 +22,9 @@ proc countLetterFreq {s} {
 set text "the quick brown fox jumps over the lazy dog"
 set k 0
 while {$k < 3000} {
-  countLetterFreq $text
+  set freq [countLetterFreq $text]
   incr k
 }
 
 # print fixed keys: dict iteration order isn't the same in tanaid and tclsh
-set freq [countLetterFreq $text]
 puts "o=[dict get $freq o] e=[dict get $freq e] space=[dict get $freq { }]"

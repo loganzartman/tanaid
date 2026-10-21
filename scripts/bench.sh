@@ -7,17 +7,8 @@
 # requires: hyperfine 2.x, tclsh
 set -euo pipefail
 
-fail() {
-  echo "error: $*" >&2
-  exit 1
-}
-
 root=$(git rev-parse --show-toplevel)
 cd "$root"
-
-if ! hyperfine --version | grep -q '^hyperfine 2\.'; then
-  fail "requires hyperfine 2.x (found: $(hyperfine --version))"
-fi
 
 base=$(git merge-base HEAD "${1:-main}")
 out=target/bench
@@ -27,7 +18,7 @@ mkdir -p "$out"
 # isn't safe: workspace crates hash the same at any path, so cargo can treat one
 # tree's build as fresh for the other.
 worktree=$(mktemp -d)
-trap 'git worktree remove --force "$worktree" 2> /dev/null || rm -rf "$worktree"' EXIT
+trap 'git worktree remove --force "$worktree"' EXIT
 git worktree add --quiet --detach "$worktree" "$base"
 (cd "$worktree" && cargo build --locked --release -p tanaid-cli --target-dir "$root/$out/base")
 cargo build --locked --release -p tanaid-cli
@@ -51,36 +42,25 @@ EOF
 
 for script in bench/*.tcl; do
   name=$(basename "$script" .tcl)
+  echo "$name"
 
   # $(...) drops trailing newlines, including the empty result line tanaid prints after a
   # final puts.
-  expected=$(tclsh "$script") || fail "tclsh $script exited with status $?"
+  expected=$(tclsh "$script")
   for bin in "$base_bin" "$head_bin"; do
-    actual=$("$bin" "$script") || fail "$bin $script exited with status $?"
+    actual=$("$bin" "$script")
     if [ "$actual" != "$expected" ]; then
-      fail "$script prints '$actual' on $bin but '$expected' on tclsh"
+      echo "error: $script prints '$actual' on $bin but '$expected' on tclsh" >&2
+      exit 1
     fi
   done
 
   # hyperfine reports changes relative to the first command.
-  hyperfine --warmup 1 --metrics "$metrics" \
-    --export-markdown "$out/$name.md" --export-json "$out/$name.json" \
-    -n base -n this -n tclsh \
-    "$base_bin $script" "$head_bin $script" "tclsh $script" \
-    | tee "$out/$name.txt"
+  hyperfine --warmup 1 --metrics "$metrics" --export-markdown "$out/$name.md" \
+    -n base -n this -n tclsh "$base_bin $script" "$head_bin $script" "tclsh $script"
 
   printf '\n### %s\n\n' "$name" >> "$summary"
   cat "$out/$name.md" >> "$summary"
 done
 
-{
-  printf '\n<details><summary>All metrics</summary>\n\n```\n'
-  for script in bench/*.tcl; do
-    name=$(basename "$script" .tcl)
-    printf '\n%s\n' "$name"
-    cat "$out/$name.txt"
-  done
-  printf '```\n\n</details>\n'
-} >> "$summary"
-
-echo "Summary written to $out/summary.md"
+echo "Summary written to $summary"

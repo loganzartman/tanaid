@@ -6,18 +6,14 @@ proc randint {} {
   set state [expr {($state * 1103515245 + 12345) % 2147483648}]
   return $state
 }
-proc random {{a 1} {b "none"}} {
-  if {$b == "none"} {
-    set b $a
-    set a 0
-  }
+proc random {a b} {
   return [expr {[randint] / 2147483648.0 * ($b - $a) + $a}]
 }
 
 set particles [list]
 set n 0
 while {$n < 400} {
-  lappend particles [list $n [random 500] [random 500] [random -5 5] [random -5 5]]
+  lappend particles [list $n [random 0 500] [random 0 500] [random -5 5] [random -5 5]]
   incr n
 }
 
