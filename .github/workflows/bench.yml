@@ -1,0 +1,62 @@
+name: bench
+
+# Third-party actions are pinned to immutable commit SHAs; the trailing
+# version comments are what Dependabot/Renovate read when bumping them.
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "crates/**"
+      - "bench/**"
+      - "scripts/bench.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - ".github/workflows/bench.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # bench.sh checks out the base commit in a worktree
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      # Before Build: compiling runs every dependency's build script.
+      - name: Check dependency cooldown
+        uses: NomicFoundation/cargo-cooldown-check@0e9231d9dc6084e8ed2e2eee2fa812f27776cab8 # v0.2.0
+      - name: Install hyperfine
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: hyperfine@2.0.0
+      - name: Install tclsh and Xvfb
+        run: sudo apt-get update && sudo apt-get install -y tcl xvfb
+      - name: Benchmark
+        # On pull requests, the checkout is the merge commit, so its base is the PR's base commit.
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        # The CLI opens a winit event loop at startup, which needs a display.
+        run: xvfb-run -a scripts/bench.sh "$BASE"
+      - name: Write job summary
+        run: cat target/bench/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment on pull request
+        # Pull requests from forks get a read-only token.
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR" --edit-last --create-if-none --body-file target/bench/summary.md
