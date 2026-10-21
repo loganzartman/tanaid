@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare the working tree, its merge-base with base-ref, and tclsh.
 
-Requires hyperfine 2.x, tclsh, and Cargo. Results go to target/bench/.
+Requires hyperfine 2.x, Valgrind, tclsh, and Cargo. Results go to target/bench/.
 On headless Linux, run under xvfb-run -a.
 """
 
@@ -30,37 +30,23 @@ def change_interval(base, current):
     return bounds[0], bounds[-1]
 
 
-def instructions(result):
-    metric = result["summary"].get("instructions")
-    # Do not compare partial measurements or unavailable counters reported as zero.
-    if metric and metric["count"] == len(result["measurements"]) and metric["mean"] > 0:
-        return metric
-    return None
-
-
-def report(results):
+def report(results, counts):
     base = results[0]
     base_times = [m["time_wall_clock"]["value"] for m in base["measurements"]]
-    base_instructions = instructions(base)
-    print("| Command | Wall time (ms) | Time change (95% CI) | Instructions (M) | Instruction change | Runs |")
+    print("| Command | Wall time (ms) | Time change (95% CI) | Cachegrind instructions (M) | Instruction change | Runs |")
     print("|:---|---:|---:|---:|---:|---:|")
-    for result in results:
+    for result, count in zip(results, counts, strict=True):
         timing = result["summary"]["time_wall_clock"]
         time_change = instruction_change = "—"
-        counter = instructions(result)
-        counts = "unavailable"
-        if counter:
-            counts = f'{counter["mean"] / 1e6:.2f} ± {counter["stddev"] / 1e6:.2f}'
         if result is not base:
             times = [m["time_wall_clock"]["value"] for m in result["measurements"]]
             low, high = change_interval(base_times, times)
             delta = 100 * (timing["mean"] / base["summary"]["time_wall_clock"]["mean"] - 1)
             time_change = f"{delta:+.2f}% [{low:+.2f}%, {high:+.2f}%]"
-            if counter and base_instructions:
-                instruction_change = f'{100 * (counter["mean"] / base_instructions["mean"] - 1):+.2f}%'
+            instruction_change = f'{100 * (count / counts[0] - 1):+.2f}%'
         print(f'| `{result.get("name", result["command"])}` '
               f'| {timing["mean"] * 1000:.1f} ± {timing["stddev"] * 1000:.1f} '
-              f'| {time_change} | {counts} | {instruction_change} | {timing["count"]} |')
+              f'| {time_change} | {count / 1e6:.2f} | {instruction_change} | {timing["count"]} |')
 
 
 def run(*args, **kwargs):
@@ -69,6 +55,18 @@ def run(*args, **kwargs):
 
 def output(*args, **kwargs):
     return run(*args, stdout=subprocess.PIPE, **kwargs).stdout.rstrip("\n")
+
+
+def count_instructions(binary, script, destination):
+    run("valgrind", "--tool=cachegrind", "--quiet", "--cache-sim=no", "--branch-sim=no",
+        f"--cachegrind-out-file={destination}", binary, str(script), stdout=subprocess.DEVNULL)
+    lines = destination.read_text().splitlines()
+    events = next(line.split()[1:] for line in lines if line.startswith("events:"))
+    totals = next(line.split()[1:] for line in lines if line.startswith("summary:"))
+    count = int(totals[events.index("Ir")])
+    if count <= 0:
+        raise ValueError(f"No instructions recorded in {destination}")
+    return count
 
 
 def main():
@@ -104,8 +102,8 @@ Compares this build against `{short_base}` (base) and tclsh {tcl_version}. Lower
 Values are mean ± standard deviation. Time changes include a 95% bootstrap confidence interval:
 an interval containing zero does not establish a difference. Intervals describe run-to-run variation,
 not machine drift between hyperfine's sequential command batches. Small changes on shared runners
-need confirmation. Instruction counts are less sensitive to scheduling and CPU frequency, but do not measure elapsed time.
-Unavailable counters are reported explicitly.
+need confirmation. Instructions come from one separate Cachegrind run per command, including startup.
+These are instrumented guest-instruction counts, not hardware counters or elapsed time.
 """)
         for script in sorted(Path("bench").glob("*.tcl")):
             print(script.stem, flush=True)
@@ -116,14 +114,17 @@ Unavailable counters are reported explicitly.
                 if actual != expected:
                     raise ValueError(f"{script} prints {actual!r} on {binary} but {expected!r} on tclsh")
 
-            # JSON includes all available counters even when the console only shows time and memory.
             results_path = out / f"{script.stem}.json"
             run("hyperfine", "--warmup", "5", "--min-runs", "30",
                 "--export-json", str(results_path), "-n", "base", "-n", "this", "-n", "tclsh",
                 *(shlex.join([binary, str(script)]) for binary in binaries))
+            counts = [
+                count_instructions(binary, script, out / f"{script.stem}.{label}.cachegrind")
+                for label, binary in zip(("base", "this", "tclsh"), binaries)
+            ]
             summary.write(f"\n### {script.stem}\n\n")
             with results_path.open() as source, redirect_stdout(summary):
-                report(json.load(source)["results"])
+                report(json.load(source)["results"], counts)
     print(f"Summary written to {summary_path}")
 
 
