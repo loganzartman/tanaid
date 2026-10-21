@@ -44,7 +44,8 @@ jobs:
         with:
           tool: hyperfine@2.0.0
       - name: Install tclsh and Xvfb
-        run: sudo apt-get update && sudo apt-get install -y tcl xvfb
+        # winit loads libxkbcommon-x11 at runtime and panics without it.
+        run: sudo apt-get update && sudo apt-get install -y tcl xvfb libxkbcommon-x11-0
       - name: Benchmark
         # On pull requests, the checkout is the merge commit, so its base is the PR's base commit.
         env:
@@ -55,7 +56,7 @@ jobs:
       - name: Annotate failure
         if: failure()
         # Rust prints a panic's message on the line after "panicked at".
-        run: grep -iE -A1 '^(error|fatal)|panicked' "$RUNNER_TEMP/bench.log" | head -n 8 | sed 's/^/::error::/' || true
+        run: grep -iE -A1 --no-group-separator '^(error|fatal)|panicked' "$RUNNER_TEMP/bench.log" | head -n 8 | sed 's/^/::error::/' || true
       - name: Write job summary
         run: cat target/bench/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on pull request
