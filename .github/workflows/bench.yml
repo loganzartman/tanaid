@@ -1,7 +1,5 @@
 name: bench
 
-# Third-party actions are pinned to immutable commit SHAs; the trailing
-# version comments are what Dependabot/Renovate read when bumping them.
 on:
   pull_request:
     branches: ["main"]
@@ -19,9 +17,6 @@ concurrency:
   group: bench-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   bench:
     runs-on: ubuntu-latest
@@ -31,21 +26,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # bench.sh checks out the base commit in a worktree
+          fetch-depth: 0
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
-      # Before Build: compiling runs every dependency's build script.
       - name: Check dependency cooldown
         uses: NomicFoundation/cargo-cooldown-check@0e9231d9dc6084e8ed2e2eee2fa812f27776cab8 # v0.2.0
       - name: Install hyperfine
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: hyperfine@2.0.0
-      - name: Install tclsh and Xvfb
-        # winit loads libxkbcommon-x11 at runtime and panics without it.
+      - name: Install tclsh and display dependencies
         run: sudo apt-get update && sudo apt-get install -y tcl xvfb libxkbcommon-x11-0
       - name: Benchmark
-        # The CLI opens a winit event loop at startup, which needs a display.
+        # The CLI's event loop needs a display even for non-GUI scripts.
         run: xvfb-run -a scripts/bench.sh ${{ github.event.pull_request.base.sha }}
       - name: Comment on pull request
         # Pull requests from forks get a read-only token.

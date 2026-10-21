@@ -1,10 +1,7 @@
 # Recursive proc calls: argument binding, frames, return, small exprs.
 proc fib {x} {
-  if {$x <= 0} {
-    return 0
-  }
-  if {$x == 1} {
-    return 1
+  if {$x < 2} {
+    return $x
   }
   return [expr {[fib [expr {$x - 1}]] + [fib [expr {$x - 2}]]}]
 }

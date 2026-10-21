@@ -1,10 +1,7 @@
 #!/bin/bash
-# Benchmarks the tanaid CLI built from the working tree against a baseline commit and
-# tclsh, running each bench/*.tcl script with hyperfine. Results go to target/bench/.
-#
-# usage: scripts/bench.sh [base-ref]
-#   base-ref defaults to main; the baseline is its merge-base with HEAD.
-# requires: hyperfine 2.x, tclsh
+# Usage: scripts/bench.sh [base-ref=main] (requires hyperfine 2.x and tclsh).
+# Compares the working tree, its merge-base with base-ref, and tclsh.
+# Results go to target/bench/. On headless Linux, run under xvfb-run -a.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -14,23 +11,15 @@ base=$(git merge-base HEAD "${1:-main}")
 out=target/bench
 mkdir -p "$out"
 
-# Build the baseline in a temporary worktree with its own target dir. Sharing target/
-# isn't safe: workspace crates hash the same at any path, so cargo can treat one
-# tree's build as fresh for the other.
+# Separate target dirs keep Cargo from reusing one tree's build for the other.
 worktree=$(mktemp -d)
 trap 'git worktree remove --force "$worktree"' EXIT
 git worktree add --quiet --detach "$worktree" "$base"
 (cd "$worktree" && cargo build --locked --release -p tanaid-cli --target-dir "$root/$out/base")
-cargo build --locked --release -p tanaid-cli
+cargo build --locked --release -p tanaid-cli --target-dir target
 
 base_bin=$out/base/release/tanaid
 head_bin=target/release/tanaid
-
-# Instruction counts are steadier than wall time, but need hardware counter access.
-metrics=time_wall_clock:ms,memory_peak_resident:MiB
-if hyperfine --runs 1 --metrics instructions true > /dev/null 2>&1; then
-  metrics+=,instructions:M
-fi
 
 tcl_version=$(echo 'puts [info patchlevel]' | tclsh)
 summary=$out/summary.md
@@ -44,8 +33,7 @@ for script in bench/*.tcl; do
   name=$(basename "$script" .tcl)
   echo "$name"
 
-  # $(...) drops trailing newlines, including the empty result line tanaid prints after a
-  # final puts.
+  # $(...) trims the empty result line tanaid prints after the final puts.
   expected=$(tclsh "$script")
   for bin in "$base_bin" "$head_bin"; do
     actual=$("$bin" "$script")
@@ -56,7 +44,7 @@ for script in bench/*.tcl; do
   done
 
   # hyperfine reports changes relative to the first command.
-  hyperfine --warmup 1 --metrics "$metrics" --export-markdown "$out/$name.md" \
+  hyperfine --warmup 1 --export-markdown "$out/$name.md" \
     -n base -n this -n tclsh "$base_bin $script" "$head_bin $script" "tclsh $script"
 
   printf '\n### %s\n\n' "$name" >> "$summary"

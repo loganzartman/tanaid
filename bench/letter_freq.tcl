@@ -1,11 +1,11 @@
-# Counting characters, from sample/count_letter_freq.tcl: string index, dict get/set.
-proc countLetterFreq {s} {
-  set i 0
-  set len [string length $s]
+# Character counting: string indexing and dictionary reads and writes.
+set text "the quick brown fox jumps over the lazy dog"
+set k 0
+while {$k < 3000} {
   set freq [dict create]
-
-  while {$i < $len} {
-    set char [string index $s $i]
+  set i 0
+  while {$i < [string length $text]} {
+    set char [string index $text $i]
 
     if {[dict exists $freq $char]} {
       dict set freq $char [expr {[dict get $freq $char] + 1}]
@@ -13,16 +13,8 @@ proc countLetterFreq {s} {
       dict set freq $char 1
     }
 
-    set i [expr {$i + 1}]
+    incr i
   }
-
-  return $freq
-}
-
-set text "the quick brown fox jumps over the lazy dog"
-set k 0
-while {$k < 3000} {
-  set freq [countLetterFreq $text]
   incr k
 }
 
