@@ -37,20 +37,24 @@ if hyperfine --runs 1 --metrics instructions true > /dev/null 2>&1; then
   metrics+=,instructions:M
 fi
 
+tcl_version=$(echo 'puts [info patchlevel]' | tclsh)
 summary=$out/summary.md
 cat > "$summary" << EOF
 ## Benchmarks
 
-Compares this build against \`$(git rev-parse --short "$base")\` (base) and tclsh $(echo 'puts [info patchlevel]' | tclsh). Lower is better.
+Compares this build against \`$(git rev-parse --short "$base")\` (base) and tclsh $tcl_version. Lower is better.
 EOF
 details=$(mktemp)
 
 for script in bench/*.tcl; do
   name=$(basename "$script" .tcl)
 
-  # tanaid also prints the script's result, which is an empty line after a final puts.
-  if ! diff <(tclsh "$script" && echo) <("$head_bin" "$script"); then
-    echo "error: $script output differs between tanaid and tclsh" >&2
+  # $(...) drops trailing newlines, including the empty result line tanaid prints after a
+  # final puts.
+  expected=$(tclsh "$script")
+  actual=$("$head_bin" "$script")
+  if [ "$actual" != "$expected" ]; then
+    echo "error: $script prints '$actual' on tanaid but '$expected' on tclsh" >&2
     exit 1
   fi
 
