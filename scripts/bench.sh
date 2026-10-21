@@ -7,12 +7,16 @@
 # requires: hyperfine 2.x, tclsh
 set -euo pipefail
 
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
 if ! hyperfine --version | grep -q '^hyperfine 2\.'; then
-  echo "error: requires hyperfine 2.x (found: $(hyperfine --version))" >&2
-  exit 1
+  fail "requires hyperfine 2.x (found: $(hyperfine --version))"
 fi
 
 base=$(git merge-base HEAD "${1:-main}")
@@ -51,11 +55,10 @@ for script in bench/*.tcl; do
 
   # $(...) drops trailing newlines, including the empty result line tanaid prints after a
   # final puts.
-  expected=$(tclsh "$script")
-  actual=$("$head_bin" "$script")
+  expected=$(tclsh "$script") || fail "tclsh $script exited with status $?"
+  actual=$("$head_bin" "$script") || fail "$head_bin $script exited with status $?"
   if [ "$actual" != "$expected" ]; then
-    echo "error: $script prints '$actual' on tanaid but '$expected' on tclsh" >&2
-    exit 1
+    fail "$script prints '$actual' on tanaid but '$expected' on tclsh"
   fi
 
   # hyperfine reports changes relative to the first command.

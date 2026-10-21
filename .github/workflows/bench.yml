@@ -54,7 +54,8 @@ jobs:
         run: xvfb-run -a scripts/bench.sh "$BASE" 2>&1 | tee "$RUNNER_TEMP/bench.log"
       - name: Annotate failure
         if: failure()
-        run: grep -iE '^(error|fatal)' "$RUNNER_TEMP/bench.log" | head -n 5 | sed 's/^/::error::/' || true
+        # Rust prints a panic's message on the line after "panicked at".
+        run: grep -iE -A1 '^(error|fatal)|panicked' "$RUNNER_TEMP/bench.log" | head -n 8 | sed 's/^/::error::/' || true
       - name: Write job summary
         run: cat target/bench/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on pull request
