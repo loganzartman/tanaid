@@ -90,9 +90,9 @@ def main():
         finally:
             run("git", "worktree", "remove", "--force", worktree)
     run("cargo", "build", "--locked", "--release", "-p", "tanaid-cli",
-        "--target-dir", "target")
+        "--target-dir", str(out / "head"))
 
-    binaries = [str(out / "base/release/tanaid"), "target/release/tanaid", "tclsh"]
+    binaries = [str(out / "base/release/tanaid"), str(out / "head/release/tanaid"), "tclsh"]
     tcl_version = output("tclsh", input="puts [info patchlevel]\n")
     short_base = output("git", "rev-parse", "--short", base)
     summary_path = out / "summary.md"

@@ -29,6 +29,12 @@ jobs:
           fetch-depth: 0
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-key: bench-v2
+          # Cache each target directly so cleanup preserves the nested builds.
+          cache-workspaces: |
+            . -> target/bench/base
+            . -> target/bench/head
       - name: Check dependency cooldown
         uses: NomicFoundation/cargo-cooldown-check@0e9231d9dc6084e8ed2e2eee2fa812f27776cab8 # v0.2.0
       - name: Install hyperfine
