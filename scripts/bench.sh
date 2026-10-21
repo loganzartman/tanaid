@@ -48,7 +48,6 @@ cat > "$summary" << EOF
 
 Compares this build against \`$(git rev-parse --short "$base")\` (base) and tclsh $tcl_version. Lower is better.
 EOF
-details=$(mktemp)
 
 for script in bench/*.tcl; do
   name=$(basename "$script" .tcl)
@@ -56,10 +55,12 @@ for script in bench/*.tcl; do
   # $(...) drops trailing newlines, including the empty result line tanaid prints after a
   # final puts.
   expected=$(tclsh "$script") || fail "tclsh $script exited with status $?"
-  actual=$("$head_bin" "$script") || fail "$head_bin $script exited with status $?"
-  if [ "$actual" != "$expected" ]; then
-    fail "$script prints '$actual' on tanaid but '$expected' on tclsh"
-  fi
+  for bin in "$base_bin" "$head_bin"; do
+    actual=$("$bin" "$script") || fail "$bin $script exited with status $?"
+    if [ "$actual" != "$expected" ]; then
+      fail "$script prints '$actual' on $bin but '$expected' on tclsh"
+    fi
+  done
 
   # hyperfine reports changes relative to the first command.
   hyperfine --warmup 1 --metrics "$metrics" \
@@ -70,15 +71,16 @@ for script in bench/*.tcl; do
 
   printf '\n### %s\n\n' "$name" >> "$summary"
   cat "$out/$name.md" >> "$summary"
-  printf '\n%s\n' "$name" >> "$details"
-  cat "$out/$name.txt" >> "$details"
 done
 
 {
   printf '\n<details><summary>All metrics</summary>\n\n```\n'
-  cat "$details"
+  for script in bench/*.tcl; do
+    name=$(basename "$script" .tcl)
+    printf '\n%s\n' "$name"
+    cat "$out/$name.txt"
+  done
   printf '```\n\n</details>\n'
 } >> "$summary"
-rm "$details"
 
 echo "Summary written to $out/summary.md"
