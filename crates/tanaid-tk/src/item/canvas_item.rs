@@ -1,7 +1,7 @@
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
 use vello::Scene;
-use vello::kurbo::{Affine, Stroke};
+use vello::kurbo::{Affine, Cap, Stroke};
 use vello::peniko::{Brush, Color};
 
 use crate::color::parse_color;
@@ -44,7 +44,7 @@ impl Default for CanvasItemCommonOptions {
     Self {
       fill_brush: Color::new([1., 1., 1., 0.]).into(),
       stroke_brush: Color::new([1., 1., 1., 1.]).into(),
-      stroke: Stroke::new(1.0),
+      stroke: Stroke::new(1.0).with_caps(Cap::Butt),
     }
   }
 }
