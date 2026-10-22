@@ -1,0 +1,56 @@
+name: bench
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "crates/**"
+      - "bench/**"
+      - "scripts/bench.py"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - ".github/workflows/bench.yml"
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Rust
+        # v2 includes rust-cache's fix for Cargo's V2 build-directory layout.
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          rustflags: -D warnings
+          cache-key: bench-v3
+          # Cache each target directly so cleanup preserves the nested builds.
+          cache-workspaces: |
+            . -> target/bench/base
+            . -> target/bench/head
+      - name: Check dependency cooldown
+        uses: NomicFoundation/cargo-cooldown-check@0e9231d9dc6084e8ed2e2eee2fa812f27776cab8 # v0.2.0
+      - name: Install hyperfine
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: hyperfine@2.0.0
+      - name: Install benchmark dependencies
+        run: sudo apt-get update && sudo apt-get install -y tcl valgrind xvfb libxkbcommon-x11-0
+      - name: Benchmark
+        # The CLI's event loop needs a display even for non-GUI scripts.
+        run: xvfb-run -a python3 scripts/bench.py ${{ github.event.pull_request.base.sha }}
+      - name: Comment on pull request
+        # Pull requests from forks get a read-only token.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body-file target/bench/summary.md
