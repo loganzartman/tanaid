@@ -120,40 +120,47 @@ impl CanvasItemLine {
   }
 
   fn compute_path_smooth_bezier(&mut self) {
-    self.path = BezPath::new();
     let (pairs, _) = self.coords.as_chunks::<2>();
 
-    if pairs.len() < 2 {
-      return;
-    }
-
-    self.path.move_to((pairs[0][0], pairs[0][1]));
     if pairs.len() < 3 {
-      self.path.line_to((pairs[1][0], pairs[1][1]));
-      return;
+      return self.compute_path_smooth_false();
     }
 
-    let point_triples = pairs.windows(3);
-    let n = point_triples.len();
-    for (i, triple) in point_triples.enumerate() {
-      let [[ax, ay], [bx, by], [cx, cy]] = triple else {
-        unreachable!("must be triple");
-      };
+    let closed = pairs.first() == pairs.last();
+    let point_triples = closed
+      .then(|| [pairs[pairs.len() - 2], pairs[0], pairs[1]])
+      .into_iter()
+      .chain(pairs.array_windows::<3>().copied());
 
-      let p1 = if i == 0 {
+    self.path = BezPath::new();
+    let n_open_triples = pairs.len() - 2;
+    for (i, [[ax, ay], [bx, by], [cx, cy]]) in point_triples.enumerate() {
+      let first = i == 0;
+      let last = i == n_open_triples - 1;
+
+      if first {
+        let p0 = if closed {
+          ((ax + bx) / 2., (ay + by) / 2.)
+        } else {
+          (ax, ay)
+        };
+        self.path.move_to(p0);
+      }
+
+      let p1 = if !closed && first {
         (ax / 3. + 2. * bx / 3., ay / 3. + 2. * by / 3.)
       } else {
         (ax / 6. + 5. * bx / 6., ay / 6. + 5. * by / 6.)
       };
 
-      let p2 = if i == n - 1 {
+      let p2 = if !closed && last {
         (2. * bx / 3. + cx / 3., 2. * by / 3. + cy / 3.)
       } else {
         (5. * bx / 6. + cx / 6., 5. * by / 6. + cy / 6.)
       };
 
-      let p3 = if i == n - 1 {
-        (*cx, *cy)
+      let p3 = if !closed && last {
+        (cx, cy)
       } else {
         ((bx + cx) / 2., (by + cy) / 2.)
       };
