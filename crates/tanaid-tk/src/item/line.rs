@@ -81,7 +81,7 @@ impl CanvasItem for CanvasItemLine {
     match self.smooth {
       Smooth::None => self.compute_path_smooth_false(),
       Smooth::Bezier => self.compute_path_smooth_bezier(),
-      Smooth::Raw => self.compute_path_smooth_bezier(),
+      Smooth::Raw => self.compute_path_smooth_raw(),
     }
     Ok(())
   }
@@ -166,6 +166,26 @@ impl CanvasItemLine {
       };
 
       self.path.curve_to(p1, p2, p3);
+    }
+  }
+
+  fn compute_path_smooth_raw(&mut self) {
+    let (pairs, _) = self.coords.as_chunks::<2>();
+
+    if pairs.len() < 3 {
+      return self.compute_path_smooth_false();
+    }
+
+    let n = pairs.len();
+    let p = |i: usize| {
+      let [x, y] = pairs[i % n];
+      (x, y)
+    };
+
+    self.path = BezPath::new();
+    self.path.move_to(p(0));
+    for k in (0..n - 1).step_by(3) {
+      self.path.curve_to(p(k + 1), p(k + 2), p(k + 3));
     }
   }
 }
