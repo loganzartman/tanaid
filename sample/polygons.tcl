@@ -1,8 +1,8 @@
 package require Tk
 
-set w 1000
-set h 1000
-canvas .c -width $w -height $h -background #333
+set w 500
+set h 500
+canvas .c -width $w -height $h -background #413
 pack .c
 
 set mx 0
@@ -60,7 +60,7 @@ proc frame {} {
         set mouseFactor [expr {1 - min(1, hypot($x - $mx, $y - $my) / 0.4)}]
         set d1 0.03
         set d2 [expr {0.07 + 0.05 * $mouseFactor}]
-        set angle [expr {sin($t * 3) * 0.1}]
+        set angle [expr {sin($t * 3 + 0.1 * $i) * 0.1}]
         set fill "#fac"
         star .c $x $y $d1 $d2 $points $angle $closed $smooth $fill
         incr i
