@@ -5,18 +5,12 @@ set h 500
 canvas .c -width $w -height $h
 pack .c
 
-set state 31
-proc randint {} {
-  global state
-  set state [expr {($state * 1103515245 + 12345) % 2147483648}]
-  return $state
-}
 proc random {{a 1} {b "none"}} {
   if {$b == "none"} {
     set b $a
     set a 0
   }
-  return [expr {[randint] / 2147483648.0 * ($b - $a) + $a}]
+  return [expr {rand() * ($b - $a) + $a}]
 }
 
 set particles [list]
@@ -46,7 +40,7 @@ proc frame {} {
 
 proc launch {} {
   global particles w h
-  after [expr {[randint] % 1500 + 500}] launch
+  after [expr {int([random 500 2000])}] launch
 
   set x [random $w]
   set y [random $h]
