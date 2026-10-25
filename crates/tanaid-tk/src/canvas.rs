@@ -24,7 +24,7 @@ impl Widget for CanvasWidget {
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
     let (width, height) = self.requested_size();
 
-    const DEFAULT_BACKGROUND: Brush = Brush::Solid(Color::BLACK);
+    const DEFAULT_BACKGROUND: Brush = Brush::Solid(Color::WHITE);
     scene.fill(
       Fill::NonZero,
       transform,

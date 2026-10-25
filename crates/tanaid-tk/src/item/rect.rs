@@ -18,7 +18,7 @@ impl Default for CanvasItemRect {
     Self {
       rect: Default::default(),
       fill: Default::default(),
-      outline: Some(Brush::Solid(Color::WHITE)),
+      outline: Some(Brush::Solid(Color::BLACK)),
       stroke: Stroke::new(1.),
     }
   }

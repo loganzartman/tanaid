@@ -20,7 +20,7 @@ impl Default for CanvasItemLine {
       coords: Default::default(),
       path: Default::default(),
       smooth: Default::default(),
-      fill: Some(Brush::Solid(Color::WHITE)),
+      fill: Some(Brush::Solid(Color::BLACK)),
       stroke: Stroke::new(1.),
     }
   }

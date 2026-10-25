@@ -28,7 +28,7 @@ proc roundrect {canvas x1 y1 x2 y2 radius fill width} {
 
   # debug
   foreach {x y} $coords {
-    $canvas create rectangle [expr {$x - 2}] [expr {$y - 2}] [expr {$x + 2}] [expr {$y + 2}] -fill #414
+    $canvas create rectangle [expr {$x - 2}] [expr {$y - 2}] [expr {$x + 2}] [expr {$y + 2}] -fill #414 -outline {}
   }
   
   return $result
