@@ -162,7 +162,7 @@ proc frame {} {
     }
     incr i
   }
-  .c create line $points -fill #e9db04 -width 5
+  .c create line $points -fill #e9db04 -width 5 -smooth true
 
 }
 
