@@ -16,7 +16,7 @@ set nodedist [expr {$length / $nnodes}]
 set nodepos [list ]
 set nodevel [list ]
 
-canvas .c -width $w -height $h
+canvas .c -width $w -height $h -background #000
 pack .c
 
 set mx 0
@@ -143,6 +143,7 @@ proc frame {} {
   lset nodevel [expr {$nnodes - 1}] [list 0 0]
 
   set i 0
+  set points [list ]
   while {$i < $nnodes} {
     set a [lindex $nodepos [expr {$i - 1}]]
     set b [lindex $nodepos $i]
@@ -150,14 +151,18 @@ proc frame {} {
     lassign $a ax ay
     lassign $b bx by
 
-    if {$i > 0} {
-      .c create line $ax $ay $bx $by
+    lappend points $bx
+    lappend points $by
+
+    if {$i == 0} {
+      .c create rectangle [expr {$bx - 2}] [expr {$by - 28}] [expr {$bx + 2}] [expr {$by - 16}] -fill #bdad8f -width 0
     }
     if {$i == 0 || $i == $nnodes - 1} {
-      .c create rectangle [expr {$bx - 2}] [expr {$by - 6}] [expr {$bx + 2}] [expr {$by + 2}]
+      .c create rectangle [expr {$bx - 4}] [expr {$by - 16}] [expr {$bx + 4}] [expr {$by + 4}] -fill #e9db04 -width 0
     }
     incr i
   }
+  .c create line $points -fill #e9db04 -width 5 -smooth true
 
 }
 

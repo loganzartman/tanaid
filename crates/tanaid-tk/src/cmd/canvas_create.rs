@@ -39,7 +39,8 @@ fn next_id(widget: &CanvasWidget) -> i64 {
   widget.items.last().map_or(0, |(id, _)| id + 1)
 }
 
-fn insert_item(widget: &mut CanvasWidget, item: impl CanvasItem + 'static) -> EvalCmdResult {
+fn insert_item(widget: &mut CanvasWidget, mut item: impl CanvasItem + 'static) -> EvalCmdResult {
+  item.recompute()?;
   let id = next_id(widget);
   widget.items.insert(id, Box::new(item));
 
@@ -98,14 +99,30 @@ fn parse_coords_and_options<'a>(
   Ok((coords, options))
 }
 
+fn apply_options(item: &mut impl CanvasItem, options: &mut [[Value; 2]]) -> Result<(), EvalError> {
+  for [option, value] in options {
+    let name = option.repr_str()?;
+    if !item.apply_option(name, value)? {
+      return Err(EvalError::ArgumentError(format!(
+        "unsupported option: {name}"
+      )));
+    }
+  }
+  Ok(())
+}
+
 fn create_rectangle(opts: &mut [Value], widget: &mut CanvasWidget) -> EvalCmdResult {
-  let (coords, _options) = parse_coords_and_options("rectangle", opts)?;
-  insert_item(widget, CanvasItemRect::default().with_coords(&coords)?)
+  let (coords, options) = parse_coords_and_options("rectangle", opts)?;
+  let mut item = CanvasItemRect::default().with_coords(&coords)?;
+  apply_options(&mut item, options)?;
+  insert_item(widget, item)
 }
 
 fn create_line(opts: &mut [Value], widget: &mut CanvasWidget) -> EvalCmdResult {
-  let (coords, _options) = parse_coords_and_options("line", opts)?;
-  insert_item(widget, CanvasItemLine::default().with_coords(&coords)?)
+  let (coords, options) = parse_coords_and_options("line", opts)?;
+  let mut item = CanvasItemLine::default().with_coords(&coords)?;
+  apply_options(&mut item, options)?;
+  insert_item(widget, item)
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 package require Tk
 
-set gridW 32
-set gridH 32
+set gridW 25
+set gridH 25
 set gridRects [dict create]
 set pos [list 15 15]
 set ix 0
@@ -9,30 +9,22 @@ set iy 0
 set dir [list 1 0]
 set foodPos [list 4 4]
 set len 5
+set score 0
 set posList [list]
-set frametime 80
+set speed 0.0
 
 set w 500
 set h 500
 
-canvas .c -width $w -height $h
+canvas .c -width $w -height $h -background #111
 pack .c
 
-bind . <KeyPress-w> {
-  global iy
-  set iy -1
-}
-bind . <KeyPress-a> {
-  global ix
-  set ix -1
-}
-bind . <KeyPress-s> {
-  global iy
-  set iy 1
-}
-bind . <KeyPress-d> {
-  global ix
-  set ix 1
+bind . <KeyPress> {
+  global ix iy
+  if {%K == "w" || %K == "Up"} {set iy -1}
+  if {%K == "a" || %K == "Left"} {set ix -1}
+  if {%K == "s" || %K == "Down"} {set iy 1}
+  if {%K == "d" || %K == "Right"} {set ix 1}
 }
 
 proc cellPx {pos} {
@@ -47,21 +39,25 @@ proc cellPx {pos} {
 }
 
 # food init
-lassign [cellPx $foodPos] fx1 fy1 fx2 fy2
-set foodRect [.c create rectangle $fx1 $fy1 $fx2 $fy2]
+set foodRect [.c create rectangle [cellPx $foodPos] -fill #944231 -outline {}]
 
 proc frame {} {
-  global gridW gridH gridRects pos ix iy dir foodPos len posList frametime w h foodRect
+  global gridW gridH gridRects pos ix iy dir foodPos len score posList speed w h foodRect
 
   lassign $pos x y
   lassign $dir dx dy
 
   # input
   if {$ix != 0} {
-    set dir [list $ix 0]
+    # prevent 180 turn
+    if {[lindex $dir 0] == 0} {
+      set dir [list $ix 0]
+    }
     set ix 0
   } elseif {$iy != 0} {
-    set dir [list 0 $iy]
+    if {[lindex $dir 1] == 0} {
+      set dir [list 0 $iy]
+    }
     set iy 0
   }
 
@@ -89,22 +85,18 @@ proc frame {} {
   # check eatin'
   lassign $foodPos fx fy
   if {$x == $fx && $y == $fy} {
-    puts "nom"
     incr len
-    if {$frametime > 0} {
-      incr frametime -5
-    }
-    # todo random
-    set foodPos [list [expr {$gridW - $fx}] [expr {$gridH - $fy}]]
-    lassign [cellPx $foodPos] fx1 fy1 fx2 fy2
-    .c coords $foodRect $fx1 $fy1 $fx2 $fy2
+    incr score
+    set speed [expr {$speed + (1 - $speed) * 0.04}]
+    set foodPos [list [expr {int(rand() * $gridW)}] [expr {int(rand() * $gridH)}]]
+    .c coords $foodRect [cellPx $foodPos]
+    puts "score: $score | speed: [expr {int($speed * 100)}]"
   }
 
   # create new segment
   set newPos [list $x $y]
   lappend posList $newPos
-  lassign [cellPx $newPos] rx1 ry1 rx2 ry2 
-  dict set gridRects $newPos [.c create rectangle $rx1 $ry1 $rx2 $ry2]
+  dict set gridRects $newPos [.c create rectangle [cellPx $newPos] -fill #31893D -outline {}]
 
   # remove old segments
   while {[llength $posList] > $len} {
@@ -112,7 +104,7 @@ proc frame {} {
     .c delete [dict get $gridRects $popped]
   }
 
-  after $frametime frame
+  after [expr {int(100 - $speed * 65)}] frame
 }
 
 frame

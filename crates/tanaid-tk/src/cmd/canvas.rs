@@ -1,5 +1,6 @@
 use crate::canvas::{CanvasAttributes, CanvasWidget};
 use crate::cmd;
+use crate::color::parse_color;
 use crate::tk_context::TkContext;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -69,6 +70,18 @@ pub(super) fn eval(
           u32::try_from(value.repr_int()?)
             .map_err(|e| EvalError::ArgumentError(format!("invalid height: {}", e)))?,
         );
+      }
+      "background" => {
+        let Some(value) = opts.next() else {
+          return Err(EvalError::ArgumentError(
+            "value for background missing".to_string(),
+          ));
+        };
+        attrs.background = parse_color(value.repr_str()?)?
+          .ok_or_else(|| {
+            EvalError::ArgumentError("canvas does not allow empty background color".to_string())
+          })?
+          .into();
       }
       _ => {
         return Err(EvalError::ArgumentError(format!(

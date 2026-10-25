@@ -34,11 +34,21 @@ pub(crate) fn eval(
         return Ok(Value::none());
       };
 
-      let coords = coords
-        .iter_mut()
-        .map(|c| c.repr_float())
-        .collect::<Result<Vec<f64>, _>>()?;
+      let coords = if coords.len() == 1 {
+        coords[0]
+          .repr_list()?
+          .iter()
+          .map(|x| x.clone().repr_float())
+          .collect::<Result<Vec<_>, _>>()?
+      } else {
+        coords
+          .iter_mut()
+          .map(|x| x.repr_float())
+          .collect::<Result<Vec<_>, _>>()?
+      };
+
       item.set_coords(&coords)?;
+      item.recompute()?;
 
       Ok(Value::none())
     }
