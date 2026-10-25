@@ -4,15 +4,26 @@ use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
 use vello::Scene;
 use vello::kurbo::{Affine, BezPath, Stroke};
-use vello::peniko::Brush;
+use vello::peniko::{Brush, Color};
 
-#[derive(Default)]
 pub struct CanvasItemLine {
   pub coords: Vec<f64>,
   path: BezPath,
   smooth: Smooth,
-  fill: Brush,
+  fill: Option<Brush>,
   stroke: Stroke,
+}
+
+impl Default for CanvasItemLine {
+  fn default() -> Self {
+    Self {
+      coords: Default::default(),
+      path: Default::default(),
+      smooth: Default::default(),
+      fill: Some(Brush::Solid(Color::WHITE)),
+      stroke: Stroke::new(1.),
+    }
+  }
 }
 
 #[derive(Default)]
@@ -27,7 +38,7 @@ impl CanvasItem for CanvasItemLine {
   fn apply_option(&mut self, name: &str, value: &mut Value) -> Result<bool, EvalError> {
     match name {
       "-fill" => {
-        self.fill = parse_color(value.repr_str()?)?.into();
+        self.fill = parse_color(value.repr_str()?)?.map(|c| c.into());
       }
       "-smooth" => {
         match value.repr_bool() {
@@ -70,7 +81,9 @@ impl CanvasItem for CanvasItemLine {
   }
 
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
-    scene.stroke(&self.stroke, transform, &self.fill, None, &self.path);
+    if let Some(fill) = &self.fill {
+      scene.stroke(&self.stroke, transform, fill, None, &self.path);
+    }
   }
 
   fn recompute(&mut self) -> Result<(), EvalError> {

@@ -1,9 +1,12 @@
 use tanaid::eval_error::EvalError;
 use vello::peniko::Color;
 
-pub fn parse_color(str: &str) -> Result<Color, EvalError> {
+pub fn parse_color(str: &str) -> Result<Option<Color>, EvalError> {
+  if str.is_empty() {
+    return Ok(None);
+  }
   if str.starts_with('#') {
-    return parse_color_hex(str);
+    return Ok(Some(parse_color_hex(str)?));
   }
   Err(EvalError::ArgumentError(
     "only hex colors are supported".to_string(),

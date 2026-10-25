@@ -77,7 +77,7 @@ pub(super) fn eval(
             "value for background missing".to_string(),
           ));
         };
-        attrs.background = parse_color(value.repr_str()?)?.into();
+        attrs.background = parse_color(value.repr_str()?)?.map(|c| c.into());
       }
       _ => {
         return Err(EvalError::ArgumentError(format!(
