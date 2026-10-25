@@ -3,7 +3,7 @@ use crate::item::canvas_item::CanvasItem;
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
 use vello::Scene;
-use vello::kurbo::{Affine, BezPath, Stroke};
+use vello::kurbo::{Affine, BezPath, Cap, Join, Stroke};
 use vello::peniko::{Brush, Color};
 
 pub struct CanvasItemLine {
@@ -21,7 +21,7 @@ impl Default for CanvasItemLine {
       path: Default::default(),
       smooth: Default::default(),
       fill: Some(Brush::Solid(Color::BLACK)),
-      stroke: Stroke::new(1.),
+      stroke: Stroke::new(1.).with_caps(Cap::Butt).with_join(Join::Round),
     }
   }
 }

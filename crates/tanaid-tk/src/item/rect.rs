@@ -3,7 +3,7 @@ use crate::item::canvas_item::CanvasItem;
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
 use vello::Scene;
-use vello::kurbo::{self, Affine, Stroke};
+use vello::kurbo::{self, Affine, Join, Stroke};
 use vello::peniko::{Brush, Color, Fill};
 
 pub struct CanvasItemRect {
@@ -19,7 +19,7 @@ impl Default for CanvasItemRect {
       rect: Default::default(),
       fill: Default::default(),
       outline: Some(Brush::Solid(Color::BLACK)),
-      stroke: Stroke::new(1.),
+      stroke: Stroke::new(1.).with_join(Join::Round),
     }
   }
 }
