@@ -2,19 +2,6 @@ package require Tk
 
 # move mouse left and right to change roundness
 
-canvas .c -width 250 -height 250 -background #cbc
-pack .c
-
-proc draw {r} {
-  .c delete all
-  roundrect .c 50 50 200 200 $r #848 2
-}
-draw 32
-
-bind . <Motion> {
-  draw [expr {%x / 250.0 * 80}]
-}
-
 proc roundrect {canvas x1 y1 x2 y2 radius fill width} {
   set w [expr {$x2 - $x1}]
   set h [expr {$y2 - $y1}]
@@ -45,4 +32,17 @@ proc roundrect {canvas x1 y1 x2 y2 radius fill width} {
   }
   
   return $result
+}
+
+canvas .c -width 250 -height 250 -background #cbc
+pack .c
+
+proc draw {r} {
+  .c delete all
+  roundrect .c 50 50 200 200 $r #848 2
+}
+draw 32
+
+bind . <Motion> {
+  draw [expr {%x / 250.0 * 80}]
 }
