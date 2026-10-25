@@ -23,16 +23,10 @@ impl CanvasWidget {
 impl Widget for CanvasWidget {
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
     let (width, height) = self.requested_size();
-
-    const DEFAULT_BACKGROUND: Brush = Brush::Solid(Color::WHITE);
     scene.fill(
       Fill::NonZero,
       transform,
-      self
-        .attrs
-        .background
-        .as_ref()
-        .unwrap_or(&DEFAULT_BACKGROUND),
+      &self.attrs.background,
       None,
       &Rect::new(0., 0., width as f64, height as f64),
     );
@@ -53,7 +47,7 @@ impl Widget for CanvasWidget {
 pub struct CanvasAttributes {
   pub width: Option<u32>,
   pub height: Option<u32>,
-  pub background: Option<Brush>,
+  pub background: Brush,
 }
 
 impl CanvasAttributes {
@@ -61,7 +55,7 @@ impl CanvasAttributes {
     Self {
       width: None,
       height: None,
-      background: None,
+      background: Brush::Solid(Color::from_rgb8(0xd9, 0xd9, 0xd9)),
     }
   }
 }

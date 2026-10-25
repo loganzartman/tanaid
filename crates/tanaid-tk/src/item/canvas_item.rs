@@ -24,7 +24,6 @@ pub trait CanvasItem {
     Self: Sized,
   {
     self.set_coords(coords)?;
-    self.recompute()?;
     Ok(self)
   }
 }

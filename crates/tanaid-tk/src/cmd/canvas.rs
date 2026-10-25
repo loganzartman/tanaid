@@ -77,7 +77,11 @@ pub(super) fn eval(
             "value for background missing".to_string(),
           ));
         };
-        attrs.background = parse_color(value.repr_str()?)?.map(|c| c.into());
+        attrs.background = parse_color(value.repr_str()?)?
+          .ok_or_else(|| {
+            EvalError::ArgumentError("canvas does not allow empty background color".to_string())
+          })?
+          .into();
       }
       _ => {
         return Err(EvalError::ArgumentError(format!(

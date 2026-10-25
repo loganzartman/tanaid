@@ -39,7 +39,8 @@ fn next_id(widget: &CanvasWidget) -> i64 {
   widget.items.last().map_or(0, |(id, _)| id + 1)
 }
 
-fn insert_item(widget: &mut CanvasWidget, item: impl CanvasItem + 'static) -> EvalCmdResult {
+fn insert_item(widget: &mut CanvasWidget, mut item: impl CanvasItem + 'static) -> EvalCmdResult {
+  item.recompute()?;
   let id = next_id(widget);
   widget.items.insert(id, Box::new(item));
 
@@ -107,7 +108,6 @@ fn apply_options(item: &mut impl CanvasItem, options: &mut [[Value; 2]]) -> Resu
       )));
     }
   }
-  item.recompute()?;
   Ok(())
 }
 

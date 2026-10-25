@@ -19,7 +19,7 @@ impl Default for CanvasItemRect {
       rect: Default::default(),
       fill: Default::default(),
       outline: Some(Brush::Solid(Color::BLACK)),
-      stroke: Stroke::new(1.).with_join(Join::Round),
+      stroke: Stroke::new(1.).with_join(Join::Miter),
     }
   }
 }
