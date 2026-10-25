@@ -143,7 +143,7 @@ proc frame {} {
   lset nodevel [expr {$nnodes - 1}] [list 0 0]
 
   set i 0
-  set points [lindex $nodepos 0]
+  set points [list ]
   while {$i < $nnodes} {
     set a [lindex $nodepos [expr {$i - 1}]]
     set b [lindex $nodepos $i]
