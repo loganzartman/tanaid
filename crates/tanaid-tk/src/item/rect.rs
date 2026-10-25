@@ -1,36 +1,40 @@
-use crate::item::canvas_item::{CanvasItem, CanvasItemCommonOptions};
+use crate::color::parse_color;
+use crate::item::canvas_item::CanvasItem;
 use tanaid::eval_error::EvalError;
+use tanaid::value::Value;
 use vello::Scene;
-use vello::kurbo::{self, Affine};
-use vello::peniko::Fill;
+use vello::kurbo::{self, Affine, Stroke};
+use vello::peniko::{Brush, Fill};
 
 #[derive(Default)]
 pub struct CanvasItemRect {
   pub rect: kurbo::Rect,
-  pub common_opts: CanvasItemCommonOptions,
+  fill: Brush,
+  outline: Brush,
+  stroke: Stroke,
 }
 
 impl CanvasItem for CanvasItemRect {
-  fn common_options(&mut self) -> &mut CanvasItemCommonOptions {
-    &mut self.common_opts
+  fn apply_option(&mut self, name: &str, value: &mut Value) -> Result<bool, EvalError> {
+    match name {
+      "-fill" => {
+        self.fill = parse_color(value.repr_str()?)?.into();
+      }
+      "-outline" => {
+        self.outline = parse_color(value.repr_str()?)?.into();
+      }
+      "-width" => {
+        self.stroke.width = value.repr_float()?;
+      }
+      _ => return Ok(false),
+    }
+    Ok(true)
   }
 
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
-    scene.fill(
-      Fill::NonZero,
-      transform,
-      &self.common_opts.fill_brush,
-      None,
-      &self.rect,
-    );
-    if self.common_opts.stroke.width > 0. {
-      scene.stroke(
-        &self.common_opts.stroke,
-        transform,
-        &self.common_opts.stroke_brush,
-        None,
-        &self.rect,
-      );
+    scene.fill(Fill::NonZero, transform, &self.fill, None, &self.rect);
+    if self.stroke.width > 0. {
+      scene.stroke(&self.stroke, transform, &self.outline, None, &self.rect);
     }
   }
 

@@ -101,15 +101,11 @@ fn parse_coords_and_options<'a>(
 fn apply_options(item: &mut impl CanvasItem, options: &mut [[Value; 2]]) -> Result<(), EvalError> {
   for [option, value] in options {
     let name = option.repr_str()?;
-    if item.apply_own_option(name, value)? {
-      continue;
+    if !item.apply_option(name, value)? {
+      return Err(EvalError::ArgumentError(format!(
+        "unsupported option: {name}"
+      )));
     }
-    if item.apply_common_option(name, value)? {
-      continue;
-    }
-    return Err(EvalError::ArgumentError(format!(
-      "unsupported option: {name} = {value}"
-    )));
   }
   item.recompute()?;
   Ok(())

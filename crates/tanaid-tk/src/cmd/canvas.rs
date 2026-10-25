@@ -1,6 +1,6 @@
 use crate::canvas::{CanvasAttributes, CanvasWidget};
 use crate::cmd;
-use crate::color::parse_color_hex;
+use crate::color::parse_color;
 use crate::tk_context::TkContext;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -8,7 +8,6 @@ use tanaid::eval::EvalCmdResult;
 use tanaid::eval::{EvalContext, FrameId};
 use tanaid::eval_error::EvalError;
 use tanaid::value::Value;
-use vello::peniko::Color;
 
 pub(super) fn eval(
   args: &mut [Value],
@@ -78,7 +77,7 @@ pub(super) fn eval(
             "value for background missing".to_string(),
           ));
         };
-        attrs.background = Color::new(parse_color_hex(value.repr_str()?)?.into()).into();
+        attrs.background = parse_color(value.repr_str()?)?.into();
       }
       _ => {
         return Err(EvalError::ArgumentError(format!(

@@ -1,14 +1,18 @@
-use crate::item::canvas_item::{CanvasItem, CanvasItemCommonOptions};
+use crate::color::parse_color;
+use crate::item::canvas_item::CanvasItem;
 use tanaid::eval_error::EvalError;
+use tanaid::value::Value;
 use vello::Scene;
-use vello::kurbo::{Affine, BezPath};
+use vello::kurbo::{Affine, BezPath, Stroke};
+use vello::peniko::Brush;
 
 #[derive(Default)]
 pub struct CanvasItemLine {
   pub coords: Vec<f64>,
   path: BezPath,
-  common_options: CanvasItemCommonOptions,
   smooth: Smooth,
+  fill: Brush,
+  stroke: Stroke,
 }
 
 #[derive(Default)]
@@ -20,16 +24,11 @@ enum Smooth {
 }
 
 impl CanvasItem for CanvasItemLine {
-  fn common_options(&mut self) -> &mut CanvasItemCommonOptions {
-    &mut self.common_options
-  }
-
-  fn apply_own_option(
-    &mut self,
-    name: &str,
-    value: &mut tanaid::value::Value,
-  ) -> Result<bool, EvalError> {
+  fn apply_option(&mut self, name: &str, value: &mut Value) -> Result<bool, EvalError> {
     match name {
+      "-fill" => {
+        self.fill = parse_color(value.repr_str()?)?.into();
+      }
       "-smooth" => {
         match value.repr_bool() {
           Ok(true) => {
@@ -62,19 +61,16 @@ impl CanvasItem for CanvasItemLine {
       "-splinesteps" => {
         // no need; our curves are literally perfect
       }
+      "-width" => {
+        self.stroke.width = value.repr_float()?;
+      }
       _ => return Ok(false),
     }
     Ok(true)
   }
 
   fn redraw(&self, scene: &mut Scene, transform: Affine) {
-    scene.stroke(
-      &self.common_options.stroke,
-      transform,
-      &self.common_options.fill_brush,
-      None,
-      &self.path,
-    );
+    scene.stroke(&self.stroke, transform, &self.fill, None, &self.path);
   }
 
   fn recompute(&mut self) -> Result<(), EvalError> {
