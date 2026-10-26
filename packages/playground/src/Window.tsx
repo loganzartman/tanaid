@@ -3,6 +3,7 @@ import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
   draggable?: boolean;
+  noContextMenu?: boolean;
   onClose?: () => void;
   onFocusOut?: (event: FocusEvent) => void;
   onPointerDown?: (event: PointerEvent, data: { x: number; y: number }) => void;
@@ -144,7 +145,11 @@ export function Window(props: WindowProps) {
         onPointerDown={(event) => props.onPointerDown?.(event, dataFromPointerEvent(event))}
         onPointerUp={(event) => props.onPointerUp?.(event, dataFromPointerEvent(event))}
         onPointerCancel={(event) => props.onPointerCancel?.(event, dataFromPointerEvent(event))}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={(event) => {
+          if (props.noContextMenu) {
+            event.preventDefault();
+          }
+        }}
       >
         {props.children}
       </div>
