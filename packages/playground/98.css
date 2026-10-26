@@ -233,7 +233,7 @@ input[type="reset"] {
 
   min-width: 75px;
   min-height: 23px;
-  padding: 0 12px;
+  padding: 3px 12px;
 }
 
 button.default,
@@ -248,13 +248,8 @@ input[type="reset"].icon {
   display: flex;
   flex-direction: row;
   align-items: center;
-  min-height: 0;
+  gap: 2px;
 
-  & :is(img, svg) {
-    margin-top: 3px;
-    margin-inline-end: 2px;
-    align-self: start;
-  }
   &:active :is(img, svg) {
     transform: translate(1px, 1px);
   }

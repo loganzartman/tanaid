@@ -259,14 +259,12 @@ export function App() {
                 </Menu>
               </MenuBar>
               <div class="m-(--element-spacing) flex flex-row gap-2">
-                <div class="flex flex-row">
-                  <button class="icon" onClick={handleStartStop}>
-                    <Show when={tclState() === "idle"} fallback={<StopIcon />}>
-                      <StartIcon />
-                    </Show>
-                    <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
-                  </button>
-                </div>
+                <button class="icon" onClick={handleStartStop}>
+                  <Show when={tclState() === "idle"} fallback={<StopIcon />}>
+                    <StartIcon />
+                  </Show>
+                  <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
+                </button>
                 <input
                   type="checkbox"
                   id="checkbox-auto"
