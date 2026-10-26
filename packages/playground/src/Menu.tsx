@@ -1,4 +1,5 @@
-import { createContext, useContext, type JSX, type ParentProps } from "solid-js";
+import { createContext, useContext, type ParentProps } from "solid-js";
+import type { JSX } from "@solidjs/web";
 
 const SUBMENU_DELAY_MS = 400;
 
