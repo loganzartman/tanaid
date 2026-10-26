@@ -1163,8 +1163,7 @@ table > tbody > tr > * {
   display: flex;
 }
 
-[role="menubar"] > button[role="menuitem"],
-[role="menu"] > button[role="menuitem"] {
+:is([role="menubar"], [role="menu"]) > button[role="menuitem"] {
   min-width: 0;
   min-height: 0;
   color: var(--text-color);
@@ -1197,7 +1196,6 @@ table > tbody > tr > * {
   color: inherit;
   box-shadow: var(--border-window-outer), var(--border-window-inner);
   outline: none;
-  overflow: visible;
   flex-direction: column;
   scale: var(--gs, 1);
   transform-origin: top left;
@@ -1205,10 +1203,8 @@ table > tbody > tr > * {
 
 [role="menu"]:popover-open {
   display: flex;
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  [role="menu"]:popover-open {
+  @media (prefers-reduced-motion: no-preference) {
     transition: opacity 200ms linear;
 
     @starting-style {

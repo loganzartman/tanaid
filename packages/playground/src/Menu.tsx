@@ -6,17 +6,17 @@ export function MenuBar(props: ParentProps) {
   // oxlint-disable-next-line no-unassigned-vars
   let bar!: HTMLDivElement;
 
-  const openItem = () => menuItems(bar).find((item) => isOpen(popoverOf(item)));
+  const openItem = () => bar.querySelector<HTMLButtonElement>(":scope > :has(+ :popover-open)");
 
   const moveInBar = (delta: 1 | -1) => {
     const all = menuItems(bar);
-    const current = openItem() ?? (document.activeElement as HTMLButtonElement);
-    const index = all.indexOf(current);
+    const open = openItem();
+    const index = all.indexOf(open ?? (document.activeElement as HTMLButtonElement));
     if (index === -1) {
       return;
     }
     const next = all.at((index + delta) % all.length)!;
-    if (openItem()) {
+    if (open) {
       openMenu(next, true);
     } else {
       next.focus();
@@ -75,9 +75,13 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
   const inBar = () => item.parentElement?.role === "menubar";
   const openSubmenu = () => menu.querySelector<HTMLElement>(":scope > :popover-open");
 
-  const unhover = () => {
+  const clearHover = () => {
     hovered = null;
     clearTimeout(hoverTimer);
+  };
+
+  const unhover = () => {
+    clearHover();
     if (document.activeElement?.parentElement === menu) {
       (openSubmenu() ?? menu).focus({ preventScroll: true });
     }
@@ -91,11 +95,11 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
         aria-haspopup="menu"
         popovertarget={id}
         onPointerDown={(event) => {
-          if (!inBar() || event.button !== 0) {
+          if (event.button !== 0) {
             return;
           }
           event.preventDefault();
-          if (isOpen(menu)) {
+          if (inBar() && menu.matches(":popover-open")) {
             menu.hidePopover();
           } else {
             openMenu(item);
@@ -105,8 +109,6 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
           event.preventDefault();
           if (event.detail === 0) {
             openMenu(item, true);
-          } else if (!inBar()) {
-            openMenu(item);
           }
         }}
       >
@@ -122,8 +124,7 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
           if (event.newState === "open") {
             return;
           }
-          clearTimeout(hoverTimer);
-          hovered = null;
+          clearHover();
           const focused = document.activeElement;
           if (!focused || focused === document.body || menu.contains(focused)) {
             item.focus({ preventScroll: true });
@@ -138,8 +139,8 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
           if (target === hovered) {
             return;
           }
+          clearHover();
           hovered = target;
-          clearTimeout(hoverTimer);
           target.focus({ preventScroll: true });
           hoverTimer = setTimeout(() => {
             if (popoverOf(target)) {
@@ -176,6 +177,7 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
             default:
               return;
           }
+          clearHover();
           event.preventDefault();
           event.stopPropagation();
         }}
@@ -215,12 +217,8 @@ function menuItems(container: Element) {
   return [...container.querySelectorAll<HTMLButtonElement>(':scope > [role="menuitem"]')];
 }
 
-function isOpen(popover: Element | null | undefined) {
-  return popover?.matches(":popover-open") ?? false;
-}
-
-function popoverOf(item: HTMLButtonElement | null) {
-  return (item?.popoverTargetElement ?? null) as HTMLElement | null;
+function popoverOf(item: HTMLButtonElement) {
+  return item.popoverTargetElement as HTMLElement | null;
 }
 
 function openMenu(item: HTMLButtonElement, focusFirstItem = false) {
@@ -233,7 +231,7 @@ function openMenu(item: HTMLButtonElement, focusFirstItem = false) {
   const inBar = item.parentElement?.role === "menubar";
   menu.style.left = `calc(${inBar ? rect.left : rect.right}px / var(--us, 1))`;
   menu.style.top = `calc(${inBar ? rect.bottom : rect.top}px / var(--us, 1))`;
-  if (!isOpen(menu)) {
+  if (!menu.matches(":popover-open")) {
     menu.showPopover({ source: item });
   }
   const target = focusFirstItem ? (menuItems(menu)[0] ?? menu) : menu;
