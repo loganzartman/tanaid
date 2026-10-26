@@ -186,6 +186,47 @@ export function App() {
           <div class="m-0 flex">
             <div class="flex flex-col gap-1">
               <MenuBar>
+                <Menu label="File">
+                  <MenuButton onClick={() => setSource("")}>New</MenuButton>
+                  <MenuButton
+                    onClick={() => {
+                      const upload = document.createElement("input");
+                      upload.type = "file";
+                      upload.accept = ".tcl";
+                      upload.addEventListener(
+                        "change",
+                        () => {
+                          if (upload.files?.length !== 1) {
+                            return;
+                          }
+                          upload.files[0]
+                            .text()
+                            .then((text) => {
+                              setSource(text);
+                            })
+                            .catch((e) => setResult(e));
+                        },
+                        false,
+                      );
+                      upload.click();
+                    }}
+                  >
+                    Open
+                  </MenuButton>
+                  <MenuButton
+                    onClick={() => {
+                      const blob = new Blob([source()], { type: ".tcl" });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = "project.tcl";
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Save
+                  </MenuButton>
+                </Menu>
                 <Menu label="Examples">
                   <For each={Object.entries(examples)}>
                     {([category, sources]) => (
