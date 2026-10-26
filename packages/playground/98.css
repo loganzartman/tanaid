@@ -1199,11 +1199,6 @@ table > tbody > tr > * {
   outline: none;
   overflow: visible;
   flex-direction: column;
-  position-area: bottom span-right;
-  position-try-fallbacks:
-    flip-block,
-    flip-inline,
-    flip-block flip-inline;
   scale: var(--gs, 1);
   transform-origin: top left;
 }
@@ -1223,7 +1218,6 @@ table > tbody > tr > * {
 }
 
 [role="menu"] > [role="menu"] {
-  position-area: right span-bottom;
   margin-block-start: calc(-3px * var(--gs, 1));
 }
 

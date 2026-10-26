@@ -63,7 +63,6 @@ export function MenuBar(props: ParentProps) {
 
 export function Menu(props: ParentProps<{ label: JSX.Element }>) {
   const id = createUniqueId();
-  const anchorName = `--menu-${id}`;
 
   // oxlint-disable-next-line no-unassigned-vars
   let item!: HTMLButtonElement;
@@ -91,7 +90,6 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
         role="menuitem"
         aria-haspopup="menu"
         popovertarget={id}
-        style={{ "anchor-name": anchorName }}
         onPointerDown={(event) => {
           if (!inBar() || event.button !== 0) {
             return;
@@ -120,7 +118,6 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
         popover
         role="menu"
         tabindex={-1}
-        style={{ "position-anchor": anchorName }}
         onToggle={(event) => {
           if (event.newState === "open") {
             return;
@@ -232,6 +229,10 @@ function openMenu(item: HTMLButtonElement, focusFirstItem = false) {
     item.focus();
     return;
   }
+  const rect = item.getBoundingClientRect();
+  const inBar = item.parentElement?.role === "menubar";
+  menu.style.left = `calc(${inBar ? rect.left : rect.right}px / var(--us, 1))`;
+  menu.style.top = `calc(${inBar ? rect.bottom : rect.top}px / var(--us, 1))`;
   if (!isOpen(menu)) {
     menu.showPopover({ source: item });
   }
