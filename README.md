@@ -17,7 +17,7 @@ cargo install tanaid-cli
 tanaid
 
 # run a file
-tanaid ./sample/fib.tcl
+tanaid ./sample/basic/fib.tcl
 ```
 
 rust library:
@@ -132,7 +132,7 @@ cargo test
 cargo run
 
 # run file
-cargo run -- ./sample/fib.tcl
+cargo run -- ./sample/basic/fib.tcl
 ```
 
 typescript:
