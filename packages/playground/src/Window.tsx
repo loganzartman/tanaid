@@ -129,9 +129,10 @@ export function Window(props: WindowProps) {
     >
       <div
         ref={titlebarRef}
-        class="title-bar"
+        class="title-bar touch-none select-none"
         onPointerDown={handleTitlebarDown}
         onPointerUp={handleTitlebarUp}
+        onPointerCancel={handleTitlebarUp}
         onPointerMove={handleTitlebarMove}
       >
         <div class="title-bar-text pointer-events-none">{props.title}</div>

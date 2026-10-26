@@ -77,7 +77,7 @@ export function App() {
     onWindowChanged({ open, canvas }) {
       setWindowOpen(open);
       setTkCanvas(canvas);
-      canvas.className = "m-0";
+      canvas.className = "m-0 touch-none select-none";
     },
   });
 
