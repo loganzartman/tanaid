@@ -338,8 +338,9 @@ input[type="reset"]:disabled,
   background: linear-gradient(90deg, var(--dialog-gray), var(--dialog-gray-light));
 }
 
+/* Focus in a top-layer popover, like a menu's, doesn't reach `:focus-within` */
 .title-bar.active,
-.window:focus-within .title-bar {
+.window:is(:focus-within, :has(:focus)) .title-bar {
   background: linear-gradient(90deg, var(--dialog-blue), var(--dialog-blue-light));
 }
 
@@ -350,7 +351,7 @@ input[type="reset"]:disabled,
   margin-right: 24px;
 }
 
-.window:focus-within .title-bar-text {
+.window:is(:focus-within, :has(:focus)) .title-bar-text {
   color: white;
 }
 
@@ -1223,7 +1224,7 @@ table > tbody > tr > * {
     align-items: center;
     padding: 2px 21px;
 
-    &:is(:focus, :has(+ [role="menu"]:focus-within)) {
+    &:is(:focus, :has(+ [role="menu"]:is(:focus, :has(:focus)))) {
       color: #fff;
       background: var(--dialog-blue);
     }
