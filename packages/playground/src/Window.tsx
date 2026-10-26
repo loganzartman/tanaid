@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, Show, type ParentProps, type Ref } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
@@ -12,6 +13,7 @@ export type WindowProps = ParentProps & {
   onKeyDown?: (event: KeyboardEvent) => void;
   onKeyUp?: (event: KeyboardEvent) => void;
   title?: string;
+  menuBar?: JSX.Element;
   open?: boolean;
   class?: string;
   ref?: Ref<HTMLDivElement>;
@@ -138,6 +140,7 @@ export function Window(props: WindowProps) {
           </Show>
         </div>
       </div>
+      {props.menuBar}
       <div
         ref={childrenContainerRef}
         class="window-body flex flex-1"

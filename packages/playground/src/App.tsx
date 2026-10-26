@@ -1,11 +1,11 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import poweredByUrl from "../powered-by.png";
 import stopwatchUrl from "../img/stopwtch.webp";
 import stopwatchStaticUrl from "../img/stopwtch-static.webp";
 import { CodeEditor } from "./CodeEditor.tsx";
-import { ExampleSelect } from "./ExampleSelect.tsx";
 import { StartIcon, StopIcon } from "./Icons.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
+import { Menu, MenuBar, MenuButton } from "./Menu.tsx";
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
@@ -181,7 +181,34 @@ export function App() {
   return (
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
-        <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
+        <Window
+          class="size-full max-w-[1200px]"
+          title="tanaid Tcl"
+          menuBar={
+            <MenuBar>
+              <Menu label="Examples">
+                <For each={Object.entries(examples)}>
+                  {([category, sources]) => (
+                    <Menu label={category}>
+                      <For each={Object.entries(sources)}>
+                        {([name, source]) => (
+                          <MenuButton
+                            onClick={() => {
+                              stop();
+                              setSource(source);
+                            }}
+                          >
+                            {name}
+                          </MenuButton>
+                        )}
+                      </For>
+                    </Menu>
+                  )}
+                </For>
+              </Menu>
+            </MenuBar>
+          }
+        >
           <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
               <div class="flex flex-col gap-1">
@@ -193,13 +220,6 @@ export function App() {
                   in your browser
                 </div>
                 <div class="flex flex-row gap-2">
-                  <ExampleSelect
-                    examples={examples}
-                    onSelect={(source) => {
-                      stop();
-                      setSource(source);
-                    }}
-                  />
                   <div class="flex flex-row">
                     <button class="icon" onClick={handleStartStop}>
                       <Show when={tclState() === "idle"} fallback={<StopIcon />}>

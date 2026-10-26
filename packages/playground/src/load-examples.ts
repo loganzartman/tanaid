@@ -1,17 +1,16 @@
 import { globSync, readFileSync } from "node:fs";
 
-export function loadExamples(): Record<string, string> {
-  const examples: Record<string, string> = {};
-  console.log(process.cwd());
-  const paths = globSync("../../sample/*.tcl");
-  console.log(paths);
-  for (const path of paths) {
-    const name = /.*\/([^.]+)(\..*)?$/.exec(path)?.[1];
-    if (typeof name !== "string") {
+/** Sample programs by category, read from `sample/<category>/<name>.tcl`. */
+export function loadExamples(): Record<string, Record<string, string>> {
+  const examples: Record<string, Record<string, string>> = {};
+  for (const path of globSync("../../sample/*/*.tcl").sort()) {
+    const match = /([^/]+)\/([^/.]+)\.tcl$/.exec(path);
+    if (!match) {
       continue;
     }
-    const content = readFileSync(path, "utf-8");
-    examples[name] = content;
+    const [, directory, name] = match;
+    const category = directory[0].toUpperCase() + directory.slice(1);
+    (examples[category] ??= {})[name] = readFileSync(path, "utf-8");
   }
   return examples;
 }
