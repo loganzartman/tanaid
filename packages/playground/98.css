@@ -1172,6 +1172,7 @@ table > tbody > tr > * {
 
 [role="menubar"] {
   display: flex;
+  margin: 0;
 
   & > button[role="menuitem"] {
     padding: 3px 6px;

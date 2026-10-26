@@ -181,44 +181,32 @@ export function App() {
   return (
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
-        <Window
-          class="size-full max-w-[1200px]"
-          title="tanaid Tcl"
-          menuBar={
-            <MenuBar>
-              <Menu label="Examples">
-                <For each={Object.entries(examples)}>
-                  {([category, sources]) => (
-                    <Menu label={category}>
-                      <For each={Object.entries(sources)}>
-                        {([name, source]) => (
-                          <MenuButton
-                            onClick={() => {
-                              stop();
-                              setSource(source);
-                            }}
-                          >
-                            {name}
-                          </MenuButton>
-                        )}
-                      </For>
-                    </Menu>
-                  )}
-                </For>
-              </Menu>
-            </MenuBar>
-          }
-        >
+        <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
+          <MenuBar>
+            <Menu label="Examples">
+              <For each={Object.entries(examples)}>
+                {([category, sources]) => (
+                  <Menu label={category}>
+                    <For each={Object.entries(sources)}>
+                      {([name, source]) => (
+                        <MenuButton
+                          onClick={() => {
+                            stop();
+                            setSource(source);
+                          }}
+                        >
+                          {name}
+                        </MenuButton>
+                      )}
+                    </For>
+                  </Menu>
+                )}
+              </For>
+            </Menu>
+          </MenuBar>
           <div class="flex min-h-0 min-w-0 flex-1 flex-col">
             <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
               <div class="flex flex-col gap-1">
-                <div>
-                  run a tiny subset of{" "}
-                  <a target="_blank" href="https://www.tcl-lang.org/">
-                    Tcl
-                  </a>{" "}
-                  in your browser
-                </div>
                 <div class="flex flex-row gap-2">
                   <div class="flex flex-row">
                     <button class="icon" onClick={handleStartStop}>
