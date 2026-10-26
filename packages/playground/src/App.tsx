@@ -182,91 +182,93 @@ export function App() {
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
         <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
-          <MenuBar>
-            <Menu label="Examples">
-              <For each={Object.entries(examples)}>
-                {([category, sources]) => (
-                  <Menu label={category}>
-                    <For each={Object.entries(sources)}>
-                      {([name, source]) => (
-                        <MenuButton
-                          onClick={() => {
-                            stop();
-                            setSource(source);
-                          }}
-                        >
-                          {name}
-                        </MenuButton>
-                      )}
-                    </For>
-                  </Menu>
-                )}
-              </For>
-            </Menu>
-          </MenuBar>
-          <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
-              <div class="flex flex-col gap-1">
-                <div class="flex flex-row gap-2">
-                  <div class="flex flex-row">
-                    <button class="icon" onClick={handleStartStop}>
-                      <Show when={tclState() === "idle"} fallback={<StopIcon />}>
-                        <StartIcon />
-                      </Show>
-                      <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
-                    </button>
-                  </div>
-                  <input
-                    type="checkbox"
-                    id="checkbox-auto"
-                    checked={isAuto()}
-                    onChange={(event) => setIsAuto(event.currentTarget.checked)}
-                  />
-                  <label for="checkbox-auto">Auto-run</label>
-                </div>
-              </div>
-              <div class="flex-1" />
-              <a target="_blank" href="https://github.com/loganzartman/tanaid">
-                <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
-              </a>
-            </div>
-            <div
-              ref={editorContainerRef}
-              class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full"
-            >
-              <CodeEditor value={source()} onChange={setSource} />
-            </div>
-            <div>
-              <div class="status-bar w-full">
-                <div class="status-bar-field flex flex-row items-center gap-2 p-2">
-                  <label for="result">result:</label>
-                  <div
-                    id="result"
-                    class={[
-                      "font-mono-13 whitespace-pre-wrap",
-                      { "text-error": result() instanceof Error },
-                    ]}
-                  >
-                    {resultText()}
-                  </div>
-                </div>
-                <div class="status-bar-field flex grow-0 flex-col gap-2">
-                  <div class="flex flex-row items-center">
-                    <Show
-                      when={pendingTimers() > 0}
-                      fallback={<img src={stopwatchStaticUrl} class="block" />}
-                    >
-                      <img src={stopwatchUrl} class="block" />
+          <div class="m-0 flex">
+            <div class="flex flex-col gap-1">
+              <MenuBar>
+                <Menu label="Examples">
+                  <For each={Object.entries(examples)}>
+                    {([category, sources]) => (
+                      <Menu label={category}>
+                        <For each={Object.entries(sources)}>
+                          {([name, source]) => (
+                            <MenuButton
+                              onClick={() => {
+                                stop();
+                                setSource(source);
+                              }}
+                            >
+                              {name}
+                            </MenuButton>
+                          )}
+                        </For>
+                      </Menu>
+                    )}
+                  </For>
+                </Menu>
+              </MenuBar>
+              <div class="m-(--element-spacing) flex flex-row gap-2">
+                <div class="flex flex-row">
+                  <button class="icon" onClick={handleStartStop}>
+                    <Show when={tclState() === "idle"} fallback={<StopIcon />}>
+                      <StartIcon />
                     </Show>
-                    <div class="p-2 pl-0.5">{pendingTimers()} timers</div>
-                  </div>
+                    <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
+                  </button>
+                </div>
+                <input
+                  type="checkbox"
+                  id="checkbox-auto"
+                  checked={isAuto()}
+                  onChange={(event) => setIsAuto(event.currentTarget.checked)}
+                />
+                <label for="checkbox-auto">Auto-run</label>
+              </div>
+            </div>
+            <div class="flex-1" />
+            <a
+              class="m-(--element-spacing)"
+              target="_blank"
+              href="https://github.com/loganzartman/tanaid"
+            >
+              <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
+            </a>
+          </div>
+          <div
+            ref={editorContainerRef}
+            class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full"
+          >
+            <CodeEditor value={source()} onChange={setSource} />
+          </div>
+          <div>
+            <div class="status-bar w-full">
+              <div class="status-bar-field flex flex-row items-center gap-2 p-2">
+                <label for="result">result:</label>
+                <div
+                  id="result"
+                  class={[
+                    "font-mono-13 whitespace-pre-wrap",
+                    { "text-error": result() instanceof Error },
+                  ]}
+                >
+                  {resultText()}
                 </div>
               </div>
-              <div class="field-row-stacked mt-2">
-                <label for="stdout">stdout:</label>
-                <div id="stdout" class="sunken-panel h-48 min-h-16 overflow-hidden *:h-full">
-                  <OutputView text={stdout()} />
+              <div class="status-bar-field flex grow-0 flex-col gap-2">
+                <div class="flex flex-row items-center">
+                  <Show
+                    when={pendingTimers() > 0}
+                    fallback={<img src={stopwatchStaticUrl} class="block" />}
+                  >
+                    <img src={stopwatchUrl} class="block" />
+                  </Show>
+                  <div class="p-2 pl-0.5">{pendingTimers()} timers</div>
                 </div>
+              </div>
+            </div>
+            <div class="field-row-stacked mt-2">
+              <label for="stdout">stdout:</label>
+              <div id="stdout" class="sunken-panel h-48 min-h-16 overflow-hidden *:h-full">
+                <OutputView text={stdout()} />
               </div>
             </div>
           </div>
