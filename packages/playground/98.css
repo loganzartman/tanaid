@@ -338,9 +338,8 @@ input[type="reset"]:disabled,
   background: linear-gradient(90deg, var(--dialog-gray), var(--dialog-gray-light));
 }
 
-/* Focus in a top-layer popover, like a menu's, doesn't reach `:focus-within` */
 .title-bar.active,
-.window:is(:focus-within, :has(:focus)) .title-bar {
+.window:focus-within .title-bar {
   background: linear-gradient(90deg, var(--dialog-blue), var(--dialog-blue-light));
 }
 
@@ -351,7 +350,7 @@ input[type="reset"]:disabled,
   margin-right: 24px;
 }
 
-.window:is(:focus-within, :has(:focus)) .title-bar-text {
+.window:focus-within .title-bar-text {
   color: white;
 }
 
@@ -1184,19 +1183,48 @@ table > tbody > tr > * {
   box-shadow: var(--border-menu-raised);
 }
 
-/* A menu's popover follows the item that opens it */
 [role="menubar"] > button[role="menuitem"]:has(+ :popover-open) {
   box-shadow: var(--border-menu-sunken);
   padding: 4px 5px 2px 7px;
 }
 
 [role="menu"] {
-  display: flex;
-  flex-direction: column;
+  inset: auto;
+  margin: 0;
   padding: 3px;
+  border: none;
   background: var(--surface);
+  color: inherit;
   box-shadow: var(--border-window-outer), var(--border-window-inner);
   outline: none;
+  overflow: visible;
+  flex-direction: column;
+  position-area: bottom span-right;
+  position-try-fallbacks:
+    flip-block,
+    flip-inline,
+    flip-block flip-inline;
+  scale: var(--gs, 1);
+  transform-origin: top left;
+}
+
+[role="menu"]:popover-open {
+  display: flex;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [role="menu"]:popover-open {
+    transition: opacity 200ms linear;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+
+[role="menu"] > [role="menu"] {
+  position-area: right span-bottom;
+  margin-block-start: calc(-3px * var(--gs, 1));
 }
 
 [role="menu"] > button[role="menuitem"] {
@@ -1208,13 +1236,7 @@ table > tbody > tr > * {
   text-align: start;
 }
 
-/* An icon sits in the gutter before the label */
-[role="menu"] > button[role="menuitem"] > :is(img, svg) {
-  margin-inline: -19px 3px;
-}
-
-[role="menu"] > button[role="menuitem"]:focus,
-[role="menu"] > button[role="menuitem"]:has(+ .menu-popover :focus) {
+[role="menu"] > button[role="menuitem"]:is(:focus, :has(+ [role="menu"]:focus-within)) {
   color: #fff;
   background: var(--dialog-blue);
 }
@@ -1227,72 +1249,4 @@ table > tbody > tr > * {
   width: 16px;
   background: currentColor;
   mask: var(--icon-arrow-right) no-repeat center;
-}
-
-/* Menus open in the top layer, anchored to the item that opens them */
-.menu-popover {
-  inset: auto;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  overflow: visible;
-  position-area: bottom span-right;
-  position-try-fallbacks:
-    flip-block,
-    flip-inline,
-    flip-block flip-inline;
-}
-
-/* Menus fade in as they open, and close at once */
-@media (prefers-reduced-motion: no-preference) {
-  .menu-popover:popover-open {
-    transition: opacity 200ms linear;
-  }
-
-  @starting-style {
-    .menu-popover:popover-open {
-      opacity: 0;
-    }
-  }
-}
-
-/* Submenus line up their first item with the item that opens them */
-[role="menu"] > .menu-popover {
-  position-area: right span-bottom;
-  margin-block-start: calc(-3px * var(--gs, 1));
-}
-
-/*
- * The top layer escapes the page's global `scale(var(--gs))`, though anchoring
- * still sees it. Scale the menu from the corner its popover is anchored by.
- */
-.menu-popover {
-  container-type: anchored;
-  pointer-events: none;
-}
-
-.menu-popover > [role="menu"] {
-  pointer-events: auto;
-  scale: var(--gs, 1);
-  transform-origin: top left;
-}
-
-@container anchored(fallback: flip-block) {
-  .menu-popover > [role="menu"] {
-    transform-origin: bottom left;
-  }
-}
-
-@container anchored(fallback: flip-inline) {
-  .menu-popover > [role="menu"] {
-    transform-origin: top right;
-  }
-}
-
-@container anchored(fallback: flip-block flip-inline) {
-  .menu-popover > [role="menu"] {
-    transform-origin: bottom right;
-  }
 }
