@@ -101,9 +101,11 @@ export function Window(props: WindowProps) {
       tabindex={0}
       style={{
         position: props.draggable ? "absolute" : "unset",
-        left: props.draggable ? `${x()}px` : "unset",
-        top: props.draggable ? `${y()}px` : "unset",
-        transform: props.draggable ? `translate(round(-50%, 1px), round(-50%, 1px))` : "unset",
+        left: props.draggable ? `0` : "unset",
+        top: props.draggable ? `0` : "unset",
+        transform: props.draggable
+          ? `translate(round(${x()}px - 50%, 1px), round(${y()}px - 50%, 1px))`
+          : "unset",
         display: (props.open ?? true) ? "flex" : "none",
       }}
       onFocusOut={(event) => {
