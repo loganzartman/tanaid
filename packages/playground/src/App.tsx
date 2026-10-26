@@ -48,6 +48,8 @@ export function App() {
   // oxlint-disable-next-line no-unassigned-vars
   let tkWindowRef!: HTMLDivElement;
   // oxlint-disable-next-line no-unassigned-vars
+  let aboutWindowRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
   let editorContainerRef!: HTMLDivElement;
 
   const [isAuto, setIsAuto] = createSignal(true);
@@ -118,6 +120,12 @@ export function App() {
     }
   });
 
+  createEffect(aboutOpen, (aboutOpen) => {
+    if (aboutOpen) {
+      aboutWindowRef.focus();
+    }
+  });
+
   const resultText = () => {
     const value = result();
     if (value instanceof Error) {
@@ -184,10 +192,17 @@ export function App() {
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
         <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
           <div class="m-0 flex">
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col">
               <MenuBar>
                 <Menu label="File">
-                  <MenuButton onClick={() => setSource("")}>New</MenuButton>
+                  <MenuButton
+                    onClick={() => {
+                      stop();
+                      setSource("");
+                    }}
+                  >
+                    New
+                  </MenuButton>
                   <MenuButton
                     onClick={() => {
                       const upload = document.createElement("input");
@@ -202,6 +217,7 @@ export function App() {
                           upload.files[0]
                             .text()
                             .then((text) => {
+                              stop();
                               setSource(text);
                             })
                             .catch((e) => setResult(e));
@@ -215,13 +231,13 @@ export function App() {
                   </MenuButton>
                   <MenuButton
                     onClick={() => {
-                      const blob = new Blob([source()], { type: ".tcl" });
+                      const blob = new Blob([source()], { type: "text/x-tcl" });
                       const url = URL.createObjectURL(blob);
                       const link = document.createElement("a");
                       link.href = url;
                       link.download = "project.tcl";
                       link.click();
-                      URL.revokeObjectURL(url);
+                      setTimeout(() => URL.revokeObjectURL(url), 1000);
                     }}
                   >
                     Save
@@ -250,7 +266,11 @@ export function App() {
                 <Menu label="Help">
                   <MenuButton
                     onClick={() =>
-                      window.open("https://www.magicsplat.com/tcl-docs/doctoc_tcl.html", "_blank")
+                      window.open(
+                        "https://www.magicsplat.com/tcl-docs/doctoc_tcl.html",
+                        "_blank",
+                        "noopener",
+                      )
                     }
                   >
                     Tcl documentation
@@ -258,7 +278,7 @@ export function App() {
                   <MenuButton onClick={() => setAboutOpen(true)}>About tanaid</MenuButton>
                 </Menu>
               </MenuBar>
-              <div class="m-(--element-spacing) flex flex-row gap-2">
+              <div class="mx-(--element-spacing) mt-(--element-spacing) flex flex-row gap-2">
                 <button class="icon" onClick={handleStartStop}>
                   <Show when={tclState() === "idle"} fallback={<StopIcon />}>
                     <StartIcon />
@@ -285,7 +305,7 @@ export function App() {
           </div>
           <div
             ref={editorContainerRef}
-            class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full"
+            class="sunken-panel mb-0 min-h-48 flex-1 overflow-hidden *:h-full"
           >
             <CodeEditor value={source()} onChange={setSource} />
           </div>
@@ -386,6 +406,7 @@ export function App() {
           {tkCanvas()}
         </Window>
         <Window
+          ref={aboutWindowRef}
           class="min-w-72 min-h-32 text-center"
           draggable
           title="About"

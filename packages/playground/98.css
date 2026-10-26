@@ -1219,7 +1219,7 @@ table > tbody > tr > * {
     align-items: center;
     padding: 2px 21px;
 
-    &:is(:focus, :has(+ [role="menu"]:is(:focus, :has(:focus)))) {
+    &:is(:focus, :has(+ [role="menu"]:focus, + [role="menu"] :focus)) {
       color: #fff;
       background: var(--dialog-blue);
     }
