@@ -73,6 +73,10 @@
     inset -2px -2px var(--button-face), inset 2px 2px var(--window-frame);
   --border-status-field: inset -1px -1px var(--button-face), inset 1px 1px var(--button-shadow);
 
+  /* Menu bar items: thin bevels, flipped for hover and press */
+  --border-menu-raised: inset -1px -1px var(--button-shadow), inset 1px 1px var(--button-highlight);
+  --border-menu-sunken: inset -1px -1px var(--button-highlight), inset 1px 1px var(--button-shadow);
+
   /* Tabs */
   --border-tab:
     inset -1px 0 var(--window-frame), inset 1px 1px var(--button-face),
@@ -229,7 +233,7 @@ input[type="reset"] {
 
   min-width: 75px;
   min-height: 23px;
-  padding: 0 12px;
+  padding: 3px 12px;
 }
 
 button.default,
@@ -244,13 +248,8 @@ input[type="reset"].icon {
   display: flex;
   flex-direction: row;
   align-items: center;
-  min-height: 0;
+  gap: 2px;
 
-  & :is(img, svg) {
-    margin-top: 3px;
-    margin-inline-end: 2px;
-    align-self: start;
-  }
   &:active :is(img, svg) {
     transform: translate(1px, 1px);
   }
@@ -334,8 +333,9 @@ input[type="reset"]:disabled,
   background: linear-gradient(90deg, var(--dialog-gray), var(--dialog-gray-light));
 }
 
+/* Focus in a top-layer popover, like a menu's, doesn't reach `:focus-within` */
 .title-bar.active,
-.window:focus-within .title-bar {
+.window:is(:focus-within, :has(:focus)) .title-bar {
   background: linear-gradient(90deg, var(--dialog-blue), var(--dialog-blue-light));
 }
 
@@ -346,7 +346,7 @@ input[type="reset"]:disabled,
   margin-right: 24px;
 }
 
-.window:focus-within .title-bar-text {
+.window:is(:focus-within, :has(:focus)) .title-bar-text {
   color: white;
 }
 
@@ -1153,4 +1153,85 @@ table > tbody > tr > * {
   background: var(--surface);
   box-shadow: var(--border-status-field);
   padding: 1px;
+}
+
+:is([role="menubar"], [role="menu"]) > button[role="menuitem"] {
+  min-width: 0;
+  min-height: 0;
+  color: var(--text-color);
+  text-shadow: none;
+  background: none;
+  box-shadow: none;
+  white-space: nowrap;
+  outline: none;
+}
+
+[role="menubar"] {
+  display: flex;
+  margin: 0;
+
+  & > button[role="menuitem"] {
+    padding: 3px 6px;
+
+    &:is(:hover, :focus-visible) {
+      box-shadow: var(--border-menu-raised);
+    }
+
+    &:has(+ :popover-open) {
+      box-shadow: var(--border-menu-sunken);
+      padding: 4px 5px 2px 7px;
+    }
+  }
+}
+
+[role="menu"] {
+  inset: auto;
+  margin: 0;
+  padding: 3px;
+  border: none;
+  background: var(--surface);
+  color: inherit;
+  box-shadow: var(--border-window-outer), var(--border-window-inner);
+  outline: none;
+  flex-direction: column;
+  scale: var(--gs, 1);
+  transform-origin: top left;
+
+  &:popover-open {
+    display: flex;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 200ms linear;
+
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+
+  & > [role="menu"] {
+    margin-block-start: calc(-3px * var(--gs, 1));
+  }
+
+  & > button[role="menuitem"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 2px 21px;
+
+    &:is(:focus, :has(+ [role="menu"]:focus, + [role="menu"] :focus)) {
+      color: #fff;
+      background: var(--dialog-blue);
+    }
+
+    &[aria-haspopup="menu"]::after {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0;
+      width: 16px;
+      background: currentColor;
+      mask: var(--icon-arrow-right) no-repeat center;
+    }
+  }
 }

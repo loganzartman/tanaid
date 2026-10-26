@@ -3,6 +3,7 @@ import { createPixelPerfectScale } from "./PixelPerfect";
 
 export type WindowProps = ParentProps & {
   draggable?: boolean;
+  noContextMenu?: boolean;
   onClose?: () => void;
   onFocusOut?: (event: FocusEvent) => void;
   onPointerDown?: (event: PointerEvent, data: { x: number; y: number }) => void;
@@ -100,9 +101,11 @@ export function Window(props: WindowProps) {
       tabindex={0}
       style={{
         position: props.draggable ? "absolute" : "unset",
-        left: props.draggable ? `${x()}px` : "unset",
-        top: props.draggable ? `${y()}px` : "unset",
-        transform: props.draggable ? `translate(round(-50%, 1px), round(-50%, 1px))` : "unset",
+        left: props.draggable ? `0` : "unset",
+        top: props.draggable ? `0` : "unset",
+        transform: props.draggable
+          ? `translate(round(${x()}px - 50%, 1px), round(${y()}px - 50%, 1px))`
+          : "unset",
         display: (props.open ?? true) ? "flex" : "none",
       }}
       onFocusOut={(event) => {
@@ -126,9 +129,10 @@ export function Window(props: WindowProps) {
     >
       <div
         ref={titlebarRef}
-        class="title-bar"
+        class="title-bar touch-none select-none"
         onPointerDown={handleTitlebarDown}
         onPointerUp={handleTitlebarUp}
+        onPointerCancel={handleTitlebarUp}
         onPointerMove={handleTitlebarMove}
       >
         <div class="title-bar-text pointer-events-none">{props.title}</div>
@@ -140,11 +144,15 @@ export function Window(props: WindowProps) {
       </div>
       <div
         ref={childrenContainerRef}
-        class="window-body flex flex-1"
+        class="window-body flex flex-1 flex-col"
         onPointerDown={(event) => props.onPointerDown?.(event, dataFromPointerEvent(event))}
         onPointerUp={(event) => props.onPointerUp?.(event, dataFromPointerEvent(event))}
         onPointerCancel={(event) => props.onPointerCancel?.(event, dataFromPointerEvent(event))}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={(event) => {
+          if (props.noContextMenu) {
+            event.preventDefault();
+          }
+        }}
       >
         {props.children}
       </div>

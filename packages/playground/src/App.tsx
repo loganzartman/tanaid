@@ -1,11 +1,11 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import poweredByUrl from "../powered-by.png";
 import stopwatchUrl from "../img/stopwtch.webp";
 import stopwatchStaticUrl from "../img/stopwtch-static.webp";
 import { CodeEditor } from "./CodeEditor.tsx";
-import { ExampleSelect } from "./ExampleSelect.tsx";
 import { StartIcon, StopIcon } from "./Icons.tsx";
 import { loadExamples } from "./load-examples.ts" with { type: "macro" };
+import { Menu, MenuBar, MenuButton } from "./Menu.tsx";
 import { OutputView } from "./OutputView.tsx";
 import { PixelPerfect } from "./PixelPerfect.tsx";
 import { createTclRunner, InterruptedError, type State } from "./tcl/tcl-runner.ts";
@@ -48,6 +48,8 @@ export function App() {
   // oxlint-disable-next-line no-unassigned-vars
   let tkWindowRef!: HTMLDivElement;
   // oxlint-disable-next-line no-unassigned-vars
+  let aboutWindowRef!: HTMLDivElement;
+  // oxlint-disable-next-line no-unassigned-vars
   let editorContainerRef!: HTMLDivElement;
 
   const [isAuto, setIsAuto] = createSignal(true);
@@ -58,6 +60,7 @@ export function App() {
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
+  const [aboutOpen, setAboutOpen] = createSignal(false);
 
   applyCursorStyles();
 
@@ -74,7 +77,7 @@ export function App() {
     onWindowChanged({ open, canvas }) {
       setWindowOpen(open);
       setTkCanvas(canvas);
-      canvas.className = "m-0";
+      canvas.className = "m-0 touch-none select-none";
     },
   });
 
@@ -114,6 +117,12 @@ export function App() {
   createEffect(windowOpen, (windowOpen) => {
     if (windowOpen && !editorContainerRef.contains(document.activeElement)) {
       tkWindowRef.focus();
+    }
+  });
+
+  createEffect(aboutOpen, (aboutOpen) => {
+    if (aboutOpen) {
+      aboutWindowRef.focus();
     }
   });
 
@@ -182,83 +191,154 @@ export function App() {
     <PixelPerfect>
       <div class="box-border flex size-[round(100%,2px)] flex-col items-center justify-center min-[1200px]:p-6">
         <Window class="size-full max-w-[1200px]" title="tanaid Tcl">
-          <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div class="mb-(--element-spacing) flex gap-(--element-spacing)">
-              <div class="flex flex-col gap-1">
-                <div>
-                  run a tiny subset of{" "}
-                  <a target="_blank" href="https://www.tcl-lang.org/">
-                    Tcl
-                  </a>{" "}
-                  in your browser
-                </div>
-                <div class="flex flex-row gap-2">
-                  <ExampleSelect
-                    examples={examples}
-                    onSelect={(source) => {
+          <div class="m-0 flex">
+            <div class="flex flex-col">
+              <MenuBar>
+                <Menu label="File">
+                  <MenuButton
+                    onClick={() => {
                       stop();
-                      setSource(source);
+                      setSource("");
                     }}
-                  />
-                  <div class="flex flex-row">
-                    <button class="icon" onClick={handleStartStop}>
-                      <Show when={tclState() === "idle"} fallback={<StopIcon />}>
-                        <StartIcon />
-                      </Show>
-                      <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
-                    </button>
-                  </div>
-                  <input
-                    type="checkbox"
-                    id="checkbox-auto"
-                    checked={isAuto()}
-                    onChange={(event) => setIsAuto(event.currentTarget.checked)}
-                  />
-                  <label for="checkbox-auto">Auto-run</label>
-                </div>
-              </div>
-              <div class="flex-1" />
-              <a target="_blank" href="https://github.com/loganzartman/tanaid">
-                <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
-              </a>
-            </div>
-            <div
-              ref={editorContainerRef}
-              class="sunken-panel mb-(--element-spacing) min-h-48 flex-1 overflow-hidden *:h-full"
-            >
-              <CodeEditor value={source()} onChange={setSource} />
-            </div>
-            <div>
-              <div class="status-bar w-full">
-                <div class="status-bar-field flex flex-row items-center gap-2 p-2">
-                  <label for="result">result:</label>
-                  <div
-                    id="result"
-                    class={[
-                      "font-mono-13 whitespace-pre-wrap",
-                      { "text-error": result() instanceof Error },
-                    ]}
                   >
-                    {resultText()}
-                  </div>
-                </div>
-                <div class="status-bar-field flex grow-0 flex-col gap-2">
-                  <div class="flex flex-row items-center">
-                    <Show
-                      when={pendingTimers() > 0}
-                      fallback={<img src={stopwatchStaticUrl} class="block" />}
-                    >
-                      <img src={stopwatchUrl} class="block" />
-                    </Show>
-                    <div class="p-2 pl-0.5">{pendingTimers()} timers</div>
-                  </div>
+                    New
+                  </MenuButton>
+                  <MenuButton
+                    onClick={() => {
+                      const upload = document.createElement("input");
+                      upload.type = "file";
+                      upload.accept = ".tcl";
+                      upload.addEventListener(
+                        "change",
+                        () => {
+                          if (upload.files?.length !== 1) {
+                            return;
+                          }
+                          upload.files[0]
+                            .text()
+                            .then((text) => {
+                              stop();
+                              setSource(text);
+                            })
+                            .catch((e) => setResult(e));
+                        },
+                        false,
+                      );
+                      upload.click();
+                    }}
+                  >
+                    Open
+                  </MenuButton>
+                  <MenuButton
+                    onClick={() => {
+                      const blob = new Blob([source()], { type: "text/x-tcl" });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = "project.tcl";
+                      link.click();
+                      setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    }}
+                  >
+                    Save
+                  </MenuButton>
+                </Menu>
+                <Menu label="Examples">
+                  <For each={Object.entries(examples)}>
+                    {([category, sources]) => (
+                      <Menu label={category}>
+                        <For each={Object.entries(sources)}>
+                          {([name, source]) => (
+                            <MenuButton
+                              onClick={() => {
+                                stop();
+                                setSource(source);
+                              }}
+                            >
+                              {name}
+                            </MenuButton>
+                          )}
+                        </For>
+                      </Menu>
+                    )}
+                  </For>
+                </Menu>
+                <Menu label="Help">
+                  <MenuButton
+                    onClick={() =>
+                      window.open(
+                        "https://www.magicsplat.com/tcl-docs/doctoc_tcl.html",
+                        "_blank",
+                        "noopener",
+                      )
+                    }
+                  >
+                    Tcl documentation
+                  </MenuButton>
+                  <MenuButton onClick={() => setAboutOpen(true)}>About tanaid</MenuButton>
+                </Menu>
+              </MenuBar>
+              <div class="mx-(--element-spacing) mt-(--element-spacing) flex flex-row gap-2">
+                <button class="icon" onClick={handleStartStop}>
+                  <Show when={tclState() === "idle"} fallback={<StopIcon />}>
+                    <StartIcon />
+                  </Show>
+                  <div>{tclState() === "idle" ? "Run" : "Stop"}</div>
+                </button>
+                <input
+                  type="checkbox"
+                  id="checkbox-auto"
+                  checked={isAuto()}
+                  onChange={(event) => setIsAuto(event.currentTarget.checked)}
+                />
+                <label for="checkbox-auto">Auto-run</label>
+              </div>
+            </div>
+            <div class="flex-1" />
+            <a
+              class="m-(--element-spacing)"
+              target="_blank"
+              href="https://github.com/loganzartman/tanaid"
+            >
+              <img alt="powered by tanaid" src={poweredByUrl} class="float-right w-22" />
+            </a>
+          </div>
+          <div
+            ref={editorContainerRef}
+            class="sunken-panel mb-0 min-h-48 flex-1 overflow-hidden *:h-full"
+          >
+            <CodeEditor value={source()} onChange={setSource} />
+          </div>
+          <div>
+            <div class="status-bar w-full">
+              <div class="status-bar-field flex flex-row items-center gap-2 p-2">
+                <label for="result">result:</label>
+                <div
+                  id="result"
+                  class={[
+                    "font-mono-13 whitespace-pre-wrap",
+                    { "text-error": result() instanceof Error },
+                  ]}
+                >
+                  {resultText()}
                 </div>
               </div>
-              <div class="field-row-stacked mt-2">
-                <label for="stdout">stdout:</label>
-                <div id="stdout" class="sunken-panel h-48 min-h-16 overflow-hidden *:h-full">
-                  <OutputView text={stdout()} />
+              <div class="status-bar-field flex grow-0 flex-col gap-2">
+                <div class="flex flex-row items-center">
+                  <Show
+                    when={pendingTimers() > 0}
+                    fallback={<img src={stopwatchStaticUrl} class="block" />}
+                  >
+                    <img src={stopwatchUrl} class="block" />
+                  </Show>
+                  <div class="p-2 pl-0.5">{pendingTimers()} timers</div>
                 </div>
+              </div>
+            </div>
+            <div class="field-row-stacked mt-2">
+              <label for="stdout">stdout:</label>
+              <div id="stdout" class="sunken-panel h-48 min-h-16 overflow-hidden *:h-full">
+                <OutputView text={stdout()} />
               </div>
             </div>
           </div>
@@ -266,6 +346,7 @@ export function App() {
         <Window
           ref={tkWindowRef}
           draggable
+          noContextMenu
           title="tanaid-tk"
           open={windowOpen()}
           onClose={() => {
@@ -323,6 +404,32 @@ export function App() {
           }}
         >
           {tkCanvas()}
+        </Window>
+        <Window
+          ref={aboutWindowRef}
+          class="min-w-72 min-h-32 text-center"
+          draggable
+          title="About"
+          open={aboutOpen()}
+          onClose={() => setAboutOpen(false)}
+        >
+          <div class="font-bold mt-4">tanaid web playground</div>
+          <div>
+            <p>
+              run a tiny subset of&nbsp;
+              <a href="https://www.tcl-lang.org/about/language.html" target="_blank">
+                Tcl
+              </a>
+              &nbsp;in your browser.
+            </p>
+            <p>
+              find more information on{" "}
+              <a href="https://github.com/loganzartman/tanaid" target="_blank">
+                github
+              </a>
+              !
+            </p>
+          </div>
         </Window>
       </div>
     </PixelPerfect>
