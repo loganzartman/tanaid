@@ -83,6 +83,9 @@ export function Menu(props: ParentProps<{ label: JSX.Element }>) {
     menu.style.left = `calc(${parent.inBar ? rect.left : rect.right}px / var(--us, 1))`;
     menu.style.top = `calc(${parent.inBar ? rect.bottom : rect.top}px / var(--us, 1))`;
     if (!menu.matches(":popover-open")) {
+      menu.style.transition = item.parentElement?.querySelector(":scope > :popover-open")
+        ? "none"
+        : "";
       menu.showPopover({ source: item });
     }
     const target = focusFirstItem ? (menuItems(menu)[0] ?? menu) : menu;
