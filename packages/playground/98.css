@@ -1159,10 +1159,6 @@ table > tbody > tr > * {
   padding: 1px;
 }
 
-[role="menubar"] {
-  display: flex;
-}
-
 :is([role="menubar"], [role="menu"]) > button[role="menuitem"] {
   min-width: 0;
   min-height: 0;
@@ -1174,17 +1170,21 @@ table > tbody > tr > * {
   outline: none;
 }
 
-[role="menubar"] > button[role="menuitem"] {
-  padding: 3px 6px;
-}
+[role="menubar"] {
+  display: flex;
 
-[role="menubar"] > button[role="menuitem"]:is(:hover, :focus-visible) {
-  box-shadow: var(--border-menu-raised);
-}
+  & > button[role="menuitem"] {
+    padding: 3px 6px;
 
-[role="menubar"] > button[role="menuitem"]:has(+ :popover-open) {
-  box-shadow: var(--border-menu-sunken);
-  padding: 4px 5px 2px 7px;
+    &:is(:hover, :focus-visible) {
+      box-shadow: var(--border-menu-raised);
+    }
+
+    &:has(+ :popover-open) {
+      box-shadow: var(--border-menu-sunken);
+      padding: 4px 5px 2px 7px;
+    }
+  }
 }
 
 [role="menu"] {
@@ -1199,44 +1199,42 @@ table > tbody > tr > * {
   flex-direction: column;
   scale: var(--gs, 1);
   transform-origin: top left;
-}
 
-[role="menu"]:popover-open {
-  display: flex;
+  &:popover-open {
+    display: flex;
 
-  @media (prefers-reduced-motion: no-preference) {
-    transition: opacity 200ms linear;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 200ms linear;
 
-    @starting-style {
-      opacity: 0;
+      @starting-style {
+        opacity: 0;
+      }
     }
   }
-}
 
-[role="menu"] > [role="menu"] {
-  margin-block-start: calc(-3px * var(--gs, 1));
-}
+  & > [role="menu"] {
+    margin-block-start: calc(-3px * var(--gs, 1));
+  }
 
-[role="menu"] > button[role="menuitem"] {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 17px;
-  padding: 2px 21px;
-  text-align: start;
-}
+  & > button[role="menuitem"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 2px 21px;
 
-[role="menu"] > button[role="menuitem"]:is(:focus, :has(+ [role="menu"]:focus-within)) {
-  color: #fff;
-  background: var(--dialog-blue);
-}
+    &:is(:focus, :has(+ [role="menu"]:focus-within)) {
+      color: #fff;
+      background: var(--dialog-blue);
+    }
 
-[role="menu"] > button[role="menuitem"][aria-haspopup="menu"]::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  width: 16px;
-  background: currentColor;
-  mask: var(--icon-arrow-right) no-repeat center;
+    &[aria-haspopup="menu"]::after {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0;
+      width: 16px;
+      background: currentColor;
+      mask: var(--icon-arrow-right) no-repeat center;
+    }
+  }
 }
