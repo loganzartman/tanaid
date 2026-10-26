@@ -58,6 +58,7 @@ export function App() {
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
+  const [aboutOpen, setAboutOpen] = createSignal(false);
 
   applyCursorStyles();
 
@@ -205,6 +206,16 @@ export function App() {
                     )}
                   </For>
                 </Menu>
+                <Menu label="Help">
+                  <MenuButton
+                    onClick={() =>
+                      window.open("https://www.magicsplat.com/tcl-docs/doctoc_tcl.html", "_blank")
+                    }
+                  >
+                    Tcl documentation
+                  </MenuButton>
+                  <MenuButton onClick={() => setAboutOpen(true)}>About tanaid</MenuButton>
+                </Menu>
               </MenuBar>
               <div class="m-(--element-spacing) flex flex-row gap-2">
                 <div class="flex flex-row">
@@ -276,6 +287,7 @@ export function App() {
         <Window
           ref={tkWindowRef}
           draggable
+          noContextMenu
           title="tanaid-tk"
           open={windowOpen()}
           onClose={() => {
@@ -333,6 +345,31 @@ export function App() {
           }}
         >
           {tkCanvas()}
+        </Window>
+        <Window
+          class="min-w-72 min-h-32 text-center"
+          draggable
+          title="About"
+          open={aboutOpen()}
+          onClose={() => setAboutOpen(false)}
+        >
+          <div class="font-bold mt-4">tanaid web playground</div>
+          <div>
+            <p>
+              run a tiny subset of&nbsp;
+              <a href="https://www.tcl-lang.org/about/language.html" target="_blank">
+                Tcl
+              </a>
+              &nbsp;in your browser.
+            </p>
+            <p>
+              find more information on{" "}
+              <a href="https://github.com/loganzartman/tanaid" target="_blank">
+                github
+              </a>
+              !
+            </p>
+          </div>
         </Window>
       </div>
     </PixelPerfect>
