@@ -4,7 +4,7 @@ import { decodeUrlPayload } from "./url.ts";
 
 const urlPayload = await decodeUrlPayload(window.location.hash.substring(1).trim()).catch((err) => {
   console.error("URL payload error: ", err);
-  window.location.hash = "";
+  window.history.replaceState(null, "", "#");
   return null;
 });
 
