@@ -1,6 +1,6 @@
 package require Tk
 
-canvas .c -width 500 -height 500
+canvas .c -width 500 -height 500 -background #c1c1c1
 pack .c
 
 set down false
@@ -35,7 +35,9 @@ bind . <ButtonPress> {
   global down color width line lx ly
   set lx %x
   set ly %y
-  set line [.c create line {%x %y %x %y} -smooth true -width $width -fill $color]
+  set lineColor $color
+  if {%b == 3} {set lineColor #c1c1c1}
+  set line [.c create line {%x %y %x %y} -smooth true -width $width -fill $lineColor]
   set down true
 }
 
