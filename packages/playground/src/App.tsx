@@ -14,37 +14,11 @@ import { Window } from "./Window.tsx";
 import { impossible } from "./impossible.ts";
 import { applyCursorStyles } from "./cursor.ts";
 import type { TclModifierKeys } from "tanaid-tcl";
+import { encodeUrlPayload, type UrlPayload } from "./url.ts";
 
 const examples = loadExamples();
 
-const loadSrc = () => {
-  const hash = window.location.hash.substring(1).trim();
-  if (!hash.length) {
-    return null;
-  }
-  let binary;
-  try {
-    binary = atob(hash);
-  } catch {
-    return null;
-  }
-  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    // links from before UTF-8 encoding held Latin-1 characters directly
-    return binary;
-  }
-};
-
-const storeSrc = (src: string) => {
-  // `btoa` only accepts Latin-1, so encode the UTF-8 bytes
-  const bytes = new TextEncoder().encode(src);
-  const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
-  window.history.replaceState(null, "", `#${btoa(binary)}`);
-};
-
-export function App() {
+export function App(props: { urlPayload: UrlPayload | null }) {
   // oxlint-disable-next-line no-unassigned-vars
   let tkWindowRef!: HTMLDivElement;
   // oxlint-disable-next-line no-unassigned-vars
@@ -56,7 +30,7 @@ export function App() {
   const [result, setResult] = createSignal<Result | Error | undefined>();
   const [stdout, setStdout] = createSignal<string>("");
   const [pendingTimers, setPendingTimers] = createSignal<number>(0);
-  const [source, setSource] = createSignal(loadSrc() ?? "");
+  const [source, setSource] = createSignal(() => props.urlPayload?.source ?? "");
   const [tclState, setTclState] = createSignal<State>("idle");
   const [windowOpen, setWindowOpen] = createSignal<boolean>(false);
   const [tkCanvas, setTkCanvas] = createSignal<HTMLCanvasElement | null>(null);
@@ -104,7 +78,32 @@ export function App() {
       });
   };
 
-  createEffect(source, storeSrc, { defer: true });
+  createEffect(
+    () => ({ source: source() }),
+    (payload) => {
+      let cancelled = false;
+
+      const timeout = setTimeout(() => {
+        encodeUrlPayload(payload)
+          .then((encoded) => {
+            if (cancelled) {
+              return;
+            }
+            window.history.replaceState(null, "", `#${encoded}`);
+          })
+          .catch((err) => {
+            console.error(err);
+          });
+      }, 400);
+
+      return () => {
+        cancelled = true;
+        clearTimeout(timeout);
+      };
+    },
+    { defer: true },
+  );
+
   createEffect(
     () => ({ source: source(), isAuto: isAuto() }),
     ({ source, isAuto }) => {
