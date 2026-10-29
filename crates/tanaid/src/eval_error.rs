@@ -1,6 +1,6 @@
 use crate::value::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EvalError {
   Generic(String),
   ArgumentError(String),
@@ -10,9 +10,10 @@ pub enum EvalError {
   ScriptParseError(String),
   ExprParseError(String),
   NotNumericError(String),
+  // TODO: separate control flow from errors
   BreakError,
   ContinueError,
-  ReturnError(Value),
+  ReturnError(Box<Value>),
   NotImplemented,
 }
 
