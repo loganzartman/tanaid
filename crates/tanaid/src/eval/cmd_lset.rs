@@ -9,7 +9,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     ));
   };
 
-  let list_var_str = list_var.repr_str()?;
+  let list_var_str = list_var.repr_str();
   let list_val = match context.get_variable(frame, list_var_str).cloned() {
     Some(list) => list,
     None => Value::from(List::new()),

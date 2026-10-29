@@ -15,7 +15,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
 
   let increment_val = increment.map(|val| val.repr_int()).unwrap_or(Ok(1))?;
 
-  let var_str = var.repr_str()?;
+  let var_str = var.repr_str();
   let mut var_val = match context.get_variable(frame, var_str).cloned() {
     Some(val) => val,
     None => Value::from(0),

@@ -11,5 +11,5 @@ pub(super) fn eval(
       "not enough arguments; expects: unknown commandName ?arg ...?".to_string(),
     ));
   };
-  Err(EvalError::UndefinedCommand(name.repr_str()?.to_string()))
+  Err(EvalError::UndefinedCommand(name.repr_str().to_string()))
 }

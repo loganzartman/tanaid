@@ -8,7 +8,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     .ok_or_else(|| EvalError::ArgumentError("dict requires subcommand".to_string()))?
     .clone();
 
-  let subcommand_str = subcommand.repr_str()?;
+  let subcommand_str = subcommand.repr_str();
   let rest = &mut args[1..];
   match subcommand_str {
     "create" => eval_create(rest),
@@ -34,7 +34,7 @@ fn eval_create(args: &mut [Value]) -> EvalCmdResult {
       )));
     };
 
-    dict.insert(k.repr_str()?.to_string(), v.clone());
+    dict.insert(k.repr_str().to_string(), v.clone());
   }
 
   Ok(Value::from(dict))
@@ -50,7 +50,7 @@ fn eval_get(args: &mut [Value]) -> EvalCmdResult {
   let mut current = val.clone();
   for key in keys {
     let dict = current.repr_dict()?;
-    let Some(child_val) = dict.get(key.repr_str()?) else {
+    let Some(child_val) = dict.get(key.repr_str()) else {
       return Err(EvalError::Generic(format!("dict missing key: {}", key)));
     };
     current = child_val.clone();
@@ -75,7 +75,7 @@ fn eval_exists(args: &mut [Value]) -> EvalCmdResult {
   let mut current = val.clone();
   for key in keys {
     let dict = current.repr_dict()?;
-    let Some(child_val) = dict.get(key.repr_str()?) else {
+    let Some(child_val) = dict.get(key.repr_str()) else {
       return Ok(Value::from(0));
     };
     current = child_val.clone();
@@ -93,15 +93,15 @@ fn eval_set(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> Ev
 
   let mut keys_strs: Vec<String> = vec![];
   for key in keys {
-    keys_strs.push(String::from(key.repr_str()?));
+    keys_strs.push(String::from(key.repr_str()));
   }
 
   let dict_val = context
-    .get_variable(frame, var.repr_str()?)
+    .get_variable(frame, var.repr_str())
     .ok_or_else(|| EvalError::UndefinedVariable(format!("undefined variable: {}", var)))?;
 
   let new_val = set_path(dict_val.clone(), keys_strs.as_slice(), val)?;
-  context.set_variable(frame, var.repr_str()?, new_val.clone());
+  context.set_variable(frame, var.repr_str(), new_val.clone());
 
   Ok(new_val)
 }

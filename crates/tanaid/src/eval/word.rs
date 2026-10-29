@@ -16,7 +16,7 @@ pub async fn eval_word(
   let mut joined = String::new();
   for part in &word.parts {
     let mut value = eval_wordpart(part, context, frame).await?;
-    joined.push_str(value.repr_str()?);
+    joined.push_str(value.repr_str());
   }
   Ok(Value::new(joined))
 }
@@ -38,7 +38,7 @@ pub async fn eval_wordpart(
       let mut result: String = "".to_string();
       for part in parts {
         let mut string = Box::pin(eval_wordpart(part, context, frame)).await?;
-        result.push_str(string.repr_str()?);
+        result.push_str(string.repr_str());
       }
       Ok(Value::new(result))
     }

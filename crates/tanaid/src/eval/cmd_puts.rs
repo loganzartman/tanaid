@@ -18,5 +18,5 @@ pub(super) fn eval(
     }
   };
 
-  context.stdout.as_ref()(format!("{}\n", string.repr_str()?).as_str()).map(|_| Value::none())
+  context.stdout.as_ref()(format!("{}\n", string.repr_str()).as_str()).map(|_| Value::none())
 }

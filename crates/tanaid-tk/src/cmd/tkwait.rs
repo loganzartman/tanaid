@@ -12,7 +12,7 @@ pub(super) async fn eval(
 ) -> EvalCmdResult {
   match args {
     [subcommand, rest @ ..] => {
-      let subcommand_str = subcommand.repr_str()?;
+      let subcommand_str = subcommand.repr_str();
       match subcommand_str {
         "window" => eval_window(rest, ctx, tk).await,
         _ => Err(EvalError::ArgumentError(format!(
@@ -29,7 +29,7 @@ pub(super) async fn eval(
 
 async fn eval_window(args: &mut [Value], ctx: &mut EvalContext, tk: &TkContext) -> EvalCmdResult {
   let window = match args {
-    [window] => window.repr_str()?,
+    [window] => window.repr_str(),
     _ => {
       return Err(EvalError::ArgumentError(
         "tkwait window: expected window name".to_string(),

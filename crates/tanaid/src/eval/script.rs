@@ -58,7 +58,7 @@ pub async fn eval_command_inner(
   let [name, args @ ..] = name_and_args else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
-  let name_str = name.repr_str()?;
+  let name_str = name.repr_str();
 
   // user-defined proc
   if let Some(proc) = context.get_proc(name_str) {
