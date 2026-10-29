@@ -3,7 +3,7 @@ use crate::eval_error::EvalError;
 use crate::value::{Dict, Value};
 
 pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> EvalCmdResult {
-  let mut subcommand = args
+  let subcommand = args
     .get(0)
     .ok_or_else(|| EvalError::ArgumentError("dict requires subcommand".to_string()))?
     .clone();
@@ -106,14 +106,14 @@ fn eval_set(args: &mut [Value], context: &mut EvalContext, frame: FrameId) -> Ev
   Ok(new_val)
 }
 
-fn set_path(mut current: Value, path: &[String], value: &Value) -> EvalCmdResult {
+fn set_path(current: Value, path: &[String], value: &Value) -> EvalCmdResult {
   let Some((first, rest)) = path.split_first() else {
     return Err(EvalError::ArgumentError(
       "wrong number of arguments, expects: dict set dictVariable key ?key ...? value".to_string(),
     ));
   };
 
-  let mut dict = current.repr_dict()?.as_ref().clone();
+  let mut dict = current.repr_dict()?.clone();
 
   if rest.is_empty() {
     dict.insert(first.clone(), value.clone());

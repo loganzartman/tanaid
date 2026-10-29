@@ -9,7 +9,7 @@ pub(super) fn eval(
   _context: &mut EvalContext,
   _frame: FrameId,
 ) -> EvalCmdResult {
-  let mut subcommand = args
+  let subcommand = args
     .get(0)
     .ok_or_else(|| EvalError::ArgumentError("dict requires subcommand".to_string()))?
     .clone();

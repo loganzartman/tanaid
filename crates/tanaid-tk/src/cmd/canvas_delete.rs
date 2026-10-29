@@ -15,7 +15,7 @@ pub(crate) fn eval(
 ) -> EvalCmdResult {
   let mut ids = vec![];
   for arg in args {
-    if matches!(arg.repr_str(), Ok("all")) {
+    if arg.repr_str() == "all" {
       widget.items.clear();
       return Ok(Value::none());
     }

@@ -27,7 +27,7 @@ pub(super) async fn eval(
     };
 
     let mut varlist: Vec<String> = vec![];
-    let mut varlist_elems = varlist_val.repr_list()?.as_ref().clone();
+    let mut varlist_elems = varlist_val.repr_list()?.clone();
     for val in varlist_elems.iter_mut() {
       varlist.push(val.repr_str().to_string());
     }
@@ -37,7 +37,7 @@ pub(super) async fn eval(
       ));
     }
 
-    varlists_lists.push((varlist, list.repr_list()?.as_ref().clone()));
+    varlists_lists.push((varlist, list.repr_list()?.clone()));
   }
 
   let body_str = body.repr_str();

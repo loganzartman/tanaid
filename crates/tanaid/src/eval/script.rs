@@ -13,7 +13,7 @@ pub async fn eval_returnable_script(
     match Box::pin(eval_command(&command, context, frame)).await {
       Ok(val) => result = val,
       Err(EvalError::ReturnError(val)) => {
-        result = val;
+        result = *val;
         break;
       }
       err => return err,

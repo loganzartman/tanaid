@@ -32,17 +32,17 @@ pub async fn eval_proc(
           if param.name == "args" {
             let args_concat = args_it
               .by_ref()
-              .map(|word| word.repr_str().map(|str| str.to_string()))
-              .collect::<Result<Vec<_>, _>>()?
+              .map(|word| word.repr_str().to_string())
+              .collect::<Vec<_>>()
               .join(" ");
-            context.set_variable(proc_frame, "args", Value::new(args_concat));
+            context.set_variable(proc_frame, "args", Value::from(args_concat));
             break;
           }
         }
 
         let value = match (args_it.next(), &param.default) {
           (Some(value), _) => Ok(value.clone()),
-          (None, Some(default)) => Ok(Value::new(default.as_str())),
+          (None, Some(default)) => Ok(Value::from(default.as_str())),
           _ => Err(EvalError::ArgumentError(format!(
             "wrong number of args for {}",
             name

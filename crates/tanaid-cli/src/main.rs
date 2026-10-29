@@ -94,7 +94,7 @@ fn run_source(
 
   // pump once to see if window is opened or events have been queued.
   // if script returns synchronously and there's no window open, we're done.
-  let printed_result = if let StepResult::Done(mut value) = interpreter.step(&waker)? {
+  let printed_result = if let StepResult::Done(value) = interpreter.step(&waker)? {
     println!("{}", value.repr_str());
     // by convention, we keep running if a window is open to generate events,
     // even if the script didn't include any explicit wait.

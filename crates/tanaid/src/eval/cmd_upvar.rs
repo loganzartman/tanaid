@@ -19,7 +19,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
   // since the variable aliases must be in pairs.
   let (level, rest) = if args.len() % 2 == 1 {
     if let Some(abs_str) = args[0].repr_str().strip_prefix('#') {
-      (Level::Abs(Value::new(abs_str).repr_int()?), &mut args[1..])
+      (Level::Abs(Value::from(abs_str).repr_int()?), &mut args[1..])
     } else {
       (Level::Rel(args[0].repr_int()?), &mut args[1..])
     }

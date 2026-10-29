@@ -12,7 +12,7 @@ pub(super) async fn eval(
     arg.repr_str()
   } else {
     let values = args.iter_mut().map(|value| value.repr_str());
-    &values.collect::<Result<Vec<&str>, _>>()?.join(" ")
+    &values.collect::<Vec<&str>>().join(" ")
   };
 
   let expr_parsed = context

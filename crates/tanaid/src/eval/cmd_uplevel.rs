@@ -23,7 +23,7 @@ pub(super) async fn eval(
   // or relative level specifier.
   let (level, used_first) = match first.repr_str() {
     abs if abs.starts_with('#') => {
-      if let Ok(val) = Value::new(abs.strip_prefix('#').unwrap()).repr_int() {
+      if let Ok(val) = Value::from(abs.strip_prefix('#').unwrap()).repr_int() {
         (Level::Abs(val), true)
       } else {
         (Level::Rel(1), false)

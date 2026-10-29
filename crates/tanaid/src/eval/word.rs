@@ -15,10 +15,10 @@ pub async fn eval_word(
 
   let mut joined = String::new();
   for part in &word.parts {
-    let mut value = eval_wordpart(part, context, frame).await?;
+    let value = eval_wordpart(part, context, frame).await?;
     joined.push_str(value.repr_str());
   }
-  Ok(Value::new(joined))
+  Ok(Value::from(joined))
 }
 
 pub async fn eval_wordpart(
@@ -27,8 +27,8 @@ pub async fn eval_wordpart(
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   match part {
-    WordPart::BareLiteral(s) => Ok(Value::new(s.as_str())),
-    WordPart::BracedLiteral(s) => Ok(Value::new(s.as_str())),
+    WordPart::BareLiteral(s) => Ok(Value::from(s.as_str())),
+    WordPart::BracedLiteral(s) => Ok(Value::from(s.as_str())),
     WordPart::BracedSub(v) => context
       .get_variable(frame, &v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))
@@ -37,10 +37,10 @@ pub async fn eval_wordpart(
     WordPart::Quoted(parts) => {
       let mut result: String = "".to_string();
       for part in parts {
-        let mut string = Box::pin(eval_wordpart(part, context, frame)).await?;
+        let string = Box::pin(eval_wordpart(part, context, frame)).await?;
         result.push_str(string.repr_str());
       }
-      Ok(Value::new(result))
+      Ok(Value::from(result))
     }
     WordPart::VarSub(v) => context
       .get_variable(frame, &v)
