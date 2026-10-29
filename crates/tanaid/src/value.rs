@@ -351,9 +351,9 @@ impl Value {
   }
 
   pub(crate) fn is_nan(&self) -> bool {
-    match self.repr_float() {
-      Ok(x) => x.is_nan(),
-      Err(_) => false,
+    match self.0.source {
+      Repr::Float(x) => x.is_nan(),
+      Repr::String(_) | Repr::Int(_) | Repr::Dict(_) | Repr::List(_) => false,
     }
   }
 
