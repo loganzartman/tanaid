@@ -112,11 +112,10 @@ impl Value {
 
   /// Gets the string representation of the value, caching the result.
   pub fn repr_str(&self) -> &str {
-    self
-      .0
-      .repr_str
-      .get_or_init(|| self.format_string())
-      .as_str()
+    if let Repr::String(s) = &self.0.source {
+      return s;
+    }
+    self.0.repr_str.get_or_init(|| self.format_string())
   }
 
   pub fn repr_bool(&self) -> Result<bool, EvalError> {
