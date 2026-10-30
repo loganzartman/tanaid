@@ -8,7 +8,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
       continue;
     }
 
-    let name = name_val.repr_str()?;
+    let name = name_val.repr_str();
 
     if context.get_variable(frame, name).is_some() {
       return Err(EvalError::ArgumentError(format!(

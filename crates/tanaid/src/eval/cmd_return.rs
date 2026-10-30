@@ -8,7 +8,7 @@ pub(super) fn eval(
   _frame: FrameId,
 ) -> EvalCmdResult {
   match args.get(0) {
-    Some(val) => Err(EvalError::ReturnError(val.clone())),
-    None => Err(EvalError::ReturnError(Value::none())),
+    Some(val) => Err(EvalError::ReturnError(Box::new(val.clone()))),
+    None => Err(EvalError::ReturnError(Box::new(Value::none()))),
   }
 }

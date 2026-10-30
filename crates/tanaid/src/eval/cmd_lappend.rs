@@ -9,13 +9,13 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     ));
   };
 
-  let list_var_str = list_var.repr_str()?;
-  let mut list_val = match context.get_variable(frame, list_var_str).cloned() {
+  let list_var_str = list_var.repr_str();
+  let list_val = match context.get_variable(frame, list_var_str).cloned() {
     Some(list) => list,
     None => Value::from(List::new()),
   };
 
-  let mut list_list = list_val.repr_list()?.as_ref().clone();
+  let mut list_list = list_val.repr_list()?.clone();
   for val in vals {
     list_list.push(val.clone());
   }

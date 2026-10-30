@@ -15,12 +15,12 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
   };
 
   if let Some(value) = maybe_value {
-    context.set_variable(frame, name.repr_str()?, value.clone());
+    context.set_variable(frame, name.repr_str(), value.clone());
     Ok(value.clone())
   } else {
     Ok(
       context
-        .get_variable(frame, name.repr_str()?)
+        .get_variable(frame, name.repr_str())
         .ok_or_else(|| EvalError::UndefinedVariable(format!("{}", name.to_string())))?
         .clone(),
     )

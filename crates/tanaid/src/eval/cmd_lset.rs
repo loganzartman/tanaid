@@ -9,23 +9,22 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     ));
   };
 
-  let list_var_str = list_var.repr_str()?;
+  let list_var_str = list_var.repr_str();
   let list_val = match context.get_variable(frame, list_var_str).cloned() {
     Some(list) => list,
     None => Value::from(List::new()),
   };
 
   let indices_concat = indices
-    .iter_mut()
-    .map(|index| index.repr_str().map(|s| s.to_string()))
-    .collect::<Result<Vec<String>, EvalError>>()?
+    .iter()
+    .map(|index| index.repr_str().to_string())
+    .collect::<Vec<String>>()
     .join(" ");
 
   let path = Value::from(indices_concat)
     .repr_list()?
-    .as_ref()
     .clone()
-    .iter_mut()
+    .iter()
     .map(|index| index.repr_int())
     .collect::<Result<Vec<i64>, EvalError>>()?;
 
@@ -40,12 +39,12 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
   Ok(new_val)
 }
 
-fn set_path(mut current: Value, path: &[i64], value: &Value) -> EvalCmdResult {
+fn set_path(current: Value, path: &[i64], value: &Value) -> EvalCmdResult {
   let Some((index, rest)) = path.split_first() else {
     return Ok(value.clone());
   };
 
-  let mut current_list = current.repr_list()?.as_ref().clone();
+  let mut current_list = current.repr_list()?.clone();
 
   if *index < 0 || *index >= current_list.len() as i64 {
     return Err(EvalError::ArgumentError(format!(

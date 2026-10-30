@@ -21,9 +21,9 @@ pub(super) async fn eval(
 
   // uplevel determines whether the first argument is a level by trying to parse it as an absolute
   // or relative level specifier.
-  let (level, used_first) = match first.repr_str()? {
+  let (level, used_first) = match first.repr_str() {
     abs if abs.starts_with('#') => {
-      if let Ok(val) = Value::new(abs.strip_prefix('#').unwrap()).repr_int() {
+      if let Ok(val) = Value::from(abs.strip_prefix('#').unwrap()).repr_int() {
         (Level::Abs(val), true)
       } else {
         (Level::Rel(1), false)
@@ -53,7 +53,7 @@ pub(super) async fn eval(
 
   let mut body = String::new();
   for arg in rest {
-    body.push_str(arg.repr_str()?);
+    body.push_str(arg.repr_str());
   }
 
   let script_result = match context.parse_script_caching(body.as_str()) {

@@ -14,7 +14,7 @@ pub(super) fn eval(
 ) -> EvalCmdResult {
   match args {
     [widget_name] => {
-      let widget_name_str = widget_name.repr_str()?;
+      let widget_name_str = widget_name.repr_str();
       let widgets = tk.widgets.borrow();
       let Some(widget) = widgets.get(widget_name_str) else {
         return Err(EvalError::ArgumentError(format!(

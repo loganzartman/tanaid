@@ -14,7 +14,7 @@ pub(super) async fn eval(
 ) -> EvalCmdResult {
   let opts = match args {
     [var] => VwaitOptions {
-      vars: vec![var.repr_str()?],
+      vars: vec![var.repr_str()],
     },
     _ => {
       return Err(EvalError::ArgumentError(

@@ -418,7 +418,7 @@ mod tests {
     runner
       .context
       .get_variable(GLOBAL_FRAME, "ran")
-      .map(|v| v.clone().repr_str().unwrap().to_string())
+      .map(|v| v.clone().repr_str().to_string())
       .unwrap_or_default()
   }
 

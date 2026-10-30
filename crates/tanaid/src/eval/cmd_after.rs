@@ -53,7 +53,7 @@ async fn eval_ms(ms: &mut Value, args: &mut [Value], context: &mut EvalContext) 
   let script_src: String = args
     .iter_mut()
     .map(|arg| arg.repr_str())
-    .collect::<Result<Vec<_>, _>>()?
+    .collect::<Vec<&str>>()
     .join(" ");
 
   let timer_script = parser::parse(script_src.as_str())

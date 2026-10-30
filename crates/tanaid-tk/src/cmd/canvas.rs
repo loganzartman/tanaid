@@ -24,7 +24,7 @@ pub(super) fn eval(
     }
   };
 
-  let path_name_str = path_name.repr_str()?;
+  let path_name_str = path_name.repr_str();
 
   if !path_name_str.starts_with(".") {
     return Err(EvalError::ArgumentError(
@@ -40,7 +40,7 @@ pub(super) fn eval(
       break;
     };
 
-    let option_str = option.repr_str()?;
+    let option_str = option.repr_str();
     let option_str = option_str
       .strip_prefix('-')
       .ok_or(EvalError::ArgumentError(format!(
@@ -77,7 +77,7 @@ pub(super) fn eval(
             "value for background missing".to_string(),
           ));
         };
-        attrs.background = parse_color(value.repr_str()?)?
+        attrs.background = parse_color(value.repr_str())?
           .ok_or_else(|| {
             EvalError::ArgumentError("canvas does not allow empty background color".to_string())
           })?
@@ -106,7 +106,7 @@ pub(super) fn eval(
 
     ctx.register_command(path_name_str, move |args, ctx, frame| {
       let (subcommand, rest) = match args {
-        [subcommand, rest @ ..] => (subcommand.repr_str()?, rest),
+        [subcommand, rest @ ..] => (subcommand.repr_str(), rest),
         _ => {
           return Err(EvalError::ArgumentError(format!(
             "wrong number of args; should be: {} option ...",

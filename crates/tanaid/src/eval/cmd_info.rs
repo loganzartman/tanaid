@@ -9,14 +9,14 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
     ));
   };
 
-  match subcommand.repr_str()? {
+  match subcommand.repr_str() {
     "exists" => {
       let [name] = rest else {
         return Err(EvalError::ArgumentError(
           "not enough arguments; expects: info exists varName".to_string(),
         ));
       };
-      if context.get_variable(frame, name.repr_str()?).is_some() {
+      if context.get_variable(frame, name.repr_str()).is_some() {
         Ok(Value::from(1))
       } else {
         Ok(Value::from(0))

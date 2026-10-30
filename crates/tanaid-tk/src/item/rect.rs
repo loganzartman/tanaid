@@ -28,10 +28,10 @@ impl CanvasItem for CanvasItemRect {
   fn apply_option(&mut self, name: &str, value: &mut Value) -> Result<bool, EvalError> {
     match name {
       "-fill" => {
-        self.fill = parse_color(value.repr_str()?)?.map(|c| c.into());
+        self.fill = parse_color(value.repr_str())?.map(|c| c.into());
       }
       "-outline" => {
-        self.outline = parse_color(value.repr_str()?)?.map(|c| c.into());
+        self.outline = parse_color(value.repr_str())?.map(|c| c.into());
       }
       "-width" => {
         self.stroke.width = value.repr_float()?;

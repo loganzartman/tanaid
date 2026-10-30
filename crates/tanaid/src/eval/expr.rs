@@ -63,19 +63,19 @@ pub async fn eval_expr_binary_op(
 
   match o {
     And => {
-      let mut a = eval_expr(a, context, frame).await?;
+      let a = eval_expr(a, context, frame).await?;
       if !a.repr_bool()? {
         return Ok(Value::from(false));
       }
-      let mut b = eval_expr(b, context, frame).await?;
+      let b = eval_expr(b, context, frame).await?;
       return Ok(Value::from(b.repr_bool()?));
     }
     Or => {
-      let mut a = eval_expr(a, context, frame).await?;
+      let a = eval_expr(a, context, frame).await?;
       if a.repr_bool()? {
         return Ok(Value::from(true));
       }
-      let mut b = eval_expr(b, context, frame).await?;
+      let b = eval_expr(b, context, frame).await?;
       return Ok(Value::from(b.repr_bool()?));
     }
     _ => {}
