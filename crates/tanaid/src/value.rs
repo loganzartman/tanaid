@@ -34,9 +34,6 @@ pub struct Value(Rc<ValueData>);
 pub struct ValueData {
   source: Repr,
   repr_str: OnceCell<String>,
-  repr_bool: OnceCell<Result<bool, EvalError>>,
-  repr_int: OnceCell<Result<Int, EvalError>>,
-  repr_float: OnceCell<Result<Float, EvalError>>,
   repr_number: OnceCell<Result<Number, EvalError>>,
   repr_dict: OnceCell<Result<Dict, EvalError>>,
   repr_list: OnceCell<Result<List, EvalError>>,
@@ -63,9 +60,6 @@ impl Default for ValueData {
     Self {
       source: Repr::String("".into()),
       repr_str: Default::default(),
-      repr_bool: Default::default(),
-      repr_int: Default::default(),
-      repr_float: Default::default(),
       repr_number: Default::default(),
       repr_dict: Default::default(),
       repr_list: Default::default(),
@@ -126,33 +120,30 @@ impl Value {
   }
 
   pub fn repr_bool(&self) -> Result<bool, EvalError> {
-    cached(&self.0.repr_bool, || {
-      match self.repr_number() {
-        Ok(Number::Int(x)) => return Ok(x != 0),
-        Ok(Number::Float(x)) => return Ok(x != 0.),
-        Err(_) => {}
-      }
+    match self.repr_number() {
+      Ok(Number::Int(x)) => return Ok(x != 0),
+      Ok(Number::Float(x)) => return Ok(x != 0.),
+      Err(_) => {}
+    }
 
-      let s = self.repr_str();
+    let s = self.repr_str();
 
-      static RE_TRUTHY: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new("(?i)^(tr?u?e?|ye?s?|on)$").unwrap());
-      if RE_TRUTHY.is_match(s) {
-        return Ok(true);
-      }
+    static RE_TRUTHY: LazyLock<Regex> =
+      LazyLock::new(|| Regex::new("(?i)^(tr?u?e?|ye?s?|on)$").unwrap());
+    if RE_TRUTHY.is_match(s) {
+      return Ok(true);
+    }
 
-      static RE_FALSY: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new("(?i)^(fa?l?s?e?|no?|off?)$").unwrap());
-      if RE_FALSY.is_match(s) {
-        return Ok(false);
-      }
+    static RE_FALSY: LazyLock<Regex> =
+      LazyLock::new(|| Regex::new("(?i)^(fa?l?s?e?|no?|off?)$").unwrap());
+    if RE_FALSY.is_match(s) {
+      return Ok(false);
+    }
 
-      Err(EvalError::ArgumentError(format!(
-        "expected boolean value but got \"{}\"",
-        s
-      )))
-    })
-    .copied()
+    Err(EvalError::ArgumentError(format!(
+      "expected boolean value but got \"{}\"",
+      s
+    )))
   }
 
   pub fn repr_int(&self) -> Result<Int, EvalError> {
@@ -160,14 +151,10 @@ impl Value {
       return Ok(x);
     }
 
-    cached(&self.0.repr_int, || {
-      let x = self
-        .repr_str()
-        .parse::<Int>()
-        .map_err(|e| EvalError::Generic(format!("{}: {}", e, self)))?;
-      Ok(x)
-    })
-    .copied()
+    match self.repr_number()? {
+      Number::Int(x) => Ok(x),
+      Number::Float(x) => Err(EvalError::Generic(format!("not a valid int: {x}"))),
+    }
   }
 
   pub fn repr_float(&self) -> Result<f64, EvalError> {
@@ -178,14 +165,10 @@ impl Value {
       return Ok(x as f64);
     }
 
-    cached(&self.0.repr_float, || {
-      let x: f64 = self
-        .repr_str()
-        .parse::<f64>()
-        .map_err(|e| EvalError::Generic(format!("{}: {}", e, self)))?;
-      Ok(x)
-    })
-    .copied()
+    match self.repr_number()? {
+      Number::Int(x) => Ok(x as f64),
+      Number::Float(x) => Ok(x),
+    }
   }
 
   pub fn repr_number(&self) -> Result<Number, EvalError> {
