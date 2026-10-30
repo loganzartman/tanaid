@@ -172,10 +172,10 @@ impl Value {
 
   pub fn repr_number(&self) -> Result<Number, EvalError> {
     cached(&self.0.repr_number, || {
-      if let Ok(x) = self.repr_int() {
+      if let Ok(x) = self.repr_str().parse::<Int>() {
         return Ok(Number::Int(x));
       }
-      if let Ok(x) = self.repr_float() {
+      if let Ok(x) = self.repr_str().parse::<Float>() {
         return Ok(Number::Float(x));
       }
       Err(EvalError::NotNumericError(self.to_string()))
