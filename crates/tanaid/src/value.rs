@@ -185,10 +185,11 @@ impl Value {
 
   /// return a number if this value has a cached numeric repr, else return None
   pub fn peek_number(&self) -> Option<Number> {
-    if let Some(Ok(n)) = self.0.repr_number.get() {
-      return Some(n.clone());
+    match self.0.source {
+      Repr::Int(i) => Some(Number::Int(i)),
+      Repr::Float(f) => Some(Number::Float(f)),
+      _ => self.0.repr_number.get()?.as_ref().ok().cloned(),
     }
-    None
   }
 
   pub fn repr_dict(&self) -> Result<&Dict, EvalError> {
