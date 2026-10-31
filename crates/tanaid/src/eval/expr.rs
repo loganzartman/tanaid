@@ -27,7 +27,7 @@ pub async fn eval_expr(
     FnCall(func, args) => Box::pin(eval_expr_fncall(func, args, context, frame)).await,
   }?;
 
-  if result.is_nan() {
+  if result.is_already_nan() {
     Err(EvalError::ArgumentError(
       "domain error: argument not in valid range".to_string(),
     ))

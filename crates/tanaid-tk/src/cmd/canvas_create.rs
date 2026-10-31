@@ -49,7 +49,7 @@ fn insert_item(widget: &mut CanvasWidget, mut item: impl CanvasItem + 'static) -
 
 fn is_option_name(value: &mut Value) -> bool {
   // optimization: will never match RE_OPT; doesn't materialize string
-  if value.peek_number().is_some() {
+  if value.is_already_number() {
     return false;
   }
 

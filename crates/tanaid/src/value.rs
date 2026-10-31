@@ -19,7 +19,7 @@ pub type Dict = HashMap<String, Value>;
 ///
 /// Any Value is representable as a String. No information is lost when converting from a Value to a String and back.
 ///
-/// A Value can be constructed from any type representable by Repr. This is the Value's `source`.
+/// A Value can be constructed from any type representable by ValueData.
 /// This avoids converting the Value to and from a String until requested.
 ///
 /// A Value may be reinterpreted as another type of Repr. For example, "2" may be interpreted as a string, an integer, a float, or a list containing the single element "2".
@@ -28,25 +28,41 @@ pub type Dict = HashMap<String, Value>;
 /// - When a Value is reinterpreted successfully, the resulting Rust value is cached within the Value for future repr_ calls.
 /// - Unlike in tclsh, all cached reprs are retained for the lifetime of the Value.
 #[derive(Clone, Debug)]
-pub struct Value(Rc<ValueData>);
-
-#[derive(Clone, Debug)]
-pub struct ValueData {
-  source: Repr,
-  repr_str: OnceCell<String>,
-  repr_number: OnceCell<Result<Number, EvalError>>,
-  repr_dict: OnceCell<Result<Dict, EvalError>>,
-  repr_list: OnceCell<Result<List, EvalError>>,
+pub struct Value {
+  /// Primary, authoritative data for this Value. Source for all other reprs.
+  data: ValueData,
+  /// Lazily-cached converted forms of the Value's data.
+  // OnceCell'd to avoid heap alloc for values that are never reinterpreted
+  reprs: OnceCell<Rc<CachedReprs>>,
 }
 
-/// A typed representation of a Tcl value.
+/// The primary, authoritative data for a Value.
 #[derive(Clone, Debug)]
-pub enum Repr {
-  String(String),
-  Int(Int),
-  Float(Float),
-  Dict(Dict),
-  List(List),
+pub enum ValueData {
+  Number(Number),
+  String(Rc<str>),
+  List(Rc<List>),
+  Dict(Rc<Dict>),
+}
+
+/// Lazily-cached converted forms of the Value's data.
+#[derive(Clone, Debug)]
+struct CachedReprs {
+  pub string: OnceCell<String>,
+  pub number: OnceCell<Option<Number>>,
+  pub dict: OnceCell<Option<Dict>>,
+  pub list: OnceCell<Option<List>>,
+}
+
+impl CachedReprs {
+  pub fn new() -> Self {
+    Self {
+      string: OnceCell::new(),
+      number: OnceCell::new(),
+      dict: OnceCell::new(),
+      list: OnceCell::new(),
+    }
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -55,37 +71,34 @@ pub enum Number {
   Float(Float),
 }
 
-impl Default for ValueData {
-  fn default() -> Self {
-    Self {
-      source: Repr::String("".into()),
-      repr_str: Default::default(),
-      repr_number: Default::default(),
-      repr_dict: Default::default(),
-      repr_list: Default::default(),
-    }
-  }
-}
-
 impl Value {
   pub fn none() -> Value {
-    Value::new(Repr::String("".into()))
+    Value {
+      data: ValueData::String(Rc::from("")),
+      reprs: OnceCell::new(),
+    }
   }
 
-  pub fn new(repr: Repr) -> Value {
-    Value(Rc::new(ValueData {
-      source: repr,
-      ..Default::default()
-    }))
+  pub fn new(data: ValueData) -> Value {
+    Value {
+      data,
+      reprs: OnceCell::new(),
+    }
+  }
+
+  pub fn new_literal(_str: &str) -> Value {
+    todo!()
   }
 
   /// Converts the source into a string.
   fn format_string(&self) -> String {
-    match &self.0.source {
-      Repr::String(s) => s.clone(),
-      Repr::Int(i) => i.to_string().into(),
-      Repr::Float(f) => format_float_tcl(*f).into(),
-      Repr::List(l) => {
+    match &self.data {
+      ValueData::String(s) => s.to_string(),
+      ValueData::Number(n) => match n {
+        Number::Int(i) => i.to_string().into(),
+        Number::Float(f) => format_float_tcl(*f).into(),
+      },
+      ValueData::List(l) => {
         let mut result = String::new();
         for v in l.iter() {
           if !result.is_empty() {
@@ -95,7 +108,7 @@ impl Value {
         }
         result.into()
       }
-      Repr::Dict(d) => {
+      ValueData::Dict(d) => {
         let mut result = String::new();
         for (k, v) in d.iter() {
           if !result.is_empty() {
@@ -110,18 +123,27 @@ impl Value {
     }
   }
 
+  fn reprs(&self) -> &Rc<CachedReprs> {
+    self.reprs.get_or_init(|| Rc::new(CachedReprs::new()))
+  }
+
   /// Gets the string representation of the value, caching the result.
   pub fn repr_str(&self) -> &str {
-    if let Repr::String(s) = &self.0.source {
+    if let ValueData::String(s) = &self.data {
       return s;
     }
-    self.0.repr_str.get_or_init(|| self.format_string())
+
+    self
+      .reprs()
+      .string
+      .get_or_init(|| self.format_string())
+      .as_str()
   }
 
   pub fn repr_bool(&self) -> Result<bool, EvalError> {
     match self.repr_number() {
-      Ok(Number::Int(x)) => return Ok(x != 0),
-      Ok(Number::Float(x)) => return Ok(x != 0.),
+      Ok(Number::Int(x)) => return Ok(*x != 0),
+      Ok(Number::Float(x)) => return Ok(*x != 0.),
       Err(_) => {}
     }
 
@@ -146,112 +168,111 @@ impl Value {
   }
 
   pub fn repr_int(&self) -> Result<Int, EvalError> {
-    if let Repr::Int(x) = self.0.source {
-      return Ok(x);
+    if let ValueData::Number(n) = &self.data {
+      return match n {
+        Number::Int(x) => Ok(*x),
+        Number::Float(x) => Err(EvalError::Generic(format!("not a valid int: {x}"))),
+      };
     }
 
     match self.repr_number()? {
-      Number::Int(x) => Ok(x),
+      Number::Int(x) => Ok(*x),
       Number::Float(x) => Err(EvalError::Generic(format!("not a valid int: {x}"))),
     }
   }
 
   pub fn repr_float(&self) -> Result<f64, EvalError> {
-    if let Repr::Float(x) = self.0.source {
-      return Ok(x);
-    }
-    if let Repr::Int(x) = self.0.source {
-      return Ok(x as f64);
+    if let ValueData::Number(n) = &self.data {
+      return match n {
+        Number::Int(x) => Ok(*x as f64),
+        Number::Float(x) => Ok(*x),
+      };
     }
 
     match self.repr_number()? {
-      Number::Int(x) => Ok(x as f64),
-      Number::Float(x) => Ok(x),
+      Number::Int(x) => Ok(*x as f64),
+      Number::Float(x) => Ok(*x),
     }
   }
 
-  pub fn repr_number(&self) -> Result<Number, EvalError> {
-    cached(&self.0.repr_number, || {
-      if let Ok(x) = self.repr_str().parse::<Int>() {
-        return Ok(Number::Int(x));
-      }
-      if let Ok(x) = self.repr_str().parse::<Float>() {
-        return Ok(Number::Float(x));
-      }
-      Err(EvalError::NotNumericError(self.to_string()))
-    })
-    .cloned()
-  }
-
-  /// return a number if this value has a cached numeric repr, else return None
-  pub fn peek_number(&self) -> Option<Number> {
-    match self.0.source {
-      Repr::Int(i) => Some(Number::Int(i)),
-      Repr::Float(f) => Some(Number::Float(f)),
-      _ => self.0.repr_number.get()?.as_ref().ok().cloned(),
+  pub fn repr_number(&self) -> Result<&Number, EvalError> {
+    if let ValueData::Number(n) = &self.data {
+      return Ok(n);
     }
+
+    self
+      .reprs()
+      .number
+      .get_or_init(|| {
+        if let Ok(x) = self.repr_str().parse::<Int>() {
+          return Some(Number::Int(x));
+        }
+        if let Ok(x) = self.repr_str().parse::<Float>() {
+          return Some(Number::Float(x));
+        }
+        None
+      })
+      .as_ref()
+      .ok_or_else(|| EvalError::NotNumericError(self.to_string()))
   }
 
   pub fn repr_dict(&self) -> Result<&Dict, EvalError> {
-    if let Repr::Dict(dict) = &self.0.source {
-      return Ok(dict);
+    if let ValueData::Dict(dict) = &self.data {
+      return Ok(dict.as_ref());
     }
 
-    cached(&self.0.repr_dict, || {
-      let str = self.repr_str();
-      let (words, "") = parser::parse_list(str)
-        .map_err(|e| EvalError::Generic(format!("failed to parse as dict: {}", e)))?
-      else {
-        return Err(EvalError::Generic(
-          "failed to parse dict: extra input".to_string(),
-        ));
-      };
-
-      let mut dict = Dict::new();
-      let mut it = words.iter();
-      loop {
-        let Some(k) = it.next() else { break };
-        let Some(v) = it.next() else {
-          return Err(EvalError::Generic(format!(
-            "invalid dict; missing value for key {}",
-            k
-          )));
+    self
+      .reprs()
+      .dict
+      .get_or_init(|| {
+        let str = self.repr_str();
+        let Ok((words, "")) = parser::parse_list(str) else {
+          return None;
         };
 
-        dict.insert(k.to_string(), Value::from(v.as_str()));
-      }
+        let mut dict = Dict::new();
+        let mut it = words.iter();
+        loop {
+          let Some(k) = it.next() else { break };
+          let Some(v) = it.next() else { return None };
 
-      Ok(dict)
-    })
+          dict.insert(k.to_string(), Value::from(v.as_str()));
+        }
+
+        Some(dict)
+      })
+      .as_ref()
+      .ok_or_else(|| EvalError::Generic(format!("value is not a valid dict: {}", self.repr_str())))
   }
 
   pub fn repr_list(&self) -> Result<&List, EvalError> {
-    if let Repr::List(list) = &self.0.source {
-      return Ok(list);
+    if let ValueData::List(list) = &self.data {
+      return Ok(list.as_ref());
     }
 
-    cached(&self.0.repr_list, || {
-      let str = self.repr_str();
-      let (words, "") = parser::parse_list(str)
-        .map_err(|e| EvalError::Generic(format!("failed to parse as list: {}", e)))?
-      else {
-        return Err(EvalError::Generic(
-          "failed to parse list: extra input".to_string(),
-        ));
-      };
+    self
+      .reprs()
+      .list
+      .get_or_init(|| {
+        let str = self.repr_str();
+        let Ok((words, "")) = parser::parse_list(str) else {
+          return None;
+        };
 
-      let mut list = List::new();
-      for word in words {
-        list.push(Value::from(word));
-      }
-      Ok(list)
-    })
+        let mut list = List::new();
+        for word in words {
+          list.push(Value::from(word));
+        }
+        Some(list)
+      })
+      .as_ref()
+      .ok_or_else(|| EvalError::Generic(format!("value is not a valid list: {}", self.repr_str())))
   }
 
   pub fn unary_plus(&mut self) -> Result<Value, EvalError> {
     match self.repr_number() {
-      Ok(Number::Int(x)) => Ok(Value::from(x)),
-      Ok(Number::Float(x)) => Ok(Value::from(x)),
+      Ok(Number::Int(x)) => Ok(Value::from(*x)),
+      Ok(Number::Float(x)) => Ok(Value::from(*x)),
       Err(_) => Err(EvalError::ArgumentError(
         "can't use non-numeric string as operand of +".to_string(),
       )),
@@ -333,11 +354,36 @@ impl Value {
     }
   }
 
-  pub(crate) fn is_nan(&self) -> bool {
-    match self.0.source {
-      Repr::Float(x) => x.is_nan(),
-      Repr::String(_) | Repr::Int(_) | Repr::Dict(_) | Repr::List(_) => false,
+  /// return whether this value has a cached numeric repr
+  pub fn is_already_number(&self) -> bool {
+    match &self.data {
+      ValueData::Number(_) => true,
+      _ => matches!(self.reprs.get().and_then(|r| r.number.get()), Some(Some(_))),
     }
+  }
+
+  /// return whether this value has a cached NaN repr
+  pub(crate) fn is_already_nan(&self) -> bool {
+    match &self.data {
+      ValueData::Number(x) => match x {
+        Number::Float(x) => return x.is_nan(),
+        Number::Int(_) => {}
+      },
+      ValueData::String(_) | ValueData::Dict(_) | ValueData::List(_) => {}
+    }
+
+    self
+      .reprs
+      .get()
+      .and_then(|r| {
+        r.number.get().and_then(|n| {
+          n.as_ref().and_then(|n| match n {
+            Number::Float(x) => Some(x.is_nan()),
+            Number::Int(_) => Some(false),
+          })
+        })
+      })
+      .unwrap_or(false)
   }
 
   pub fn is_numeric(&mut self) -> bool {
@@ -357,43 +403,45 @@ impl Display for Value {
 
 impl From<String> for Value {
   fn from(value: String) -> Self {
-    Value::new(Repr::String(value))
+    Value::new(ValueData::String(Rc::from(value)))
   }
 }
 
 impl From<&str> for Value {
   fn from(value: &str) -> Self {
-    Value::new(Repr::String(value.into()))
+    Value::new(ValueData::String(Rc::from(value)))
   }
 }
 
 impl From<bool> for Value {
   fn from(value: bool) -> Self {
-    Value::new(Repr::Int(if value { 1 } else { 0 }))
+    Value::new(ValueData::Number(Number::Int(if value { 1 } else { 0 })))
   }
 }
 
 impl From<Int> for Value {
   fn from(value: Int) -> Self {
-    Value::new(Repr::Int(value))
+    Value::new(ValueData::Number(Number::Int(value)))
   }
 }
 
 impl From<Float> for Value {
   fn from(value: Float) -> Self {
-    Value::new(Repr::Float(value))
+    Value::new(ValueData::Number(Number::Float(value)))
   }
 }
 
 impl From<Dict> for Value {
   fn from(value: Dict) -> Self {
-    Value::new(Repr::Dict(value))
+    Value::new(ValueData::Dict(Rc::new(value)))
   }
 }
 
 impl<T: Into<Value>> From<Vec<T>> for Value {
   fn from(value: Vec<T>) -> Self {
-    Value::new(Repr::List(value.into_iter().map(Into::into).collect()))
+    Value::new(ValueData::List(Rc::new(
+      value.into_iter().map(Into::into).collect(),
+    )))
   }
 }
 
@@ -494,11 +542,4 @@ pub fn maybe_quote(s: &str) -> String {
   }
 
   format!("{{{}}}", s)
-}
-
-fn cached<T>(
-  cell: &OnceCell<Result<T, EvalError>>,
-  f: impl FnOnce() -> Result<T, EvalError>,
-) -> Result<&T, EvalError> {
-  cell.get_or_init(f).as_ref().map_err(Clone::clone)
 }
