@@ -367,23 +367,10 @@ impl Value {
     match &self.data {
       ValueData::Number(x) => match x {
         Number::Float(x) => return x.is_nan(),
-        Number::Int(_) => {}
+        Number::Int(_) => false,
       },
-      ValueData::String(_) | ValueData::Dict(_) | ValueData::List(_) => {}
+      ValueData::String(_) | ValueData::Dict(_) | ValueData::List(_) => false,
     }
-
-    self
-      .reprs
-      .get()
-      .and_then(|r| {
-        r.number.get().and_then(|n| {
-          n.as_ref().and_then(|n| match n {
-            Number::Float(x) => Some(x.is_nan()),
-            Number::Int(_) => Some(false),
-          })
-        })
-      })
-      .unwrap_or(false)
   }
 
   pub fn is_numeric(&mut self) -> bool {
