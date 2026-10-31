@@ -49,9 +49,9 @@ pub enum ValueData {
 #[derive(Clone, Debug)]
 struct CachedReprs {
   pub string: OnceCell<String>,
-  pub number: OnceCell<Option<Number>>,
-  pub dict: OnceCell<Option<Dict>>,
-  pub list: OnceCell<Option<List>>,
+  pub number: OnceCell<Result<Number, EvalError>>,
+  pub dict: OnceCell<Result<Dict, EvalError>>,
+  pub list: OnceCell<Result<List, EvalError>>,
 }
 
 impl CachedReprs {
@@ -186,20 +186,15 @@ impl Value {
       return Ok(n);
     }
 
-    self
-      .reprs()
-      .number
-      .get_or_init(|| {
-        if let Ok(x) = self.repr_str().parse::<Int>() {
-          return Some(Number::Int(x));
-        }
-        if let Ok(x) = self.repr_str().parse::<Float>() {
-          return Some(Number::Float(x));
-        }
-        None
-      })
-      .as_ref()
-      .ok_or_else(|| EvalError::NotNumericError(self.to_string()))
+    cached(&self.reprs().number, || {
+      if let Ok(x) = self.repr_str().parse::<Int>() {
+        return Ok(Number::Int(x));
+      }
+      if let Ok(x) = self.repr_str().parse::<Float>() {
+        return Ok(Number::Float(x));
+      }
+      Err(EvalError::NotNumericError(self.to_string()))
+    })
   }
 
   pub fn repr_dict(&self) -> Result<&Dict, EvalError> {
@@ -207,28 +202,32 @@ impl Value {
       return Ok(dict.as_ref());
     }
 
-    self
-      .reprs()
-      .dict
-      .get_or_init(|| {
-        let str = self.repr_str();
-        let Ok((words, "")) = parser::parse_list(str) else {
-          return None;
+    cached(&self.reprs().dict, || {
+      let str = self.repr_str();
+      let (words, "") = parser::parse_list(str)
+        .map_err(|e| EvalError::Generic(format!("failed to parse as dict: {}", e)))?
+      else {
+        return Err(EvalError::Generic(
+          "failed to parse dict: extra input".to_string(),
+        ));
+      };
+
+      let mut dict = Dict::new();
+      let mut it = words.iter();
+      loop {
+        let Some(k) = it.next() else { break };
+        let Some(v) = it.next() else {
+          return Err(EvalError::Generic(format!(
+            "invalid dict; missing value for key {}",
+            k
+          )));
         };
 
-        let mut dict = Dict::new();
-        let mut it = words.iter();
-        loop {
-          let Some(k) = it.next() else { break };
-          let Some(v) = it.next() else { return None };
+        dict.insert(k.to_string(), Value::from(v.as_str()));
+      }
 
-          dict.insert(k.to_string(), Value::from(v.as_str()));
-        }
-
-        Some(dict)
-      })
-      .as_ref()
-      .ok_or_else(|| EvalError::Generic(format!("value is not a valid dict: {}", self.repr_str())))
+      Ok(dict)
+    })
   }
 
   pub fn repr_list(&self) -> Result<&List, EvalError> {
@@ -236,23 +235,22 @@ impl Value {
       return Ok(list.as_ref());
     }
 
-    self
-      .reprs()
-      .list
-      .get_or_init(|| {
-        let str = self.repr_str();
-        let Ok((words, "")) = parser::parse_list(str) else {
-          return None;
-        };
+    cached(&self.reprs().list, || {
+      let str = self.repr_str();
+      let (words, "") = parser::parse_list(str)
+        .map_err(|e| EvalError::Generic(format!("failed to parse as list: {}", e)))?
+      else {
+        return Err(EvalError::Generic(
+          "failed to parse list: extra input".to_string(),
+        ));
+      };
 
-        let mut list = List::new();
-        for word in words {
-          list.push(Value::from(word));
-        }
-        Some(list)
-      })
-      .as_ref()
-      .ok_or_else(|| EvalError::Generic(format!("value is not a valid list: {}", self.repr_str())))
+      let mut list = List::new();
+      for word in words {
+        list.push(Value::from(word));
+      }
+      Ok(list)
+    })
   }
 
   pub fn unary_plus(&mut self) -> Result<Value, EvalError> {
@@ -344,7 +342,7 @@ impl Value {
   pub fn is_already_number(&self) -> bool {
     match &self.data {
       ValueData::Number(_) => true,
-      _ => matches!(self.reprs.get().and_then(|r| r.number.get()), Some(Some(_))),
+      _ => matches!(self.reprs.get().and_then(|r| r.number.get()), Some(Ok(_))),
     }
   }
 
@@ -515,4 +513,11 @@ pub fn maybe_quote(s: &str) -> String {
   }
 
   format!("{{{}}}", s)
+}
+
+fn cached<T>(
+  cell: &OnceCell<Result<T, EvalError>>,
+  f: impl FnOnce() -> Result<T, EvalError>,
+) -> Result<&T, EvalError> {
+  cell.get_or_init(f).as_ref().map_err(Clone::clone)
 }
