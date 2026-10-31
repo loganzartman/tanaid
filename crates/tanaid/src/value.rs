@@ -168,13 +168,6 @@ impl Value {
   }
 
   pub fn repr_int(&self) -> Result<Int, EvalError> {
-    if let ValueData::Number(n) = &self.data {
-      return match n {
-        Number::Int(x) => Ok(*x),
-        Number::Float(x) => Err(EvalError::Generic(format!("not a valid int: {x}"))),
-      };
-    }
-
     match self.repr_number()? {
       Number::Int(x) => Ok(*x),
       Number::Float(x) => Err(EvalError::Generic(format!("not a valid int: {x}"))),
@@ -182,13 +175,6 @@ impl Value {
   }
 
   pub fn repr_float(&self) -> Result<f64, EvalError> {
-    if let ValueData::Number(n) = &self.data {
-      return match n {
-        Number::Int(x) => Ok(*x as f64),
-        Number::Float(x) => Ok(*x),
-      };
-    }
-
     match self.repr_number()? {
       Number::Int(x) => Ok(*x as f64),
       Number::Float(x) => Ok(*x),
