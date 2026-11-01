@@ -65,7 +65,7 @@ impl CachedReprs {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Number {
   Int(Int),
   Float(Float),
@@ -142,8 +142,8 @@ impl Value {
 
   pub fn repr_bool(&self) -> Result<bool, EvalError> {
     match self.repr_number() {
-      Ok(Number::Int(x)) => return Ok(*x != 0),
-      Ok(Number::Float(x)) => return Ok(*x != 0.),
+      Ok(Number::Int(x)) => return Ok(x != 0),
+      Ok(Number::Float(x)) => return Ok(x != 0.),
       Err(_) => {}
     }
 
@@ -169,21 +169,21 @@ impl Value {
 
   pub fn repr_int(&self) -> Result<Int, EvalError> {
     match self.repr_number()? {
-      Number::Int(x) => Ok(*x),
+      Number::Int(x) => Ok(x),
       Number::Float(x) => Err(EvalError::Generic(format!("not a valid int: {x}"))),
     }
   }
 
   pub fn repr_float(&self) -> Result<f64, EvalError> {
     match self.repr_number()? {
-      Number::Int(x) => Ok(*x as f64),
-      Number::Float(x) => Ok(*x),
+      Number::Int(x) => Ok(x as f64),
+      Number::Float(x) => Ok(x),
     }
   }
 
-  pub fn repr_number(&self) -> Result<&Number, EvalError> {
+  pub fn repr_number(&self) -> Result<Number, EvalError> {
     if let ValueData::Number(n) = &self.data {
-      return Ok(n);
+      return Ok(*n);
     }
 
     cached(&self.reprs().number, || {
@@ -195,6 +195,7 @@ impl Value {
       }
       Err(EvalError::NotNumericError(self.to_string()))
     })
+    .copied()
   }
 
   pub fn repr_dict(&self) -> Result<&Dict, EvalError> {
@@ -255,8 +256,8 @@ impl Value {
 
   pub fn unary_plus(&mut self) -> Result<Value, EvalError> {
     match self.repr_number() {
-      Ok(Number::Int(x)) => Ok(Value::from(*x)),
-      Ok(Number::Float(x)) => Ok(Value::from(*x)),
+      Ok(Number::Int(x)) => Ok(Value::from(x)),
+      Ok(Number::Float(x)) => Ok(Value::from(x)),
       Err(_) => Err(EvalError::ArgumentError(
         "can't use non-numeric string as operand of +".to_string(),
       )),

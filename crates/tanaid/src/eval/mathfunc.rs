@@ -15,7 +15,7 @@ pub fn register_commands(context: &mut EvalContext) {
       Ok(Number::Int(x)) => Ok(
         x.checked_abs()
           .map(Value::from)
-          .unwrap_or_else(|| (*x as f64).abs().into()),
+          .unwrap_or_else(|| (x as f64).abs().into()),
       ),
       Ok(Number::Float(x)) => Ok(x.abs().into()),
       Err(_) => Err(type_error("number", x)),
@@ -230,8 +230,8 @@ fn mf_int1_1(
       return Err(arity_error(name, 1, args.len()));
     };
     match x.repr_number() {
-      Ok(Number::Int(x)) => Ok(f(*x)?.into()),
-      Ok(Number::Float(x)) => Ok(f(to_int(*x))?.into()),
+      Ok(Number::Int(x)) => Ok(f(x)?.into()),
+      Ok(Number::Float(x)) => Ok(f(to_int(x))?.into()),
       Err(_) => Err(type_error("number", x)),
     }
   }
