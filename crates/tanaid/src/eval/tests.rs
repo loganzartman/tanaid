@@ -457,7 +457,7 @@ async fn eval_if_elseif_three_verbose() -> Result<(), Box<dyn std::error::Error>
 macro_rules! lit {
   ($val: expr) => {
     WordNode {
-      parts: vec![WordPart::BareLiteral($val.to_string())],
+      parts: vec![WordPart::BareLiteral(Value::new_literal($val.to_string()))],
     }
   };
 }

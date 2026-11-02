@@ -27,8 +27,8 @@ pub async fn eval_wordpart(
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   match part {
-    WordPart::BareLiteral(s) => Ok(Value::from(s.as_str())),
-    WordPart::BracedLiteral(s) => Ok(Value::from(s.as_str())),
+    WordPart::BareLiteral(s) => Ok(s.clone()),
+    WordPart::BracedLiteral(s) => Ok(s.clone()),
     WordPart::BracedSub(v) => context
       .get_variable(frame, &v)
       .ok_or_else(|| EvalError::UndefinedVariable(v.to_string()))

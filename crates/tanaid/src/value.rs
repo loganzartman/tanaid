@@ -86,11 +86,13 @@ impl Value {
     }
   }
 
-  pub fn new_literal(str: &str) -> Value {
+  pub fn new_literal(string: String) -> Value {
     let reprs = CachedReprs::new();
-    reprs.number.set(parse_number(str)).unwrap();
+    if let Ok(n) = parse_number(string.as_str()) {
+      reprs.number.set(Ok(n)).unwrap();
+    }
     Value {
-      data: ValueData::String(Rc::from(str)),
+      data: ValueData::String(Rc::from(string)),
       reprs: OnceCell::from(Rc::new(reprs)),
     }
   }
