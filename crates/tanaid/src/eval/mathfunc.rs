@@ -286,7 +286,7 @@ fn mf_min_max(
       if !arg.is_numeric() {
         return Err(type_error("number", arg));
       }
-      if arg.compare(result)? == Some(ordering) {
+      if arg.expr_cmp(result)? == Some(ordering) {
         result = arg;
       }
     }

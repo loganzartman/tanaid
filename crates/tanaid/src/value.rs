@@ -86,8 +86,13 @@ impl Value {
     }
   }
 
-  pub fn new_literal(_str: &str) -> Value {
-    todo!()
+  pub fn new_literal(str: &str) -> Value {
+    let reprs = CachedReprs::new();
+    reprs.number.set(parse_number(str)).unwrap();
+    Value {
+      data: ValueData::String(Rc::from(str)),
+      reprs: OnceCell::from(Rc::new(reprs)),
+    }
   }
 
   /// Converts the source into a string.
@@ -186,16 +191,7 @@ impl Value {
       return Ok(*n);
     }
 
-    cached(&self.reprs().number, || {
-      if let Ok(x) = self.repr_str().parse::<Int>() {
-        return Ok(Number::Int(x));
-      }
-      if let Ok(x) = self.repr_str().parse::<Float>() {
-        return Ok(Number::Float(x));
-      }
-      Err(EvalError::NotNumericError(self.to_string()))
-    })
-    .copied()
+    cached(&self.reprs().number, || parse_number(self.repr_str())).copied()
   }
 
   pub fn repr_dict(&self) -> Result<&Dict, EvalError> {
@@ -254,7 +250,7 @@ impl Value {
     })
   }
 
-  pub fn unary_plus(&mut self) -> Result<Value, EvalError> {
+  pub fn unary_plus(&self) -> Result<Value, EvalError> {
     match self.repr_number() {
       Ok(Number::Int(x)) => Ok(Value::from(x)),
       Ok(Number::Float(x)) => Ok(Value::from(x)),
@@ -264,7 +260,7 @@ impl Value {
     }
   }
 
-  pub fn bit_not(&mut self) -> Result<Value, EvalError> {
+  pub fn bit_not(&self) -> Result<Value, EvalError> {
     if let Ok(x) = self.repr_int() {
       return Ok(Value::from(!x));
     }
@@ -274,7 +270,7 @@ impl Value {
     ))
   }
 
-  pub fn compare(&mut self, other: &mut Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
+  pub fn expr_cmp(&self, other: &Value) -> Result<Option<std::cmp::Ordering>, EvalError> {
     if let (Ok(a), Ok(b)) = (self.repr_number(), other.repr_number()) {
       return match (a, b) {
         (Number::Int(a), Number::Int(b)) => Ok(Some(a.cmp(&b))),
@@ -285,17 +281,17 @@ impl Value {
     return Ok(Some(self.repr_str().cmp(other.repr_str())));
   }
 
-  pub fn lt(&mut self, other: &mut Value) -> Result<Value, EvalError> {
-    if matches!(self.compare(other)?, Some(Ordering::Less)) {
+  pub fn expr_lt(&self, other: &Value) -> Result<Value, EvalError> {
+    if matches!(self.expr_cmp(other)?, Some(Ordering::Less)) {
       Ok(Value::from(1))
     } else {
       Ok(Value::from(0))
     }
   }
 
-  pub fn le(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+  pub fn expr_le(&self, other: &Value) -> Result<Value, EvalError> {
     if matches!(
-      self.compare(other)?,
+      self.expr_cmp(other)?,
       Some(Ordering::Less) | Some(Ordering::Equal)
     ) {
       Ok(Value::from(1))
@@ -304,25 +300,25 @@ impl Value {
     }
   }
 
-  pub fn eq(&mut self, other: &mut Value) -> Result<Value, EvalError> {
-    if matches!(self.compare(other)?, Some(Ordering::Equal)) {
+  pub fn expr_eq(&self, other: &Value) -> Result<Value, EvalError> {
+    if matches!(self.expr_cmp(other)?, Some(Ordering::Equal)) {
       Ok(Value::from(1))
     } else {
       Ok(Value::from(0))
     }
   }
 
-  pub fn ne(&mut self, other: &mut Value) -> Result<Value, EvalError> {
-    if !matches!(self.compare(other)?, Some(Ordering::Equal)) {
+  pub fn expr_ne(&self, other: &Value) -> Result<Value, EvalError> {
+    if !matches!(self.expr_cmp(other)?, Some(Ordering::Equal)) {
       Ok(Value::from(1))
     } else {
       Ok(Value::from(0))
     }
   }
 
-  pub fn ge(&mut self, other: &mut Value) -> Result<Value, EvalError> {
+  pub fn expr_ge(&self, other: &Value) -> Result<Value, EvalError> {
     if matches!(
-      self.compare(other)?,
+      self.expr_cmp(other)?,
       Some(Ordering::Greater) | Some(Ordering::Equal)
     ) {
       Ok(Value::from(1))
@@ -331,8 +327,8 @@ impl Value {
     }
   }
 
-  pub fn gt(&mut self, other: &mut Value) -> Result<Value, EvalError> {
-    if matches!(self.compare(other)?, Some(Ordering::Greater)) {
+  pub fn expr_gt(&self, other: &Value) -> Result<Value, EvalError> {
+    if matches!(self.expr_cmp(other)?, Some(Ordering::Greater)) {
       Ok(Value::from(1))
     } else {
       Ok(Value::from(0))
@@ -358,7 +354,7 @@ impl Value {
     }
   }
 
-  pub fn is_numeric(&mut self) -> bool {
+  pub fn is_numeric(&self) -> bool {
     match self.repr_number() {
       Ok(Number::Int(_)) => true,
       Ok(Number::Float(x)) => !x.is_nan(),
@@ -370,6 +366,20 @@ impl Value {
 impl Display for Value {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.repr_str())
+  }
+}
+
+impl PartialEq for Value {
+  /// Test exact string repr equality. See also expr_eq()
+  fn eq(&self, other: &Self) -> bool {
+    self.repr_str() == other.repr_str()
+  }
+}
+
+impl PartialOrd for Value {
+  /// Compare exact string reprs. See also expr_cmp()
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.repr_str().cmp(other.repr_str()))
   }
 }
 
@@ -521,4 +531,14 @@ fn cached<T>(
   f: impl FnOnce() -> Result<T, EvalError>,
 ) -> Result<&T, EvalError> {
   cell.get_or_init(f).as_ref().map_err(Clone::clone)
+}
+
+fn parse_number(str: &str) -> Result<Number, EvalError> {
+  if let Ok(x) = str.parse::<Int>() {
+    return Ok(Number::Int(x));
+  }
+  if let Ok(x) = str.parse::<Float>() {
+    return Ok(Number::Float(x));
+  }
+  Err(EvalError::NotNumericError(str.to_string()))
 }

@@ -43,7 +43,7 @@ pub async fn eval_expr_unary_op(
   frame: FrameId,
 ) -> Result<Value, EvalError> {
   use UnaryOp::*;
-  let mut x = eval_expr(x, context, frame).await?;
+  let x = eval_expr(x, context, frame).await?;
   match o {
     Plus => x.unary_plus(),
     Minus => -x,
@@ -81,15 +81,15 @@ pub async fn eval_expr_binary_op(
     _ => {}
   }
 
-  let mut a = eval_expr(a, context, frame).await?;
-  let mut b = eval_expr(b, context, frame).await?;
+  let a = eval_expr(a, context, frame).await?;
+  let b = eval_expr(b, context, frame).await?;
   match o {
-    Lt => a.lt(&mut b),
-    Le => a.le(&mut b),
-    Eq => a.eq(&mut b),
-    Ne => a.ne(&mut b),
-    Ge => a.ge(&mut b),
-    Gt => a.gt(&mut b),
+    Lt => a.expr_lt(&b),
+    Le => a.expr_le(&b),
+    Eq => a.expr_eq(&b),
+    Ne => a.expr_ne(&b),
+    Ge => a.expr_ge(&b),
+    Gt => a.expr_gt(&b),
     Add => a + b,
     Sub => a - b,
     Mul => a * b,
