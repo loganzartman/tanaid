@@ -27,7 +27,7 @@ pub type Dict = HashMap<String, Value>;
 /// - Reinterpreting can fail; for example, "2.2" cannot be interpreted as an integer. This returns an EvalError.
 /// - When a Value is reinterpreted successfully, the resulting Rust value is cached within the Value for future repr_ calls.
 /// - Unlike in tclsh, all cached reprs are retained for the lifetime of the Value.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Value {
   /// Primary, authoritative data for this Value. Source for all other reprs.
   data: ValueData,
@@ -79,6 +79,20 @@ thread_local! {
 impl Default for Value {
   fn default() -> Self {
     Value::none()
+  }
+}
+
+impl Clone for Value {
+  fn clone(&self) -> Self {
+    if !matches!(self.data, ValueData::Number(_)) {
+      // create OnceCells now to share cache.
+      // not worth the allocation for numbers.
+      self.reprs();
+    }
+    Self {
+      data: self.data.clone(),
+      reprs: self.reprs.clone(),
+    }
   }
 }
 
