@@ -13,9 +13,9 @@ pub(super) fn eval(
 ) -> EvalCmdResult {
   match args {
     [tag, sequence, script] => {
-      let tag_str = tag.repr_str()?;
-      let sequence_str = sequence.repr_str()?;
-      let script_str = script.repr_str()?;
+      let tag_str = tag.repr_str();
+      let sequence_str = sequence.repr_str();
+      let script_str = script.repr_str();
       let (script_str, append) = if let Some(stripped) = script_str.strip_prefix("+") {
         (stripped, true)
       } else {

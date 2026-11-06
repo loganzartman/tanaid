@@ -9,6 +9,7 @@ use crate::parser_expr::{self, ExprNode};
 use crate::value::Value;
 use foldhash::fast::RandomState;
 use std::cell::RefCell;
+use std::mem::take;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -337,7 +338,7 @@ impl EvalContext {
     Ok(self.parse_cache_expr.get(src).unwrap().clone())
   }
 
-  pub fn get_variable(&self, frame: FrameId, name: &str) -> Option<&Value> {
+  fn get_binding(&self, frame: FrameId, name: &str) -> Option<(&Value, Revision)> {
     let mut cur_frame = frame;
     let mut cur_name = name;
     loop {
@@ -349,30 +350,17 @@ impl EvalContext {
           cur_frame = *ref_frame;
           cur_name = ref_name;
         }
-        Binding::Val(v, _) => return Some(v),
+        Binding::Val(value, revision) => return Some((value, *revision)),
       }
     }
   }
 
-  pub fn get_variable_rev(&self, frame: FrameId, name: &str) -> u64 {
-    let mut cur_frame = frame;
-    let mut cur_name = name;
-    loop {
-      match self.frame(cur_frame).get_binding(cur_name) {
-        Some(Binding::Ref(ref_frame, ref_name)) => {
-          if *ref_frame == frame && &**ref_name == name {
-            panic!("circular reference to {}", ref_name);
-          }
-          cur_frame = *ref_frame;
-          cur_name = ref_name;
-        }
-        Some(Binding::Val(_, revision)) => return *revision,
-        None => return 0,
-      }
-    }
-  }
-
-  pub fn set_variable(&mut self, frame: FrameId, name: &str, value: Value) {
+  fn modify_binding<R>(
+    &mut self,
+    frame: FrameId,
+    name: &str,
+    modify: impl FnOnce(Option<Value>) -> (Value, Result<R, EvalError>),
+  ) -> Result<R, EvalError> {
     let mut cur_frame = frame;
     let mut cur_name: Option<Rc<str>> = None;
     loop {
@@ -386,19 +374,50 @@ impl EvalContext {
           cur_frame = *ref_frame;
           cur_name = Some(Rc::clone(ref_name));
         }
-        Some(Binding::Val(binding_value, revision)) => {
-          *binding_value = value;
-          *revision += 1;
-          return;
+        Some(Binding::Val(value, revision)) => {
+          let (new_value, result) = modify(Some(take(value)));
+          *value = new_value;
+          if result.is_ok() {
+            *revision += 1;
+          }
+          return result;
         }
         None => {
-          self
-            .frame_mut(cur_frame)
-            .set_binding(cur_name_resolved, Binding::Val(value, 1));
-          return;
+          let (new_value, result) = modify(None);
+          if result.is_ok() {
+            self
+              .frame_mut(cur_frame)
+              .set_binding(cur_name_resolved, Binding::Val(new_value, 1));
+          }
+          return result;
         }
       }
     }
+  }
+
+  pub fn get_variable(&self, frame: FrameId, name: &str) -> Option<&Value> {
+    self.get_binding(frame, name).map(|x| x.0)
+  }
+
+  pub fn get_variable_rev(&self, frame: FrameId, name: &str) -> u64 {
+    self.get_binding(frame, name).map(|x| x.1).unwrap_or(0)
+  }
+
+  pub fn set_variable(&mut self, frame: FrameId, name: &str, value: Value) {
+    let _ = self.modify_binding(frame, name, |_| (value, Ok(())));
+  }
+
+  pub fn update_variable(
+    &mut self,
+    frame: FrameId,
+    name: &str,
+    modify: impl FnOnce(Option<Value>) -> (Value, Result<(), EvalError>),
+  ) -> Result<Value, EvalError> {
+    self.modify_binding(frame, name, |value| {
+      let (value, result) = modify(value);
+      let result = result.map(|()| value.clone());
+      (value, result)
+    })
   }
 
   pub fn ref_variable(

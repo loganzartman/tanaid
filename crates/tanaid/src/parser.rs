@@ -4,6 +4,8 @@ use std::fmt::{Display, Formatter};
 use std::mem::take;
 use std::sync::LazyLock;
 
+use crate::value::Value;
+
 #[derive(Debug)]
 pub enum ParseError {
   Generic(String),
@@ -42,8 +44,8 @@ pub struct WordNode {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum WordPart {
-  BareLiteral(String),
-  BracedLiteral(String),
+  BareLiteral(Value),
+  BracedLiteral(Value),
   Quoted(Vec<WordPart>),
   VarSub(String),
   VarIndex(String, String),
@@ -402,7 +404,7 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
 
       return Ok((
         WordNode {
-          parts: vec![WordPart::BracedLiteral(s)],
+          parts: vec![WordPart::BracedLiteral(Value::new_literal(s))],
         },
         rest,
       ));
@@ -434,7 +436,9 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
       ch if is_bare_terminator(ch) => {
         // flush
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         break;
@@ -442,7 +446,9 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
       Some('$') => {
         // flush
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         let (parsed, rest) = parse_varsub(src)?;
@@ -452,7 +458,9 @@ pub(crate) fn parse_word(mut src: &str, mode: ParseMode) -> Result<(WordNode, &s
       Some('[') => {
         // flush
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         let (parsed, rest) = parse_cmdsub(src)?;
@@ -553,7 +561,9 @@ pub(crate) fn parse_quoted(mut src: &str) -> Result<(WordPart, &str), ParseError
       '"' => {
         // flush
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
         src = &src[1..];
         break;
@@ -561,7 +571,9 @@ pub(crate) fn parse_quoted(mut src: &str) -> Result<(WordPart, &str), ParseError
       '$' => {
         // flush
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         let (part, rest) = parse_varsub(src)?;
@@ -571,7 +583,9 @@ pub(crate) fn parse_quoted(mut src: &str) -> Result<(WordPart, &str), ParseError
       '[' => {
         // flush
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         let (part, rest) = parse_cmdsub(src)?;
@@ -618,7 +632,7 @@ pub(crate) fn parse_varsub(mut src: &str) -> Result<(WordPart, &str), ParseError
         if !part_buffer.is_empty() {
           return Ok((WordPart::VarSub(take(&mut part_buffer)), src));
         } else {
-          return Ok((WordPart::BareLiteral("$".to_string()), src));
+          return Ok((WordPart::BareLiteral(Value::new_literal("$".into())), src));
         }
       }
     }
@@ -758,12 +772,30 @@ pub(crate) fn parse_ws(src: &str) -> Result<(String, &str), ParseError> {
 mod tests {
   use super::*;
 
+  macro_rules! lit {
+    ($string:expr) => {
+      WordPart::BareLiteral(Value::new_literal($string.into()))
+    };
+  }
+
+  macro_rules! braced {
+    ($string:expr) => {
+      WordPart::BracedLiteral(Value::new_literal($string.into()))
+    };
+  }
+
+  macro_rules! varsub {
+    ($string:expr) => {
+      WordPart::VarSub($string.into())
+    };
+  }
+
   fn bare_script(words: &[&str]) -> ScriptNode {
     ScriptNode {
       commands: vec![CommandNode {
         words: words
           .iter()
-          .map(|word| WordNode::only(WordPart::BareLiteral((*word).to_string())))
+          .map(|word| WordNode::only(lit!(*word)))
           .collect(),
       }],
     }
@@ -783,10 +815,7 @@ mod tests {
       parsed,
       (
         WordNode {
-          parts: vec![
-            WordPart::VarSub("x".to_string()),
-            WordPart::VarSub("y".to_string())
-          ]
+          parts: vec![varsub!("x"), varsub!("y")]
         },
         ""
       )
@@ -801,11 +830,7 @@ mod tests {
       parsed,
       (
         WordNode {
-          parts: vec![
-            WordPart::VarSub("x".to_string()),
-            WordPart::BareLiteral("+".to_string()),
-            WordPart::VarSub("x".to_string()),
-          ]
+          parts: vec![varsub!("x"), lit!("+"), varsub!("x")]
         },
         ""
       )
@@ -820,10 +845,7 @@ mod tests {
       parsed,
       (
         WordNode {
-          parts: vec![
-            WordPart::VarSub("foo".to_string()),
-            WordPart::BareLiteral("$bar".to_string()),
-          ]
+          parts: vec![varsub!("foo"), lit!("$bar")]
         },
         ""
       )
@@ -838,10 +860,7 @@ mod tests {
       parsed,
       (
         WordNode {
-          parts: vec![
-            WordPart::VarSub("foo".to_string()),
-            WordPart::BareLiteral("[bar]".to_string()),
-          ]
+          parts: vec![WordPart::VarSub("foo".to_string()), lit!("[bar]"),]
         },
         ""
       )
@@ -877,7 +896,7 @@ mod tests {
             WordPart::VarSub("y".to_string()),
             WordPart::CommandSub(bare_script(&["a"])),
             WordPart::CommandSub(bare_script(&["b"])),
-            WordPart::BareLiteral("{c}".to_string()),
+            lit!("{c}"),
           ]
         },
         ""
@@ -893,9 +912,7 @@ mod tests {
       parsed,
       (
         WordNode {
-          parts: vec![WordPart::Quoted(vec![WordPart::BareLiteral(
-            "hello".to_string()
-          ),]),]
+          parts: vec![WordPart::Quoted(vec![lit!("hello"),]),]
         },
         ""
       )
@@ -911,7 +928,7 @@ mod tests {
       (
         WordNode {
           parts: vec![WordPart::Quoted(vec![
-            WordPart::BareLiteral("hello ".to_string()),
+            lit!("hello "),
             WordPart::VarSub("name".to_string())
           ]),]
         },
@@ -929,7 +946,7 @@ mod tests {
       (
         WordNode {
           parts: vec![WordPart::Quoted(vec![
-            WordPart::BareLiteral("sum ".to_string()),
+            lit!("sum "),
             WordPart::CommandSub(bare_script(&["expr", "1", "+", "2"]))
           ]),]
         },
@@ -946,9 +963,7 @@ mod tests {
       parsed,
       (
         WordNode {
-          parts: vec![WordPart::Quoted(vec![WordPart::BareLiteral(
-            "a\nb\"c".to_string()
-          )])]
+          parts: vec![WordPart::Quoted(vec![lit!("a\nb\"c")])]
         },
         ""
       )
@@ -959,52 +974,28 @@ mod tests {
   #[test]
   fn parses_backslash_escapes_in_bare_word() -> Result<(), ParseError> {
     let parsed = parse_word(r#"a\ b\;\$x\[cmd\]\{c\}\"q"#, ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BareLiteral("a b;$x[cmd]{c}\"q".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(lit!("a b;$x[cmd]{c}\"q")), ""));
     Ok(())
   }
 
   #[test]
   fn parses_backslash_sequences_in_bare_word() -> Result<(), ParseError> {
     let parsed = parse_word(r"line\ncol\t\x41\101\q", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BareLiteral("line\ncol\tAAq".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(lit!("line\ncol\tAAq")), ""));
     Ok(())
   }
 
   #[test]
   fn trailing_backslash_in_bare_word_is_literal() -> Result<(), ParseError> {
     let parsed = parse_word(r"hello\", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BareLiteral(r"hello\".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(lit!(r"hello\")), ""));
     Ok(())
   }
 
   #[test]
   fn braces_and_quotes_are_literal_inside_bare_word() -> Result<(), ParseError> {
     let parsed = parse_word(r#"pre{braced}"quoted""#, ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BareLiteral(r#"pre{braced}"quoted""#.to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(lit!(r#"pre{braced}"quoted""#)), ""));
     Ok(())
   }
 
@@ -1016,13 +1007,7 @@ mod tests {
   #[test]
   fn braced_word_allows_following_separator() -> Result<(), ParseError> {
     let parsed = parse_word("{hello} world", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BracedLiteral("hello".to_string())),
-        " world"
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(braced!("hello")), " world"));
     Ok(())
   }
 
@@ -1049,13 +1034,7 @@ mod tests {
   #[test]
   fn backslash_newline_continues_bare_word() -> Result<(), ParseError> {
     let parsed = parse_word("hello\\\n \t  world", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BareLiteral("hello world".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(lit!("hello world")), ""));
     Ok(())
   }
 
@@ -1065,9 +1044,7 @@ mod tests {
     assert_eq!(
       parsed,
       (
-        WordNode::only(WordPart::Quoted(vec![WordPart::BareLiteral(
-          "hello world".to_string()
-        )])),
+        WordNode::only(WordPart::Quoted(vec![lit!("hello world")])),
         ""
       )
     );
@@ -1077,65 +1054,35 @@ mod tests {
   #[test]
   fn backslash_newline_is_substituted_in_braced_word() -> Result<(), ParseError> {
     let parsed = parse_word("{hello\\\n \t  world}", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BracedLiteral("hello world".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(braced!("hello world")), ""));
     Ok(())
   }
 
   #[test]
   fn braced_backslash_newline_does_not_consume_next_newline() -> Result<(), ParseError> {
     let parsed = parse_word("{hello\\\n\nworld}", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BracedLiteral("hello \nworld".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(braced!("hello \nworld")), ""));
     Ok(())
   }
 
   #[test]
   fn braced_word_preserves_other_backslashes() -> Result<(), ParseError> {
     let parsed = parse_word(r"{a\n\$x}", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BracedLiteral(r"a\n\$x".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(braced!(r"a\n\$x")), ""));
     Ok(())
   }
 
   #[test]
   fn escaped_brace_does_not_close_braced_word() -> Result<(), ParseError> {
     let parsed = parse_word(r"{a\}b}", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BracedLiteral(r"a\}b".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(braced!(r"a\}b")), ""));
     Ok(())
   }
 
   #[test]
   fn escaped_open_brace_does_not_nest_braced_word() -> Result<(), ParseError> {
     let parsed = parse_word(r"{a\{b}", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BracedLiteral(r"a\{b".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(braced!(r"a\{b")), ""));
     Ok(())
   }
 
@@ -1174,9 +1121,9 @@ mod tests {
         WordNode::only(WordPart::CommandSub(ScriptNode {
           commands: vec![CommandNode {
             words: vec![
-              WordNode::only(WordPart::BareLiteral("set".to_string())),
-              WordNode::only(WordPart::BareLiteral("x".to_string())),
-              WordNode::only(WordPart::BracedLiteral("]".to_string())),
+              WordNode::only(lit!("set")),
+              WordNode::only(lit!("x")),
+              WordNode::only(braced!("]")),
             ],
           }],
         })),
@@ -1255,12 +1202,12 @@ mod tests {
             WordPart::CommandSub(ScriptNode {
               commands: vec![CommandNode {
                 words: vec![
-                  WordNode::only(WordPart::BareLiteral("list".to_string())),
+                  WordNode::only(lit!("list")),
                   WordNode::only(WordPart::CommandSub(bare_script(&["expr", "1", "+", "2",]))),
                 ],
               }],
             }),
-            WordPart::BareLiteral("suffix".to_string()),
+            lit!("suffix"),
           ],
         },
         ""
@@ -1280,23 +1227,14 @@ mod tests {
   #[test]
   fn lone_dollar_is_a_word() -> Result<(), ParseError> {
     let parsed = parse_word("$", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (WordNode::only(WordPart::BareLiteral("$".to_string())), "")
-    );
+    assert_eq!(parsed, (WordNode::only(lit!("$")), ""));
     Ok(())
   }
 
   #[test]
   fn parses_word_includes_parentheses() -> Result<(), ParseError> {
     let parsed = parse_word("hello(a)", ParseMode::Script)?;
-    assert_eq!(
-      parsed,
-      (
-        WordNode::only(WordPart::BareLiteral("hello(a)".to_string())),
-        ""
-      )
-    );
+    assert_eq!(parsed, (WordNode::only(lit!("hello(a)")), ""));
     Ok(())
   }
 
@@ -1492,9 +1430,9 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::only(WordPart::BareLiteral("set".to_string())),
-            WordNode::only(WordPart::BareLiteral("x".to_string())),
-            WordNode::only(WordPart::BareLiteral("3".to_string())),
+            WordNode::only(lit!("set")),
+            WordNode::only(lit!("x")),
+            WordNode::only(lit!("3")),
           ]
         }]
       }
@@ -1511,17 +1449,17 @@ mod tests {
         commands: vec![
           CommandNode {
             words: vec![
-              WordNode::only(WordPart::BareLiteral("set".to_string())),
-              WordNode::only(WordPart::BareLiteral("x".to_string())),
-              WordNode::only(WordPart::BareLiteral("3".to_string())),
+              WordNode::only(lit!("set")),
+              WordNode::only(lit!("x")),
+              WordNode::only(lit!("3")),
             ],
           },
           CommandNode {
             words: vec![
-              WordNode::only(WordPart::BareLiteral("expr".to_string())),
-              WordNode::only(WordPart::BareLiteral("2".to_string())),
-              WordNode::only(WordPart::BareLiteral("+".to_string())),
-              WordNode::only(WordPart::BareLiteral("1".to_string())),
+              WordNode::only(lit!("expr")),
+              WordNode::only(lit!("2")),
+              WordNode::only(lit!("+")),
+              WordNode::only(lit!("1")),
             ]
           },
         ]
@@ -1538,9 +1476,9 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::only(WordPart::BareLiteral("expr".to_string())),
-            WordNode::only(WordPart::BareLiteral("2".to_string())),
-            WordNode::only(WordPart::BareLiteral("+".to_string())),
+            WordNode::only(lit!("expr")),
+            WordNode::only(lit!("2")),
+            WordNode::only(lit!("+")),
             WordNode::only(WordPart::VarSub("x".to_string())),
           ]
         },]
@@ -1557,15 +1495,15 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::only(WordPart::BareLiteral("expr".to_string())),
-            WordNode::only(WordPart::BareLiteral("2".to_string())),
-            WordNode::only(WordPart::BareLiteral("+".to_string())),
+            WordNode::only(lit!("expr")),
+            WordNode::only(lit!("2")),
+            WordNode::only(lit!("+")),
             WordNode::only(WordPart::CommandSub(ScriptNode {
               commands: vec![CommandNode {
                 words: vec![
-                  WordNode::only(WordPart::BareLiteral("expr".to_string())),
-                  WordNode::only(WordPart::BareLiteral("3".to_string())),
-                  WordNode::only(WordPart::BareLiteral("+".to_string())),
+                  WordNode::only(lit!("expr")),
+                  WordNode::only(lit!("3")),
+                  WordNode::only(lit!("+")),
                   WordNode::only(WordPart::CommandSub(bare_script(&["expr", "4", "+", "5",]))),
                 ],
               }],
@@ -1585,13 +1523,9 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::only(WordPart::BareLiteral("puts".to_string())),
-            WordNode::only(WordPart::Quoted(vec![WordPart::BareLiteral(
-              "hello world".to_string()
-            )])),
-            WordNode::only(WordPart::BracedLiteral(
-              "nested {braced} string".to_string()
-            )),
+            WordNode::only(lit!("puts")),
+            WordNode::only(WordPart::Quoted(vec![lit!("hello world")])),
+            WordNode::only(braced!("nested {braced} string")),
           ]
         }]
       }
@@ -1607,16 +1541,10 @@ mod tests {
       ScriptNode {
         commands: vec![
           CommandNode {
-            words: vec![
-              WordNode::only(WordPart::BareLiteral("puts".to_string())),
-              WordNode::only(WordPart::BareLiteral("hey".to_string())),
-            ]
+            words: vec![WordNode::only(lit!("puts")), WordNode::only(lit!("hey")),]
           },
           CommandNode {
-            words: vec![
-              WordNode::only(WordPart::BareLiteral("expr".to_string())),
-              WordNode::only(WordPart::BareLiteral("1".to_string())),
-            ]
+            words: vec![WordNode::only(lit!("expr")), WordNode::only(lit!("1")),]
           },
         ]
       }
@@ -1630,10 +1558,7 @@ mod tests {
     assert_eq!(
       parsed,
       CommandNode {
-        words: vec![
-          WordNode::only(WordPart::BareLiteral("puts".to_string())),
-          WordNode::only(WordPart::BareLiteral("hey".to_string())),
-        ]
+        words: vec![WordNode::only(lit!("puts")), WordNode::only(lit!("hey")),]
       },
     );
     Ok(())
@@ -1676,17 +1601,14 @@ mod tests {
         commands: vec![
           CommandNode {
             words: vec![
-              WordNode::only(WordPart::BareLiteral("puts".to_string())),
-              WordNode::only(WordPart::BareLiteral("hi".to_string())),
-              WordNode::only(WordPart::BareLiteral("#".to_string())),
-              WordNode::only(WordPart::BareLiteral("x".to_string())),
+              WordNode::only(lit!("puts")),
+              WordNode::only(lit!("hi")),
+              WordNode::only(lit!("#")),
+              WordNode::only(lit!("x")),
             ]
           },
           CommandNode {
-            words: vec![
-              WordNode::only(WordPart::BareLiteral("puts".to_string())),
-              WordNode::only(WordPart::BareLiteral("z".to_string())),
-            ]
+            words: vec![WordNode::only(lit!("puts")), WordNode::only(lit!("z")),]
           },
         ]
       }
@@ -1716,7 +1638,7 @@ mod tests {
       ScriptNode {
         commands: vec![CommandNode {
           words: vec![
-            WordNode::only(WordPart::BareLiteral("puts".to_string())),
+            WordNode::only(lit!("puts")),
             WordNode::only(WordPart::CommandSub(ScriptNode { commands: vec![] })),
           ]
         }]

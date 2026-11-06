@@ -9,10 +9,10 @@ pub(super) async fn eval(
 ) -> EvalCmdResult {
   let expr_src = if let [arg] = args {
     // optimization: no allocation for idiomatic single (braced) argument
-    arg.repr_str()?
+    arg.repr_str()
   } else {
     let values = args.iter_mut().map(|value| value.repr_str());
-    &values.collect::<Result<Vec<&str>, _>>()?.join(" ")
+    &values.collect::<Vec<&str>>().join(" ")
   };
 
   let expr_parsed = context

@@ -17,7 +17,7 @@ pub(crate) fn eval(
   widget: &mut CanvasWidget,
 ) -> EvalCmdResult {
   let (item_type, rest) = match args {
-    [item_type, rest @ ..] => (item_type.repr_str()?, rest),
+    [item_type, rest @ ..] => (item_type.repr_str(), rest),
     _ => {
       return Err(EvalError::ArgumentError(
         "wrong number of args; should be: pathName create itemType ?option ...?".to_string(),
@@ -49,14 +49,11 @@ fn insert_item(widget: &mut CanvasWidget, mut item: impl CanvasItem + 'static) -
 
 fn is_option_name(value: &mut Value) -> bool {
   // optimization: will never match RE_OPT; doesn't materialize string
-  if value.peek_number().is_some() {
+  if value.is_already_number() {
     return false;
   }
 
-  match value.repr_str() {
-    Ok(val) => matches!(val.as_bytes(), [b'-', b'a'..=b'z', ..]),
-    Err(_) => false,
-  }
+  matches!(value.repr_str().as_bytes(), [b'-', b'a'..=b'z', ..])
 }
 
 fn parse_coords_and_options<'a>(
@@ -101,7 +98,7 @@ fn parse_coords_and_options<'a>(
 
 fn apply_options(item: &mut impl CanvasItem, options: &mut [[Value; 2]]) -> Result<(), EvalError> {
   for [option, value] in options {
-    let name = option.repr_str()?;
+    let name = option.repr_str();
     if !item.apply_option(name, value)? {
       return Err(EvalError::ArgumentError(format!(
         "unsupported option: {name}"

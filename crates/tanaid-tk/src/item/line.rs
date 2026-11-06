@@ -38,7 +38,7 @@ impl CanvasItem for CanvasItemLine {
   fn apply_option(&mut self, name: &str, value: &mut Value) -> Result<bool, EvalError> {
     match name {
       "-fill" => {
-        self.fill = parse_color(value.repr_str()?)?.map(|c| c.into());
+        self.fill = parse_color(value.repr_str())?.map(|c| c.into());
       }
       "-smooth" => {
         match value.repr_bool() {
@@ -53,7 +53,7 @@ impl CanvasItem for CanvasItemLine {
           Err(_) => {}
         }
 
-        match value.repr_str()? {
+        match value.repr_str() {
           "bezier" => {
             self.smooth = Smooth::Bezier;
             return Ok(true);

@@ -27,9 +27,9 @@ pub(super) async fn eval(
     };
 
     let mut varlist: Vec<String> = vec![];
-    let mut varlist_elems = varlist_val.repr_list()?.as_ref().clone();
+    let mut varlist_elems = varlist_val.repr_list()?.clone();
     for val in varlist_elems.iter_mut() {
-      varlist.push(val.repr_str()?.to_string());
+      varlist.push(val.repr_str().to_string());
     }
     if varlist.is_empty() {
       return Err(EvalError::ArgumentError(
@@ -37,10 +37,10 @@ pub(super) async fn eval(
       ));
     }
 
-    varlists_lists.push((varlist, list.repr_list()?.as_ref().clone()));
+    varlists_lists.push((varlist, list.repr_list()?.clone()));
   }
 
-  let body_str = body.repr_str()?;
+  let body_str = body.repr_str();
   let (body_script, _) = context
     .parse_script_caching(body_str)
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?

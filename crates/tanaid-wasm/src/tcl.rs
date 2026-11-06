@@ -159,8 +159,8 @@ impl Tcl {
     })
     .await;
 
-    match result?.repr_str() {
-      Ok(s) => Ok(JsValue::from_str(s)),
+    match result {
+      Ok(s) => Ok(JsValue::from_str(s.repr_str())),
       Err(e) => Err(JsError::new(e.to_string().as_str()).into()),
     }
   }

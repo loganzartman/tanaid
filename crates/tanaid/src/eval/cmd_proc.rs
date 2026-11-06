@@ -14,10 +14,10 @@ pub(super) fn eval(
     ));
   };
 
-  let name = name_val.repr_str()?;
+  let name = name_val.repr_str();
 
   // args list items are not eval'ed; parse list and convert to literal strings
-  let (params_raw, "") = parser::parse_list(params_val.repr_str()?)
+  let (params_raw, "") = parser::parse_list(params_val.repr_str())
     .map_err(|e| EvalError::ArgumentError(format!("proc params must be a list: {}", e)))?
   else {
     return Err(EvalError::ArgumentError(
@@ -56,7 +56,7 @@ pub(super) fn eval(
     .collect::<Result<Vec<_>, _>>()?;
 
   let parsed = context
-    .parse_script_caching(body_val.repr_str()?)
+    .parse_script_caching(body_val.repr_str())
     .map_err(|e| EvalError::ArgumentError(format!("proc body must be a script: {}", e)))?;
   let (body, rest) = parsed.as_ref();
 

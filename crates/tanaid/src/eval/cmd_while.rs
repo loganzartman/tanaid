@@ -14,12 +14,12 @@ pub(super) async fn eval(
   };
 
   let test_parsed = context
-    .parse_expr_caching(test.repr_str()?)
+    .parse_expr_caching(test.repr_str())
     .map_err(|e| EvalError::ExprParseError(e.to_string()))?;
   let (test_expr, _) = test_parsed.as_ref();
 
   let body_parsed = context
-    .parse_script_caching(body.repr_str()?)
+    .parse_script_caching(body.repr_str())
     .map_err(|e| EvalError::ScriptParseError(e.to_string()))?;
   let (body_script, _) = body_parsed.as_ref();
 

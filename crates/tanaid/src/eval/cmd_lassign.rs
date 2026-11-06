@@ -15,7 +15,7 @@ pub(super) fn eval(args: &mut [Value], context: &mut EvalContext, frame: FrameId
   for assign_var in assign_vars {
     context.set_variable(
       frame,
-      assign_var.repr_str()?,
+      assign_var.repr_str(),
       list_iter.next().cloned().unwrap_or(Value::none()),
     );
   }

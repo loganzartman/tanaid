@@ -13,7 +13,7 @@ pub(super) fn eval(
     ));
   };
 
-  let mut list_list = list.repr_list()?.as_ref().clone();
+  let mut list_list = list.repr_list()?.clone();
   list_list.reverse();
 
   Ok(Value::from(list_list))

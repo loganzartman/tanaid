@@ -51,12 +51,12 @@ pub(super) async fn eval(
 
   for (cond, body) in cond_body.iter_mut() {
     let cond_parse_result = context
-      .parse_expr_caching(cond.repr_str()?)
+      .parse_expr_caching(cond.repr_str())
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if condition: {}", e)))?;
     let (cond_parsed, _) = cond_parse_result.as_ref();
 
     let body_parse_result = context
-      .parse_script_caching(body.repr_str()?)
+      .parse_script_caching(body.repr_str())
       .map_err(|e| EvalError::ArgumentError(format!("Failed to parse if body: {}", e)))?;
     let (body_parsed, _) = body_parse_result.as_ref();
 

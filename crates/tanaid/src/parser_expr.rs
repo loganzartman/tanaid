@@ -2,6 +2,7 @@ use regex::Regex;
 
 use crate::parser::{self, WordPart};
 use crate::parser::{ParseError, WordNode};
+use crate::value::Value;
 
 use std::mem::take;
 use std::sync::LazyLock;
@@ -192,7 +193,7 @@ fn parse_expr_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
 
       return Ok((
         WordNode {
-          parts: vec![WordPart::BracedLiteral(parsed)],
+          parts: vec![WordPart::BracedLiteral(Value::new_literal(parsed))],
         },
         rest,
       ));
@@ -219,7 +220,9 @@ fn parse_expr_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
         | ',',
       ) => {
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         if parts.is_empty() {
@@ -231,7 +234,9 @@ fn parse_expr_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
 
       Some('$') => {
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         let (parsed, rest) = parser::parse_varsub(src)?;
@@ -241,7 +246,9 @@ fn parse_expr_word(mut src: &str) -> Result<(WordNode, &str), ParseError> {
 
       Some('[') => {
         if !part_buffer.is_empty() {
-          parts.push(WordPart::BareLiteral(take(&mut part_buffer)));
+          parts.push(WordPart::BareLiteral(Value::new_literal(take(
+            &mut part_buffer,
+          ))));
         }
 
         let (parsed, rest) = parser::parse_cmdsub(src)?;
@@ -358,7 +365,9 @@ mod tests {
   macro_rules! lit {
     ($s: literal) => {
       ExprNode::Word(WordNode {
-        parts: vec![parser::WordPart::BareLiteral($s.to_string())],
+        parts: vec![parser::WordPart::BareLiteral(Value::new_literal(
+          $s.to_string(),
+        ))],
       })
     };
   }
@@ -580,7 +589,9 @@ mod tests {
     assert_eq!(
       node,
       ExprNode::Word(WordNode {
-        parts: vec![parser::WordPart::BracedLiteral("2".to_string())],
+        parts: vec![parser::WordPart::BracedLiteral(Value::new_literal(
+          "2".to_string()
+        ))],
       })
     );
     assert_eq!(rest, "");
@@ -591,7 +602,9 @@ mod tests {
       binop!(
         Add,
         ExprNode::Word(WordNode {
-          parts: vec![parser::WordPart::BracedLiteral("2".to_string())],
+          parts: vec![parser::WordPart::BracedLiteral(Value::new_literal(
+            "2".to_string()
+          ))],
         }),
         lit!("3")
       )

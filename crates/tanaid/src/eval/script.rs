@@ -10,10 +10,11 @@ pub async fn eval_returnable_script(
 ) -> Result<Value, EvalError> {
   let mut result = Value::none();
   for command in &script.commands {
+    drop(result);
     match Box::pin(eval_command(&command, context, frame)).await {
       Ok(val) => result = val,
       Err(EvalError::ReturnError(val)) => {
-        result = val;
+        result = *val;
         break;
       }
       err => return err,
@@ -29,6 +30,7 @@ pub async fn eval_script(
 ) -> Result<Value, EvalError> {
   let mut result = Value::none();
   for command in &script.commands {
+    drop(result);
     result = Box::pin(eval_command(&command, context, frame)).await?;
   }
   Ok(result)
@@ -58,7 +60,7 @@ pub async fn eval_command_inner(
   let [name, args @ ..] = name_and_args else {
     return Err(EvalError::Generic("missing command name".to_string()));
   };
-  let name_str = name.repr_str()?;
+  let name_str = name.repr_str();
 
   // user-defined proc
   if let Some(proc) = context.get_proc(name_str) {
