@@ -10,6 +10,7 @@ pub async fn eval_returnable_script(
 ) -> Result<Value, EvalError> {
   let mut result = Value::none();
   for command in &script.commands {
+    drop(result);
     match Box::pin(eval_command(&command, context, frame)).await {
       Ok(val) => result = val,
       Err(EvalError::ReturnError(val)) => {
@@ -29,6 +30,7 @@ pub async fn eval_script(
 ) -> Result<Value, EvalError> {
   let mut result = Value::none();
   for command in &script.commands {
+    drop(result);
     result = Box::pin(eval_command(&command, context, frame)).await?;
   }
   Ok(result)
