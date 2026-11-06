@@ -84,9 +84,9 @@ impl Default for Value {
 
 impl Clone for Value {
   fn clone(&self) -> Self {
-    if !matches!(self.data, ValueData::Number(_)) {
-      // create OnceCells now to share cache.
-      // not worth the allocation for numbers.
+    if matches!(self.data, ValueData::String(_)) {
+      // allocate repr cache now so that the cache is shared with the clone.
+      // worth the allocation for strings, which are often parsed into other types.
       self.reprs();
     }
     Self {
