@@ -124,7 +124,6 @@ impl Value {
 
   /// Take a Value and mutate its List repr.
   /// Does not clone if the Value is already a List, and there are no other refs to the list.
-  /// Return a (Value, Result) pair, where the Value is updated iff the Result is Ok.
   pub fn update_list(
     mut self,
     update: impl FnOnce(&mut List) -> Result<(), EvalError>,
