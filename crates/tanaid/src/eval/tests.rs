@@ -1275,6 +1275,30 @@ async fn eval_lappend_mutates_variable() -> Result<(), Box<dyn std::error::Error
 }
 
 #[pollster::test]
+async fn eval_lappend_does_not_mutate_copy() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("set xs [list a]; set ys $xs; lappend xs b; list $xs $ys")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "{a b} a");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_lappend_does_not_mutate_result() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("set xs {a}; set r [lappend xs b]; lappend xs c; list $xs $r")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "{a b c} {a b}");
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_lappend_no_values() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(&parser::parse("set xs [list a b]; lappend xs")?, &mut ctx).await?;
@@ -1424,6 +1448,46 @@ async fn eval_lset_mutates_in_local_frame() -> Result<(), Box<dyn std::error::Er
   )
   .await?;
   assert_eq!(result.repr_str(), "{Z d} {a b}");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_lset_does_not_mutate_copy() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("set xs [list a b]; set ys $xs; lset xs 0 Z; list $xs $ys")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "{Z b} {a b}");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_lset_nested_does_not_mutate_inner_copy() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse(
+      "set xs [list [list a b] c]; set inner [lindex $xs 0]; lset xs 0 1 Z; list $xs $inner",
+    )?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "{{a Z} c} {a b}");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_lset_error_keeps_variable() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("set xs [list [list a b] c]; lset xs 0 5 Z")?,
+    &mut ctx,
+  )
+  .await;
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("set xs")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "{a b} c");
   Ok(())
 }
 
