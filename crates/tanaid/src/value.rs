@@ -71,12 +71,23 @@ pub enum Number {
   Float(Float),
 }
 
+thread_local! {
+  // avoid allocating string for none values
+  static EMPTY_STRING: Rc<str> = Rc::from("");
+}
+
+impl Default for Value {
+  fn default() -> Self {
+    Value::none()
+  }
+}
+
 impl Value {
   pub fn none() -> Value {
-    Value {
-      data: ValueData::String(Rc::from("")),
+    EMPTY_STRING.with(|s| Value {
+      data: ValueData::String(Rc::clone(s)),
       reprs: OnceCell::new(),
-    }
+    })
   }
 
   pub fn new(data: ValueData) -> Value {
@@ -95,6 +106,34 @@ impl Value {
       data: ValueData::String(Rc::from(string)),
       reprs: OnceCell::from(Rc::new(reprs)),
     }
+  }
+
+  /// Take a Value and mutate its List repr.
+  /// Does not clone if the Value is already a List, and there are no other refs to the list.
+  /// Return a (Value, Result) pair, where the Value is updated iff the Result is Ok.
+  pub fn update_list(
+    mut self,
+    update: impl FnOnce(&mut List) -> Result<(), EvalError>,
+  ) -> (Value, Result<(), EvalError>) {
+    let rc = match &mut self.data {
+      ValueData::List(rc) => rc,
+      _ => match self.repr_list() {
+        Ok(l) => {
+          self.data = ValueData::List(Rc::new(l.clone()));
+          let ValueData::List(rc) = &mut self.data else {
+            unreachable!()
+          };
+          rc
+        }
+        Err(e) => {
+          return (self, Err(e));
+        }
+      },
+    };
+
+    let result = update(Rc::make_mut(rc));
+    self.reprs = OnceCell::new();
+    (self, result)
   }
 
   /// Converts the source into a string.
