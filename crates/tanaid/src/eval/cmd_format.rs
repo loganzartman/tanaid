@@ -2,14 +2,10 @@ use super::{EvalContext, FrameId, cmd::EvalCmdResult};
 use crate::{eval_error::EvalError, value::Value};
 use std::{fmt::Write, mem::take};
 
+#[derive(Default)]
 struct FormatOpts {
-  width: Option<u32>,
-}
-
-impl FormatOpts {
-  fn new() -> Self {
-    FormatOpts { width: None }
-  }
+  width: Option<usize>,
+  precision: Option<usize>,
 }
 
 pub(super) fn eval(
@@ -21,7 +17,7 @@ pub(super) fn eval(
     [format_str, rest @ ..] => (format_str, rest),
     _ => {
       return Err(EvalError::ArgumentError(
-        "unsupported clock subcommand".to_string(),
+        "format expects at least one argument".to_string(),
       ));
     }
   };
@@ -31,15 +27,26 @@ pub(super) fn eval(
   enum State {
     Copy,
     Sub,
+    SubPrec,
   }
 
   let mut state = State::Copy;
-  let mut numeric_buffer: Option<u32> = None;
+  let mut numeric_buffer: Option<usize> = None;
   let mut positional_arg = rest.iter();
   let mut selected_arg: Option<&Value> = None;
-  let mut opts = FormatOpts::new();
+  let mut opts = FormatOpts::default();
   // heuristic initial capacity
   let mut out = String::with_capacity(format_str.len());
+
+  macro_rules! build_number {
+    ($ch:expr) => {
+      let digit = $ch.to_digit(10).unwrap().saturating_cast::<usize>();
+      numeric_buffer = match numeric_buffer {
+        Some(n) => Some(n * 10 + digit),
+        None => Some(digit),
+      };
+    };
+  }
 
   macro_rules! do_format {
     ($ex:expr) => {{
@@ -65,44 +72,71 @@ pub(super) fn eval(
     };
   }
 
-  for ch in format_str.chars() {
+  let mut chars = format_str.chars().peekable();
+  while let Some(&ch) = chars.peek() {
     match state {
       State::Copy => {
+        chars.next();
         if ch == '%' {
           numeric_buffer = None;
           selected_arg = None;
+          opts = FormatOpts::default();
           state = State::Sub;
         } else {
           out.push(ch);
         }
       }
-      State::Sub => match ch {
-        ch @ '0'..'9' => {
-          let digit = ch.to_digit(10).unwrap();
-          numeric_buffer = match numeric_buffer {
-            Some(n) => Some(n * 10 + digit),
-            None => Some(digit),
-          };
-        }
-        '$' => {
-          let Some(index) = take(&mut numeric_buffer) else {
-            return Err(EvalError::ArgumentError("bad field specifier".to_string()));
-          };
-          let Some(selected) = rest.get(index.saturating_cast::<usize>()) else {
+      State::Sub => {
+        chars.next();
+        match ch {
+          ch @ '0'..='9' => {
+            build_number!(ch);
+          }
+          '%' => {
+            out.push('%');
+            state = State::Copy;
+          }
+          '$' => {
+            let Some(index) = take(&mut numeric_buffer) else {
+              return Err(EvalError::ArgumentError("bad field specifier".to_string()));
+            };
+            let Some(selected) = rest.get(index) else {
+              return Err(EvalError::ArgumentError(format!(
+                "%{index}$ argument index out of range"
+              )));
+            };
+            selected_arg = Some(selected);
+          }
+          '.' => {
+            opts.width = take(&mut numeric_buffer);
+            state = State::SubPrec;
+          }
+          'd' | 'i' => do_format!(format_int(&mut out, arg!()?, &opts)?),
+          'f' => do_format!(format_float(&mut out, arg!()?, &opts)?),
+          _ => {
             return Err(EvalError::ArgumentError(format!(
-              "%{index}$ argument index out of range"
+              "unknown format specifier: {ch}"
             )));
-          };
-          selected_arg = Some(selected);
+          }
         }
-        'd' => do_format!(format_int(&mut out, arg!()?, &opts)?),
+      }
+      State::SubPrec => match ch {
+        ch @ '0'..='9' => {
+          chars.next();
+          build_number!(ch);
+        }
         _ => {
-          return Err(EvalError::ArgumentError(format!(
-            "unknown format specifier: {ch}"
-          )));
+          opts.precision = Some(take(&mut numeric_buffer).unwrap_or(0));
+          state = State::Sub;
         }
       },
     }
+  }
+
+  if !matches!(state, State::Copy) {
+    return Err(EvalError::ArgumentError(
+      "format string ended in the middle of field specifier".to_string(),
+    ));
   }
 
   Ok(Value::from(out))
@@ -113,7 +147,30 @@ fn format_int(out: &mut String, arg: &Value, opts: &FormatOpts) -> Result<(), Ev
     out,
     "{:width$}",
     arg.repr_int()?,
-    width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0)
+    width = opts.width.unwrap_or(0)
   )
+  .map_err(|e| EvalError::Generic(format!("write error: {}", e.to_string())))
+}
+
+fn format_float(out: &mut String, arg: &Value, opts: &FormatOpts) -> Result<(), EvalError> {
+  match opts.precision {
+    Some(precision) => {
+      write!(
+        out,
+        "{:width$.precision$}",
+        arg.repr_float()?,
+        width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0),
+        precision = precision,
+      )
+    }
+    None => {
+      write!(
+        out,
+        "{:width$}",
+        arg.repr_float()?,
+        width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0),
+      )
+    }
+  }
   .map_err(|e| EvalError::Generic(format!("write error: {}", e.to_string())))
 }
