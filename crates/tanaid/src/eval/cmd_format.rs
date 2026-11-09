@@ -295,7 +295,10 @@ fn write_arg_pad(
       FormatPad::Space => (" ", output_start),
       FormatPad::Zero => ("0", body_start),
     };
-    out.insert_str(pad_index, pad_str.repeat(0.max(width - len)).as_str());
+    out.insert_str(
+      pad_index,
+      pad_str.repeat(width.saturating_sub(len)).as_str(),
+    );
   }
 
   Ok(())
