@@ -286,8 +286,12 @@ fn write_arg_pad(
     write!(out, "{}", prefix).unwrap();
   }
 
-  let body_start = out.len();
+  let mut body_start = out.len();
   write_body(out)?;
+
+  if out.as_bytes()[body_start] == '-' as u8 {
+    body_start += 1;
+  }
 
   let len = out.chars().count() - output_chars_start;
   if let Some(width) = opts.width {
