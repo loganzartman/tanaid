@@ -274,7 +274,6 @@ fn write_arg_pad(
   use ArgFmt::*;
 
   let output_start = out.len();
-  let output_chars_start = out.chars().count();
   if opts.alt {
     let prefix = match format {
       DecSigned | DecUnsigned => "0d",
@@ -290,11 +289,11 @@ fn write_arg_pad(
   let mut body_start = out.len();
   write_body(out)?;
 
-  if out.as_bytes()[body_start] == '-' as u8 {
+  if out[body_start..].starts_with('-') {
     body_start += 1;
   }
 
-  let len = out.chars().count() - output_chars_start;
+  let len = out[output_start..].chars().count();
   if let Some(width) = opts.width {
     let (pad_str, pad_index) = match opts.pad.as_ref().unwrap_or(&FormatPad::Space) {
       FormatPad::Space => (" ", output_start),
