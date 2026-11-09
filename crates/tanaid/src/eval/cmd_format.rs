@@ -9,14 +9,10 @@ use std::{fmt::Write, mem::take};
 struct FormatOpts {
   alt: bool,
   width: Option<usize>,
-  pad: Option<FormatPad>,
+  pad_zero: bool,
+  left_align: bool,
   precision: Option<usize>,
   size: ArgSize,
-}
-
-enum FormatPad {
-  Space,
-  Zero,
 }
 
 #[derive(Default)]
@@ -172,7 +168,11 @@ pub(super) fn eval(
         }
         '0' => {
           chars.next();
-          opts.pad = Some(FormatPad::Zero);
+          opts.pad_zero = true;
+        }
+        '-' => {
+          chars.next();
+          opts.left_align = true;
         }
         _ => {
           state = State::SubWidth;
@@ -363,9 +363,10 @@ fn write_arg_pad(
 
   let len = out[output_start..].chars().count();
   if let Some(width) = opts.width {
-    let (pad_str, pad_index) = match opts.pad.as_ref().unwrap_or(&FormatPad::Space) {
-      FormatPad::Space => (" ", output_start),
-      FormatPad::Zero => ("0", body_start),
+    let (pad_str, pad_index) = match (opts.pad_zero, opts.left_align) {
+      (false, false) => (" ", output_start),
+      (false, true) => (" ", out.len()),
+      (true, _) => ("0", body_start),
     };
     out.insert_str(
       pad_index,
