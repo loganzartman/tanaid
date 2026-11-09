@@ -151,6 +151,7 @@ pub(super) fn eval(
           'b' => w!(write_number(&mut out, NumFmt::Bin, &opts, arg!()?)?),
           'c' => w!(write_number(&mut out, NumFmt::Char, &opts, arg!()?)?),
           'f' => w!(write_number(&mut out, NumFmt::Float, &opts, arg!()?)?),
+          's' => w!(write!(out, "{}", arg!()?.repr_str()).unwrap()),
           _ => {
             return Err(EvalError::ArgumentError(format!(
               "unsupported format specifier: {ch}"
