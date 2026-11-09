@@ -6,7 +6,24 @@ use std::{fmt::Write, mem::take};
 struct FormatOpts {
   alt: bool,
   width: Option<usize>,
+  pad: Option<FormatPad>,
   precision: Option<usize>,
+}
+
+enum FormatPad {
+  Space,
+  Zero,
+}
+
+enum NumFmt {
+  DecSigned,
+  DecUnsigned,
+  Oct,
+  HexLower,
+  HexUpper,
+  Bin,
+  Char,
+  Float,
 }
 
 pub(super) fn eval(
@@ -50,22 +67,13 @@ pub(super) fn eval(
     };
   }
 
-  macro_rules! pre_format {
-    () => {{
+  macro_rules! w {
+    ($ex:expr) => {{
       if let Some(n) = numeric_buffer {
         opts.width = Some(n);
       }
       state = State::Copy;
-    }};
-  }
-
-  macro_rules! format_int {
-    ($format:expr,$arg:expr) => {{
-      pre_format!();
-      let arg = $arg;
-      write_number(&mut out, &opts, |out| {
-        write!(out, concat!("{:", $format, "}"), arg).unwrap();
-      })?;
+      $ex
     }};
   }
 
@@ -102,6 +110,10 @@ pub(super) fn eval(
           chars.next();
           opts.alt = true;
         }
+        '0' => {
+          chars.next();
+          opts.pad = Some(FormatPad::Zero);
+        }
         _ => {
           state = State::Sub;
         }
@@ -131,16 +143,17 @@ pub(super) fn eval(
             opts.width = take(&mut numeric_buffer);
             state = State::SubPrec;
           }
-          'd' | 'i' => format_int!("", arg!()?.repr_int()? as i32),
-          'u' => format_int!("", arg!()?.repr_int()? as u32),
-          'x' => format_int!("x", arg!()?.repr_int()? as u32),
-          'X' => format_int!("X", arg!()?.repr_int()? as u32),
-          'o' => format_int!("o", arg!()?.repr_int()? as u32),
-          'b' => format_int!("b", arg!()?.repr_int()? as u32),
-          'f' => format_int!("", arg!()?.repr_int()? as u32),
+          'd' | 'i' => w!(write_number(&mut out, NumFmt::DecSigned, &opts, arg!()?)?),
+          'u' => w!(write_number(&mut out, NumFmt::DecUnsigned, &opts, arg!()?)?),
+          'x' => w!(write_number(&mut out, NumFmt::HexLower, &opts, arg!()?)?),
+          'X' => w!(write_number(&mut out, NumFmt::HexUpper, &opts, arg!()?)?),
+          'o' => w!(write_number(&mut out, NumFmt::Oct, &opts, arg!()?)?),
+          'b' => w!(write_number(&mut out, NumFmt::Bin, &opts, arg!()?)?),
+          'c' => w!(write_number(&mut out, NumFmt::Char, &opts, arg!()?)?),
+          'f' => w!(write_number(&mut out, NumFmt::Float, &opts, arg!()?)?),
           _ => {
             return Err(EvalError::ArgumentError(format!(
-              "unknown format specifier: {ch}"
+              "unsupported format specifier: {ch}"
             )));
           }
         }
@@ -167,22 +180,97 @@ pub(super) fn eval(
   Ok(Value::from(out))
 }
 
-fn format_float(out: &mut String, arg: &Value, opts: &FormatOpts) -> Result<(), EvalError> {
-  write!(
-    out,
-    "{:width$.precision$}",
-    arg.repr_float()?,
-    width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0),
-    precision = opts.precision.unwrap_or(6),
-  )
-  .map_err(|e| EvalError::Generic(format!("write error: {}", e.to_string())))
-}
-
 fn write_number(
   out: &mut String,
-  _opts: &FormatOpts,
-  write_body: impl FnOnce(&mut String),
+  format: NumFmt,
+  opts: &FormatOpts,
+  value: &Value,
 ) -> Result<(), EvalError> {
-  write_body(out);
+  use NumFmt::*;
+  match format {
+    DecSigned => write_num_pad(out, format, opts, |out| {
+      write!(out, "{}", value.repr_int()? as i32).unwrap();
+      Ok(())
+    }),
+    DecUnsigned => write_num_pad(out, format, opts, |out| {
+      write!(out, "{}", value.repr_int()? as u32).unwrap();
+      Ok(())
+    }),
+    Oct => write_num_pad(out, format, opts, |out| {
+      write!(out, "{:o}", value.repr_int()? as u32).unwrap();
+      Ok(())
+    }),
+    HexLower => write_num_pad(out, format, opts, |out| {
+      write!(out, "{:x}", value.repr_int()? as u32).unwrap();
+      Ok(())
+    }),
+    HexUpper => write_num_pad(out, format, opts, |out| {
+      write!(out, "{:X}", value.repr_int()? as u32).unwrap();
+      Ok(())
+    }),
+    Bin => write_num_pad(out, format, opts, |out| {
+      write!(out, "{:b}", value.repr_int()? as u32).unwrap();
+      Ok(())
+    }),
+    Char => write_num_pad(out, format, opts, |out| {
+      write!(
+        out,
+        "{}",
+        value
+          .repr_int()?
+          .checked_cast::<u32>()
+          .and_then(|u| char::from_u32(u))
+          .ok_or_else(|| EvalError::ArgumentError(
+            "value too large to convert to char".to_string()
+          ))?
+      )
+      .unwrap();
+      Ok(())
+    }),
+    Float => write_num_pad(out, format, opts, |out| {
+      write!(
+        out,
+        "{:.precision$}",
+        value.repr_float()? as f32,
+        precision = opts.precision.unwrap_or(6)
+      )
+      .unwrap();
+      Ok(())
+    }),
+  }
+}
+
+fn write_num_pad(
+  out: &mut String,
+  format: NumFmt,
+  opts: &FormatOpts,
+  write_body: impl FnOnce(&mut String) -> Result<(), EvalError>,
+) -> Result<(), EvalError> {
+  use NumFmt::*;
+
+  let output_start = out.len();
+  if opts.alt {
+    let prefix = match format {
+      DecSigned | DecUnsigned => "0d",
+      Oct => "0o",
+      HexLower | HexUpper => "0x",
+      Bin => "0b",
+      Char | Float => "",
+    };
+    write!(out, "{}", prefix).unwrap();
+  }
+
+  let body_start = out.len();
+  write_body(out)?;
+
+  let len = out.len() - output_start;
+  if let Some(width) = opts.width {
+    let (pad_str, pad_index) = match opts.pad.as_ref().unwrap_or(&FormatPad::Space) {
+      FormatPad::Space => (" ", output_start),
+      FormatPad::Zero => ("0", body_start),
+    };
+    out.insert_str(pad_index, pad_str.repeat(0.max(width - len)).as_str());
+  }
+
   Ok(())
 }
