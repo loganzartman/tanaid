@@ -1067,6 +1067,118 @@ async fn eval_string_length() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[pollster::test]
+async fn eval_format_conversions() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%s %d %x %X %#x %o %b %c %.2f %%} a -3 255 255 255 8 5 65 2.5")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "a -3 ff FF 0xff 10 101 A 2.50 %");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_value_wider_than_field() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format %2d 12345")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "12345");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_zero_pad_negative() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%05d %07.2f} -42 -1.5")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "-0042 -001.50");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_positional() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%2$s %1$s %1$03d} 7 b")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "b 7 007");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_float_precision() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format %.10f 0.1")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "0.1000000000");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_string_width_unicode() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%3s|} 🦀")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "  🦀|");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_huge_width() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format %99999999999999999999d 1")?, &mut ctx).await;
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_literal_text_around_fields() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {<%d,%s>} 1 a")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "<1,a>");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_zero_pad() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%05d %#06x} 7 255")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "00007 0x00ff");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_multi_digit_numbers() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%10d|%10$s} 7 2 3 4 5 6 7 8 9 j")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "         7|j");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_width_and_precision() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%8.3f|} 3.14159")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "   3.142|");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_empty_precision() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format %.f 2.7")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "3");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_position_zero() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%0$s} a")?, &mut ctx).await;
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_list_empty() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(&parser::parse("list")?, &mut ctx).await?;
