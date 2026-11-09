@@ -1179,6 +1179,14 @@ async fn eval_format_position_zero() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[pollster::test]
+async fn eval_format_alt_prefix_after_sign() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%#d|%#08llx} -5 -255")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "-0d5|-0x000ff");
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_format_size_default_32_bit() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(&parser::parse("format {%d %u %x} 5000000000 -1 -1")?, &mut ctx).await?;
