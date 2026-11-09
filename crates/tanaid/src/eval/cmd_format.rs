@@ -319,7 +319,15 @@ fn write_arg(
       Ok(())
     }),
     String => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{}", value.repr_str()).unwrap();
+      let mut str = value.repr_str();
+      if let Some(precision) = opts.precision {
+        str = &str[0..str
+          .char_indices()
+          .nth(precision)
+          .map(|x| x.0)
+          .unwrap_or(str.len())];
+      }
+      write!(out, "{}", str).unwrap();
       Ok(())
     }),
   }
