@@ -334,6 +334,13 @@ fn write_arg_pad(
   use ArgFmt::*;
 
   let output_start = out.len();
+  write_body(out)?;
+
+  let mut body_start = output_start;
+  if out[body_start..].starts_with('-') {
+    body_start += 1;
+  }
+
   if opts.alt {
     let prefix = match format {
       DecSigned | DecUnsigned => "0d",
@@ -342,14 +349,8 @@ fn write_arg_pad(
       Bin => "0b",
       Char | Float | String => "",
     };
-    write!(out, "{}", prefix).unwrap();
-  }
-
-  let mut body_start = out.len();
-  write_body(out)?;
-
-  if out[body_start..].starts_with('-') {
-    body_start += 1;
+    out.insert_str(body_start, prefix);
+    body_start += prefix.len();
   }
 
   let len = out[output_start..].chars().count();
