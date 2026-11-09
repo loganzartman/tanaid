@@ -252,7 +252,7 @@ fn write_arg(
       write!(
         out,
         "{:.precision$}",
-        value.repr_float()? as f32,
+        value.repr_float()?,
         precision = opts.precision.unwrap_or(6)
       )
       .unwrap();
