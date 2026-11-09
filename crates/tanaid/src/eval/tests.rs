@@ -1179,6 +1179,45 @@ async fn eval_format_position_zero() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[pollster::test]
+async fn eval_format_left_justify() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%-5s|%-5d|%-#6x|} ab 7 255")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "ab   |7    |0xff  |");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_string_precision() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%.2s|%5.2s|%-5.2s|%.1s|} abcd abcd abcd 🦀b")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "ab|   ab|ab   |🦀|");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_integer_precision() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%.3d|%.3d|%6.3d|%.3x|%#.4x|%06.3d|%.0d|%.1d|} 5 -5 5 10 10 5 0 123")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(
+    result.repr_str(),
+    "005|-005|   005|00a|0x000a|   005|0|123|"
+  );
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_format_alt_prefix_after_sign() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(&parser::parse("format {%#d|%#08llx} -5 -255")?, &mut ctx).await?;
@@ -1189,7 +1228,11 @@ async fn eval_format_alt_prefix_after_sign() -> Result<(), Box<dyn std::error::E
 #[pollster::test]
 async fn eval_format_size_default_32_bit() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("format {%d %u %x} 5000000000 -1 -1")?, &mut ctx).await?;
+  let result = eval(
+    &parser::parse("format {%d %u %x} 5000000000 -1 -1")?,
+    &mut ctx,
+  )
+  .await?;
   assert_eq!(result.repr_str(), "705032704 4294967295 ffffffff");
   Ok(())
 }
@@ -1197,7 +1240,11 @@ async fn eval_format_size_default_32_bit() -> Result<(), Box<dyn std::error::Err
 #[pollster::test]
 async fn eval_format_size_short() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("format {%hd %hd %hx} 70000 40000 -1")?, &mut ctx).await?;
+  let result = eval(
+    &parser::parse("format {%hd %hd %hx} 70000 40000 -1")?,
+    &mut ctx,
+  )
+  .await?;
   assert_eq!(result.repr_str(), "4464 -25536 ffff");
   Ok(())
 }
@@ -1205,7 +1252,11 @@ async fn eval_format_size_short() -> Result<(), Box<dyn std::error::Error>> {
 #[pollster::test]
 async fn eval_format_size_wide() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("format {%ld %lu %lx} 5000000000 -1 -1")?, &mut ctx).await?;
+  let result = eval(
+    &parser::parse("format {%ld %lu %lx} 5000000000 -1 -1")?,
+    &mut ctx,
+  )
+  .await?;
   assert_eq!(
     result.repr_str(),
     "5000000000 18446744073709551615 ffffffffffffffff"
@@ -1231,7 +1282,11 @@ async fn eval_format_size_wide_aliases() -> Result<(), Box<dyn std::error::Error
 #[pollster::test]
 async fn eval_format_size_ignored_for_non_integers() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
-  let result = eval(&parser::parse("format {%ls|%hc|%lf|%Lf} ab 65 1.5 1.5")?, &mut ctx).await?;
+  let result = eval(
+    &parser::parse("format {%ls|%hc|%lf|%Lf} ab 65 1.5 1.5")?,
+    &mut ctx,
+  )
+  .await?;
   assert_eq!(result.repr_str(), "ab|A|1.500000|1.500000");
   Ok(())
 }
