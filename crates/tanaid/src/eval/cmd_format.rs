@@ -1,5 +1,8 @@
 use super::{EvalContext, FrameId, cmd::EvalCmdResult};
-use crate::{eval_error::EvalError, value::Value};
+use crate::{
+  eval_error::EvalError,
+  value::{Int, Value},
+};
 use std::{fmt::Write, mem::take};
 
 #[derive(Default)]
@@ -8,6 +11,7 @@ struct FormatOpts {
   width: Option<usize>,
   pad: Option<FormatPad>,
   precision: Option<usize>,
+  size: ArgSize,
 }
 
 enum FormatPad {
@@ -15,6 +19,35 @@ enum FormatPad {
   Zero,
 }
 
+#[derive(Default)]
+enum ArgSize {
+  X16,
+  #[default]
+  X32,
+  X64,
+  NoTrunc,
+}
+
+impl ArgSize {
+  fn signed(&self, n: Int) -> i64 {
+    match self {
+      ArgSize::X16 => n as i16 as i64,
+      ArgSize::X32 => n as i32 as i64,
+      ArgSize::X64 | ArgSize::NoTrunc => n,
+    }
+  }
+
+  fn unsigned(&self, n: Int) -> (bool, u64) {
+    match self {
+      ArgSize::X16 => (false, n as u16 as u64),
+      ArgSize::X32 => (false, n as u32 as u64),
+      ArgSize::X64 => (false, n as u64),
+      ArgSize::NoTrunc => (n < 0, n.unsigned_abs()),
+    }
+  }
+}
+
+#[derive(Clone, Copy)]
 enum ArgFmt {
   DecSigned,
   DecUnsigned,
@@ -49,6 +82,7 @@ pub(super) fn eval(
     SubFlag,
     SubWidth,
     SubPrec,
+    SubSize,
     SubType,
   }
 
@@ -156,7 +190,7 @@ pub(super) fn eval(
         }
         _ => {
           opts.width = take(&mut numeric_buffer);
-          state = State::SubType;
+          state = State::SubSize;
         }
       },
       State::SubPrec => match ch {
@@ -166,6 +200,36 @@ pub(super) fn eval(
         }
         _ => {
           opts.precision = Some(take(&mut numeric_buffer).unwrap_or(0));
+          state = State::SubSize;
+        }
+      },
+      State::SubSize => match ch {
+        'h' => {
+          chars.next();
+          opts.size = ArgSize::X16;
+          state = State::SubType;
+        }
+        'l' => {
+          chars.next();
+          if chars.peek() == Some(&'l') {
+            chars.next();
+            opts.size = ArgSize::NoTrunc;
+          } else {
+            opts.size = ArgSize::X64;
+          }
+          state = State::SubType;
+        }
+        'z' | 't' | 'j' | 'q' => {
+          chars.next();
+          opts.size = ArgSize::X64;
+          state = State::SubType;
+        }
+        'L' => {
+          chars.next();
+          opts.size = ArgSize::NoTrunc;
+          state = State::SubType;
+        }
+        _ => {
           state = State::SubType;
         }
       },
@@ -210,27 +274,23 @@ fn write_arg(
   use ArgFmt::*;
   match format {
     DecSigned => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{}", value.repr_int()? as i64).unwrap();
+      write!(out, "{}", opts.size.signed(value.repr_int()?)).unwrap();
       Ok(())
     }),
-    DecUnsigned => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{}", value.repr_int()? as u64).unwrap();
-      Ok(())
-    }),
-    Oct => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:o}", value.repr_int()? as u64).unwrap();
-      Ok(())
-    }),
-    HexLower => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:x}", value.repr_int()? as u64).unwrap();
-      Ok(())
-    }),
-    HexUpper => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:X}", value.repr_int()? as u64).unwrap();
-      Ok(())
-    }),
-    Bin => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:b}", value.repr_int()? as u64).unwrap();
+    DecUnsigned | Oct | HexLower | HexUpper | Bin => write_arg_pad(out, format, opts, |out| {
+      let (negative, n) = opts.size.unsigned(value.repr_int()?);
+      if negative {
+        out.push('-');
+      }
+      match format {
+        DecUnsigned => write!(out, "{n}"),
+        Oct => write!(out, "{n:o}"),
+        HexLower => write!(out, "{n:x}"),
+        HexUpper => write!(out, "{n:X}"),
+        Bin => write!(out, "{n:b}"),
+        _ => unreachable!(),
+      }
+      .unwrap();
       Ok(())
     }),
     Char => write_arg_pad(out, format, opts, |out| {
@@ -277,9 +337,8 @@ fn write_arg_pad(
   if opts.alt {
     let prefix = match format {
       DecSigned | DecUnsigned => "0d",
-      Oct => "0",
-      HexLower => "0x",
-      HexUpper => "0X",
+      Oct => "0o",
+      HexLower | HexUpper => "0x",
       Bin => "0b",
       Char | Float | String => "",
     };

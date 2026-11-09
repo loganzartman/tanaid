@@ -1179,6 +1179,66 @@ async fn eval_format_position_zero() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[pollster::test]
+async fn eval_format_size_default_32_bit() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%d %u %x} 5000000000 -1 -1")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "705032704 4294967295 ffffffff");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_size_short() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%hd %hd %hx} 70000 40000 -1")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "4464 -25536 ffff");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_size_wide() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%ld %lu %lx} 5000000000 -1 -1")?, &mut ctx).await?;
+  assert_eq!(
+    result.repr_str(),
+    "5000000000 18446744073709551615 ffffffffffffffff"
+  );
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_size_wide_aliases() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%jd %qd %lld %Ld %llu %zd %td} 5000000000 5000000000 5000000000 5000000000 5000000000 5000000000 5000000000")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(
+    result.repr_str(),
+    "5000000000 5000000000 5000000000 5000000000 5000000000 5000000000 5000000000"
+  );
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_size_ignored_for_non_integers() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format {%ls|%hc|%lf|%Lf} ab 65 1.5 1.5")?, &mut ctx).await?;
+  assert_eq!(result.repr_str(), "ab|A|1.500000|1.500000");
+  Ok(())
+}
+
+#[pollster::test]
+async fn eval_format_size_single_modifier() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(&parser::parse("format %hld 1")?, &mut ctx).await;
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  let result = eval(&parser::parse("format %llld 1")?, &mut ctx).await;
+  assert_matches!(result, Err(EvalError::ArgumentError(_)));
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_list_empty() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(&parser::parse("list")?, &mut ctx).await?;
