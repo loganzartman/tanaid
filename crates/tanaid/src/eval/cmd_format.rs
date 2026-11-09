@@ -349,6 +349,15 @@ fn write_arg_pad(
     body_start += 1;
   }
 
+  let is_int = matches!(
+    format,
+    DecSigned | DecUnsigned | Oct | HexLower | HexUpper | Bin
+  );
+  if is_int && let Some(precision) = opts.precision {
+    let digits = out.len() - body_start;
+    out.insert_str(body_start, &"0".repeat(precision.saturating_sub(digits)));
+  }
+
   if opts.alt {
     let prefix = match format {
       DecSigned | DecUnsigned => "0d",
@@ -363,7 +372,9 @@ fn write_arg_pad(
 
   let len = out[output_start..].chars().count();
   if let Some(width) = opts.width {
-    let (pad_str, pad_index) = match (opts.pad_zero, opts.left_align) {
+    // int precision disables zero-pad
+    let pad_zero = opts.pad_zero && !(is_int && opts.precision.is_some());
+    let (pad_str, pad_index) = match (pad_zero, opts.left_align) {
       (false, false) => (" ", output_start),
       (false, true) => (" ", out.len()),
       (true, _) => ("0", body_start),
