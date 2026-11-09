@@ -278,8 +278,9 @@ fn write_arg_pad(
   if opts.alt {
     let prefix = match format {
       DecSigned | DecUnsigned => "0d",
-      Oct => "0o",
-      HexLower | HexUpper => "0x",
+      Oct => "0",
+      HexLower => "0x",
+      HexUpper => "0X",
       Bin => "0b",
       Char | Float | String => "",
     };
