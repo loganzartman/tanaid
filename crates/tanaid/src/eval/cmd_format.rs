@@ -4,6 +4,7 @@ use std::{fmt::Write, mem::take};
 
 #[derive(Default)]
 struct FormatOpts {
+  alt: bool,
   width: Option<usize>,
   precision: Option<usize>,
 }
@@ -26,6 +27,7 @@ pub(super) fn eval(
 
   enum State {
     Copy,
+    SubStart,
     Sub,
     SubPrec,
   }
@@ -48,13 +50,22 @@ pub(super) fn eval(
     };
   }
 
-  macro_rules! do_format {
-    ($ex:expr) => {{
+  macro_rules! pre_format {
+    () => {{
       if let Some(n) = numeric_buffer {
         opts.width = Some(n);
       }
       state = State::Copy;
-      $ex
+    }};
+  }
+
+  macro_rules! format_int {
+    ($format:expr,$arg:expr) => {{
+      pre_format!();
+      let arg = $arg;
+      write_number(&mut out, &opts, |out| {
+        write!(out, concat!("{:", $format, "}"), arg).unwrap();
+      })?;
     }};
   }
 
@@ -81,11 +92,20 @@ pub(super) fn eval(
           numeric_buffer = None;
           selected_arg = None;
           opts = FormatOpts::default();
-          state = State::Sub;
+          state = State::SubStart;
         } else {
           out.push(ch);
         }
       }
+      State::SubStart => match ch {
+        '#' => {
+          chars.next();
+          opts.alt = true;
+        }
+        _ => {
+          state = State::Sub;
+        }
+      },
       State::Sub => {
         chars.next();
         match ch {
@@ -111,8 +131,13 @@ pub(super) fn eval(
             opts.width = take(&mut numeric_buffer);
             state = State::SubPrec;
           }
-          'd' | 'i' => do_format!(format_int(&mut out, arg!()?, &opts)?),
-          'f' => do_format!(format_float(&mut out, arg!()?, &opts)?),
+          'd' | 'i' => format_int!("", arg!()?.repr_int()? as i32),
+          'u' => format_int!("", arg!()?.repr_int()? as u32),
+          'x' => format_int!("x", arg!()?.repr_int()? as u32),
+          'X' => format_int!("X", arg!()?.repr_int()? as u32),
+          'o' => format_int!("o", arg!()?.repr_int()? as u32),
+          'b' => format_int!("b", arg!()?.repr_int()? as u32),
+          'f' => format_int!("", arg!()?.repr_int()? as u32),
           _ => {
             return Err(EvalError::ArgumentError(format!(
               "unknown format specifier: {ch}"
@@ -142,35 +167,22 @@ pub(super) fn eval(
   Ok(Value::from(out))
 }
 
-fn format_int(out: &mut String, arg: &Value, opts: &FormatOpts) -> Result<(), EvalError> {
+fn format_float(out: &mut String, arg: &Value, opts: &FormatOpts) -> Result<(), EvalError> {
   write!(
     out,
-    "{:width$}",
-    arg.repr_int()?,
-    width = opts.width.unwrap_or(0)
+    "{:width$.precision$}",
+    arg.repr_float()?,
+    width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0),
+    precision = opts.precision.unwrap_or(6),
   )
   .map_err(|e| EvalError::Generic(format!("write error: {}", e.to_string())))
 }
 
-fn format_float(out: &mut String, arg: &Value, opts: &FormatOpts) -> Result<(), EvalError> {
-  match opts.precision {
-    Some(precision) => {
-      write!(
-        out,
-        "{:width$.precision$}",
-        arg.repr_float()?,
-        width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0),
-        precision = precision,
-      )
-    }
-    None => {
-      write!(
-        out,
-        "{:width$}",
-        arg.repr_float()?,
-        width = opts.width.map(|w| w.saturating_cast()).unwrap_or(0),
-      )
-    }
-  }
-  .map_err(|e| EvalError::Generic(format!("write error: {}", e.to_string())))
+fn write_number(
+  out: &mut String,
+  _opts: &FormatOpts,
+  write_body: impl FnOnce(&mut String),
+) -> Result<(), EvalError> {
+  write_body(out);
+  Ok(())
 }
