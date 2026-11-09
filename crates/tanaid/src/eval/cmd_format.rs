@@ -210,27 +210,27 @@ fn write_arg(
   use ArgFmt::*;
   match format {
     DecSigned => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{}", value.repr_int()? as i32).unwrap();
+      write!(out, "{}", value.repr_int()? as i64).unwrap();
       Ok(())
     }),
     DecUnsigned => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{}", value.repr_int()? as u32).unwrap();
+      write!(out, "{}", value.repr_int()? as u64).unwrap();
       Ok(())
     }),
     Oct => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:o}", value.repr_int()? as u32).unwrap();
+      write!(out, "{:o}", value.repr_int()? as u64).unwrap();
       Ok(())
     }),
     HexLower => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:x}", value.repr_int()? as u32).unwrap();
+      write!(out, "{:x}", value.repr_int()? as u64).unwrap();
       Ok(())
     }),
     HexUpper => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:X}", value.repr_int()? as u32).unwrap();
+      write!(out, "{:X}", value.repr_int()? as u64).unwrap();
       Ok(())
     }),
     Bin => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{:b}", value.repr_int()? as u32).unwrap();
+      write!(out, "{:b}", value.repr_int()? as u64).unwrap();
       Ok(())
     }),
     Char => write_arg_pad(out, format, opts, |out| {
