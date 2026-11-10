@@ -1226,6 +1226,18 @@ async fn eval_format_alt_prefix_after_sign() -> Result<(), Box<dyn std::error::E
 }
 
 #[pollster::test]
+async fn eval_format_zero_pad_non_numeric() -> Result<(), Box<dyn std::error::Error>> {
+  let mut ctx = EvalContext::new();
+  let result = eval(
+    &parser::parse("format {%05s|%05c|%05s|%08.2f|} ab 45 -ab -Inf")?,
+    &mut ctx,
+  )
+  .await?;
+  assert_eq!(result.repr_str(), "000ab|0000-|00-ab|    -inf|");
+  Ok(())
+}
+
+#[pollster::test]
 async fn eval_format_size_default_32_bit() -> Result<(), Box<dyn std::error::Error>> {
   let mut ctx = EvalContext::new();
   let result = eval(
