@@ -291,7 +291,7 @@ fn format_arg(format: ArgFmt, opts: &FormatOpts, value: &Value) -> Result<Format
         .and_then(|u| char::from_u32(u))
         .ok_or_else(|| EvalError::ArgumentError("value too large to convert to char".to_string()))?
         .to_string(),
-      should_zero_pad: false,
+      should_zero_pad: true,
     },
     ArgFmt::Float => {
       let f = value.repr_float()?;
@@ -346,7 +346,7 @@ fn format_arg(format: ArgFmt, opts: &FormatOpts, value: &Value) -> Result<Format
         sign: "",
         prefix: "",
         body: str.to_string(),
-        should_zero_pad: false,
+        should_zero_pad: true,
       }
     }
   });
