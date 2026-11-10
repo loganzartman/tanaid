@@ -84,6 +84,7 @@ implements a small subset of Tcl. the supported subset is Tcl-compatible (runs i
   - `dict set dictVariable key ?key ...? value` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/dict.html#M24)
   - `expr arg ?arg arg ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/expr.html)
   - `foreach varlist1 list1 ?varlist2 list2 ...? body` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/foreach.html)
+  - `format formatString ?arg arg ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/format.html)
   - `global ?varname ...?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/global.html)
   - `if expr1 ?then? body1 elseif expr2 ?then? body2 elseif ... ?else? ?bodyN?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/if.html)
   - `incr varName ?increment?` [[ref]](https://www.tcl-lang.org/man/tcl9.0.4/TclCmd/incr.html)

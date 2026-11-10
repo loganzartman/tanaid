@@ -1,8 +1,8 @@
 use super::{
-  EvalContext, cmd_after, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_global,
-  cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lassign, cmd_lindex, cmd_list, cmd_llength,
-  cmd_lreverse, cmd_lset, cmd_package, cmd_proc, cmd_puts, cmd_return, cmd_set, cmd_string,
-  cmd_unknown, cmd_uplevel, cmd_upvar, cmd_vwait, cmd_while,
+  EvalContext, cmd_after, cmd_break, cmd_continue, cmd_dict, cmd_expr, cmd_foreach, cmd_format,
+  cmd_global, cmd_if, cmd_incr, cmd_info, cmd_lappend, cmd_lassign, cmd_lindex, cmd_list,
+  cmd_llength, cmd_lreverse, cmd_lset, cmd_package, cmd_proc, cmd_puts, cmd_return, cmd_set,
+  cmd_string, cmd_unknown, cmd_uplevel, cmd_upvar, cmd_vwait, cmd_while,
 };
 use crate::eval::{cmd_clock, cmd_update, mathfunc};
 use crate::eval_error::EvalError;
@@ -18,6 +18,7 @@ pub fn register_builtin_commands(context: &mut EvalContext) {
   context.register_command("dict", cmd_dict::eval);
   context.register_async_command("expr", cmd_expr::eval);
   context.register_async_command("foreach", cmd_foreach::eval);
+  context.register_command("format", cmd_format::eval);
   context.register_command("global", cmd_global::eval);
   context.register_async_command("if", cmd_if::eval);
   context.register_command("incr", cmd_incr::eval);
