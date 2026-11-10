@@ -37,9 +37,7 @@ proc frame {} {
   set t [expr {[clock monotonic] / 1000000.}]
   set i 0
   while {$i <= 100} {
-    set f [expr {$i / 100.0 * 0.6 + $t}]
-    # TODO: fmod
-    while {$f > 1.0} {set f [expr {$f - 1.0}]}
+    set f [expr {fmod($i / 100.0 * 0.6 + $t, 1.0)}]
     lassign [bez [p 0 [expr {$h * 0.5}]] [p [expr {$w * 0.33}] $h] [p [expr {$w * 0.66}] 0] [p $w [expr {$h * 0.5}]] $f] x y
     .c coords $i $x $y [expr {$x + 2}] [expr {$y + 2}]
     incr i 1
