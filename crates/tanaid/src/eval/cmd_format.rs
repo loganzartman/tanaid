@@ -281,7 +281,7 @@ pub(super) fn eval(
 }
 
 fn format_arg(format: ArgFmt, opts: &FormatOpts, value: &Value) -> Result<FormattedArg, EvalError> {
-  return Ok(match format {
+  Ok(match format {
     ArgFmt::Char => FormattedArg {
       sign: "",
       prefix: "",
@@ -349,7 +349,7 @@ fn format_arg(format: ArgFmt, opts: &FormatOpts, value: &Value) -> Result<Format
         should_zero_pad: true,
       }
     }
-  });
+  })
 }
 
 fn write_arg(out: &mut String, formatted: FormattedArg, opts: &FormatOpts) {
