@@ -25,12 +25,13 @@ enum ArgSize {
 }
 
 impl ArgSize {
-  fn signed(&self, n: Int) -> i64 {
-    match self {
+  fn signed(&self, n: Int) -> (bool, u64) {
+    let n = match self {
       ArgSize::X16 => n as i16 as i64,
       ArgSize::X32 => n as i32 as i64,
       ArgSize::X64 | ArgSize::NoTrunc => n,
-    }
+    };
+    (n < 0, n.unsigned_abs())
   }
 
   fn unsigned(&self, n: Int) -> (bool, u64) {
@@ -45,15 +46,27 @@ impl ArgSize {
 
 #[derive(Clone, Copy)]
 enum ArgFmt {
+  Int(IntFmt),
+  Char,
+  Float,
+  String,
+}
+
+#[derive(Clone, Copy)]
+enum IntFmt {
   DecSigned,
   DecUnsigned,
   Oct,
   HexLower,
   HexUpper,
   Bin,
-  Char,
-  Float,
-  String,
+}
+
+struct FormattedArg {
+  sign: &'static str,
+  prefix: &'static str,
+  body: String,
+  should_zero_pad: bool,
 }
 
 pub(super) fn eval(
@@ -235,22 +248,24 @@ pub(super) fn eval(
       },
       State::SubType => {
         chars.next();
-        match ch {
-          'd' | 'i' => write_arg(&mut out, ArgFmt::DecSigned, &opts, arg!()?)?,
-          'u' => write_arg(&mut out, ArgFmt::DecUnsigned, &opts, arg!()?)?,
-          'x' => write_arg(&mut out, ArgFmt::HexLower, &opts, arg!()?)?,
-          'X' => write_arg(&mut out, ArgFmt::HexUpper, &opts, arg!()?)?,
-          'o' => write_arg(&mut out, ArgFmt::Oct, &opts, arg!()?)?,
-          'b' => write_arg(&mut out, ArgFmt::Bin, &opts, arg!()?)?,
-          'c' => write_arg(&mut out, ArgFmt::Char, &opts, arg!()?)?,
-          'f' => write_arg(&mut out, ArgFmt::Float, &opts, arg!()?)?,
-          's' => write_arg(&mut out, ArgFmt::String, &opts, arg!()?)?,
+        let format = match ch {
+          'd' | 'i' => ArgFmt::Int(IntFmt::DecSigned),
+          'u' => ArgFmt::Int(IntFmt::DecUnsigned),
+          'x' => ArgFmt::Int(IntFmt::HexLower),
+          'X' => ArgFmt::Int(IntFmt::HexUpper),
+          'o' => ArgFmt::Int(IntFmt::Oct),
+          'b' => ArgFmt::Int(IntFmt::Bin),
+          'c' => ArgFmt::Char,
+          'f' => ArgFmt::Float,
+          's' => ArgFmt::String,
           _ => {
             return Err(EvalError::ArgumentError(format!(
               "unsupported format specifier: {ch}"
             )));
           }
-        }
+        };
+        let formatted = format_arg(format, &opts, arg!()?)?;
+        write_arg(&mut out, formatted, &opts);
         state = State::Copy;
       }
     }
@@ -265,60 +280,59 @@ pub(super) fn eval(
   Ok(Value::from(out))
 }
 
-fn write_arg(
-  out: &mut String,
-  format: ArgFmt,
-  opts: &FormatOpts,
-  value: &Value,
-) -> Result<(), EvalError> {
-  use ArgFmt::*;
-  match format {
-    DecSigned => write_arg_pad(out, format, opts, |out| {
-      write!(out, "{}", opts.size.signed(value.repr_int()?)).unwrap();
-      Ok(())
-    }),
-    DecUnsigned | Oct | HexLower | HexUpper | Bin => write_arg_pad(out, format, opts, |out| {
-      let (negative, n) = opts.size.unsigned(value.repr_int()?);
-      if negative {
-        out.push('-');
+fn format_arg(format: ArgFmt, opts: &FormatOpts, value: &Value) -> Result<FormattedArg, EvalError> {
+  return Ok(match format {
+    ArgFmt::Char => FormattedArg {
+      sign: "",
+      prefix: "",
+      body: value
+        .repr_int()?
+        .checked_cast::<u32>()
+        .and_then(|u| char::from_u32(u))
+        .ok_or_else(|| EvalError::ArgumentError("value too large to convert to char".to_string()))?
+        .to_string(),
+      should_zero_pad: false,
+    },
+    ArgFmt::Float => {
+      let f = value.repr_float()?;
+      FormattedArg {
+        sign: if f.is_sign_negative() && !f.is_nan() {
+          "-"
+        } else {
+          ""
+        },
+        prefix: "",
+        body: format!(
+          "{:.precision$}",
+          f.abs(),
+          precision = opts.precision.unwrap_or(6)
+        ),
+        should_zero_pad: f.is_finite(),
       }
-      match format {
-        DecUnsigned => write!(out, "{n}"),
-        Oct => write!(out, "{n:o}"),
-        HexLower => write!(out, "{n:x}"),
-        HexUpper => write!(out, "{n:X}"),
-        Bin => write!(out, "{n:b}"),
-        _ => unreachable!(),
+    }
+    ArgFmt::Int(int_fmt) => {
+      let (negative, n) = match int_fmt {
+        IntFmt::DecSigned => opts.size.signed(value.repr_int()?),
+        _ => opts.size.unsigned(value.repr_int()?),
+      };
+      let (prefix, numeric) = match int_fmt {
+        IntFmt::Bin => ("0b", format!("{n:b}")),
+        IntFmt::DecSigned | IntFmt::DecUnsigned => ("0d", format!("{n}")),
+        IntFmt::HexLower => ("0x", format!("{n:x}")),
+        IntFmt::HexUpper => ("0x", format!("{n:X}")),
+        IntFmt::Oct => ("0o", format!("{n:o}")),
+      };
+      FormattedArg {
+        sign: if negative { "-" } else { "" },
+        prefix: if opts.alt { prefix } else { "" },
+        body: format!(
+          "{numeric:0>precision$}",
+          precision = opts.precision.unwrap_or(0)
+        ),
+        should_zero_pad: opts.precision.is_none(),
       }
-      .unwrap();
-      Ok(())
-    }),
-    Char => write_arg_pad(out, format, opts, |out| {
-      write!(
-        out,
-        "{}",
-        value
-          .repr_int()?
-          .checked_cast::<u32>()
-          .and_then(|u| char::from_u32(u))
-          .ok_or_else(|| EvalError::ArgumentError(
-            "value too large to convert to char".to_string()
-          ))?
-      )
-      .unwrap();
-      Ok(())
-    }),
-    Float => write_arg_pad(out, format, opts, |out| {
-      write!(
-        out,
-        "{:.precision$}",
-        value.repr_float()?,
-        precision = opts.precision.unwrap_or(6)
-      )
-      .unwrap();
-      Ok(())
-    }),
-    String => write_arg_pad(out, format, opts, |out| {
+    }
+    ArgFmt::String => {
       let mut str = value.repr_str();
       if let Some(precision) = opts.precision {
         str = &str[0..str
@@ -327,63 +341,35 @@ fn write_arg(
           .map(|x| x.0)
           .unwrap_or(str.len())];
       }
-      write!(out, "{}", str).unwrap();
-      Ok(())
-    }),
-  }
+
+      FormattedArg {
+        sign: "",
+        prefix: "",
+        body: str.to_string(),
+        should_zero_pad: false,
+      }
+    }
+  });
 }
 
-fn write_arg_pad(
-  out: &mut String,
-  format: ArgFmt,
-  opts: &FormatOpts,
-  write_body: impl FnOnce(&mut String) -> Result<(), EvalError>,
-) -> Result<(), EvalError> {
-  use ArgFmt::*;
-
-  let output_start = out.len();
-  write_body(out)?;
-
-  let mut body_start = output_start;
-  if out[body_start..].starts_with('-') {
-    body_start += 1;
-  }
-
-  let is_int = matches!(
-    format,
-    DecSigned | DecUnsigned | Oct | HexLower | HexUpper | Bin
-  );
-  if is_int && let Some(precision) = opts.precision {
-    let digits = out.len() - body_start;
-    out.insert_str(body_start, &"0".repeat(precision.saturating_sub(digits)));
-  }
-
-  if opts.alt {
-    let prefix = match format {
-      DecSigned | DecUnsigned => "0d",
-      Oct => "0o",
-      HexLower | HexUpper => "0x",
-      Bin => "0b",
-      Char | Float | String => "",
-    };
-    out.insert_str(body_start, prefix);
-    body_start += prefix.len();
-  }
-
-  let len = out[output_start..].chars().count();
-  if let Some(width) = opts.width {
-    // int precision disables zero-pad
-    let pad_zero = opts.pad_zero && !(is_int && opts.precision.is_some());
-    let (pad_str, pad_index) = match (pad_zero, opts.left_align) {
-      (false, false) => (" ", output_start),
-      (false, true) => (" ", out.len()),
-      (true, _) => ("0", body_start),
-    };
-    out.insert_str(
-      pad_index,
-      pad_str.repeat(width.saturating_sub(len)).as_str(),
-    );
-  }
-
-  Ok(())
+fn write_arg(out: &mut String, formatted: FormattedArg, opts: &FormatOpts) {
+  let FormattedArg {
+    sign,
+    prefix,
+    body,
+    should_zero_pad,
+  } = formatted;
+  let len = sign.len() + prefix.len() + body.chars().count();
+  let pad_count = opts.width.unwrap_or(0).saturating_sub(len);
+  let (leftpad, zeropad, rightpad) = match (opts.pad_zero && should_zero_pad, opts.left_align) {
+    (true, _) => (0, pad_count, 0),
+    (false, true) => (0, 0, pad_count),
+    (false, false) => (pad_count, 0, 0),
+  };
+  write!(
+    out,
+    "{:leftpad$}{sign}{prefix}{:0<zeropad$}{body}{:rightpad$}",
+    "", "", ""
+  )
+  .unwrap();
 }
