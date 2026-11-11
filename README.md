@@ -2,6 +2,8 @@
 
 [_tuh-NAY-id_](https://en.wikipedia.org/wiki/Tanaidacea)
 
+![Crates.io Version](https://img.shields.io/crates/v/tanaid) ![NPM Version](https://img.shields.io/npm/v/tanaid-tcl)
+
 i am learning rust and tcl by writing a tcl interpreter. i chose tcl because it is "very simple" and actually used for some things.
 
 ## use it
